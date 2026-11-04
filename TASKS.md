@@ -5,13 +5,14 @@
 ## Phase 0
 
 -   [x] التحقق من Windows وGit وNode.js وpnpm.
--   [ ] إنشاء مجلد ومستودع المشروع.
+-   [x] إنشاء مجلد ومستودع المشروع.
 -   [x] تهيئة pnpm workspace.
 -   [x] إعداد TypeScript.
 -   [x] إعداد ESLint وPrettier.
 -   [x] إضافة lint/typecheck/test/build scripts.
 -   [x] تشغيل التحقق وتسجيل النتائج.
--   [ ] أول Git commit.
+-   [x] أول Git commit.
+-   [x] ربط وتكامل مستودع GitHub الخاص والرفع على فرع main (المرحلة 0.5).
 
 ## Phase 1
 

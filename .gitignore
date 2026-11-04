@@ -1,0 +1,31 @@
+# Dependencies and generated output
+node_modules/
+build/
+dist/
+
+# Project-local caches and tool downloads (must stay on D:)
+.cache/
+.tmp/
+.browsers/
+.tools/
+
+# Secrets and local environment
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store

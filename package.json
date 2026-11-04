@@ -13,9 +13,13 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "build": "tsc -p tsconfig.build.json",
+    "test:package-exports": "node scripts/test-package-exports.mjs",
+    "build": "pnpm --filter @auditor/shared build && tsc -p tsconfig.build.json",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@auditor/shared": "workspace:*"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

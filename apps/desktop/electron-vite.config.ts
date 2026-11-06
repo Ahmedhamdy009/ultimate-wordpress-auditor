@@ -14,9 +14,15 @@ export default defineConfig({
     },
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: ['@auditor/shared'] })],
+    ssr: {
+      noExternal: ['@auditor/shared'],
+    },
     build: {
       rollupOptions: {
+        treeshake: {
+          moduleSideEffects: id => id.replace(/\\/g, '/').endsWith('src/preload/index.ts'),
+        },
         input: {
           index: resolve(import.meta.dirname, 'src/preload/index.ts'),
         },

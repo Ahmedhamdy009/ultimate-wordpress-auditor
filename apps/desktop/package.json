@@ -6,9 +6,9 @@
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
-    "preview": "electron-vite preview",
+    "dev": "electron-vite dev -c electron-vite.config.ts",
+    "build": "electron-vite build -c electron-vite.config.ts",
+    "preview": "electron-vite preview -c electron-vite.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

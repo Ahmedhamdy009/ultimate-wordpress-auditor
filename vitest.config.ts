@@ -10,7 +10,19 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['tests/**/*.test.ts', 'src/**/*.test.ts', 'packages/**/*.test.ts'],
-    exclude: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.cache/**', '**/.tmp/**'],
+    include: [
+      'tests/**/*.test.ts',
+      'src/**/*.test.ts',
+      'packages/**/*.test.ts',
+      'apps/**/*.test.ts',
+    ],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/build/**',
+      '**/out/**',
+      '**/.cache/**',
+      '**/.tmp/**',
+    ],
   },
 });

@@ -2,6 +2,8 @@
 node_modules/
 build/
 dist/
+out/
+*.tsbuildinfo
 
 # Project-local caches and tool downloads (must stay on D:)
 .cache/

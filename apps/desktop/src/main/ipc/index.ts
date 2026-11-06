@@ -9,3 +9,4 @@ export * from './inspector.js';
 export * from './lifecycle.js';
 export * from './manager.js';
 export * from './dispatcher.js';
+export * from './handlers.js';

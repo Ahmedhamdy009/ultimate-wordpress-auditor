@@ -20,6 +20,8 @@ export const IPC_ERROR_CODES = {
   PAYLOAD_INVALID_PROTOTYPE: 'ERR_PAYLOAD_INVALID_PROTOTYPE',
   PAYLOAD_VALIDATION_FAILED: 'ERR_PAYLOAD_VALIDATION_FAILED',
   PAYLOAD_UNSUPPORTED_TYPE: 'ERR_PAYLOAD_UNSUPPORTED_TYPE',
+  RATE_LIMIT_EXCEEDED: 'ERR_RATE_LIMIT_EXCEEDED',
+  CONCURRENCY_LIMIT_EXCEEDED: 'ERR_CONCURRENCY_LIMIT_EXCEEDED',
   INTERNAL_ERROR: 'ERR_INTERNAL_ERROR',
   PATH_TRAVERSAL: 'ERR_PATH_TRAVERSAL',
   TMP_JUNCTION_ESCAPE: 'ERR_TMP_JUNCTION_ESCAPE',
@@ -49,6 +51,9 @@ export const SAFE_IPC_ERROR_MESSAGES: Readonly<Record<IPCErrorCode, string>> = O
   [IPC_ERROR_CODES.PAYLOAD_INVALID_PROTOTYPE]: 'Object prototype is not allowed',
   [IPC_ERROR_CODES.PAYLOAD_VALIDATION_FAILED]: 'Payload validation failed',
   [IPC_ERROR_CODES.PAYLOAD_UNSUPPORTED_TYPE]: 'Payload contains unsupported data type',
+  [IPC_ERROR_CODES.RATE_LIMIT_EXCEEDED]: 'Rate limit exceeded for requested channel',
+  [IPC_ERROR_CODES.CONCURRENCY_LIMIT_EXCEEDED]:
+    'Maximum concurrent requests exceeded for requested channel',
   [IPC_ERROR_CODES.INTERNAL_ERROR]: 'An internal error occurred while processing the IPC request',
   [IPC_ERROR_CODES.PATH_TRAVERSAL]: 'Path traversal outside boundary was detected',
   [IPC_ERROR_CODES.TMP_JUNCTION_ESCAPE]: 'Storage junction or link outside boundary was detected',
@@ -636,6 +641,26 @@ export class IPCValidationError extends IPCError {
   constructor(message: string, details?: readonly unknown[]) {
     super(message, IPC_ERROR_CODES.PAYLOAD_VALIDATION_FAILED, details);
     this.name = 'IPCValidationError';
+  }
+}
+
+export class IPCRateLimitError extends IPCError {
+  constructor(
+    message: string = SAFE_IPC_ERROR_MESSAGES[IPC_ERROR_CODES.RATE_LIMIT_EXCEEDED],
+    details?: readonly unknown[],
+  ) {
+    super(message, IPC_ERROR_CODES.RATE_LIMIT_EXCEEDED, details);
+    this.name = 'IPCRateLimitError';
+  }
+}
+
+export class IPCConcurrencyError extends IPCError {
+  constructor(
+    message: string = SAFE_IPC_ERROR_MESSAGES[IPC_ERROR_CODES.CONCURRENCY_LIMIT_EXCEEDED],
+    details?: readonly unknown[],
+  ) {
+    super(message, IPC_ERROR_CODES.CONCURRENCY_LIMIT_EXCEEDED, details);
+    this.name = 'IPCConcurrencyError';
   }
 }
 

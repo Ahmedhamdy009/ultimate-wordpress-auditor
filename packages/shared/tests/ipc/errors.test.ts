@@ -5,6 +5,8 @@ import {
   IPCSecurityError,
   IPCPayloadBoundsError,
   IPCValidationError,
+  IPCRateLimitError,
+  IPCConcurrencyError,
   sanitizeZodIssues,
   sanitizePath,
   toSafeIPCError,
@@ -23,6 +25,8 @@ describe('IPC Errors Specification & Hardened Serialization', () => {
     expect(IPC_ERROR_CODES.PAYLOAD_INVALID_PROTOTYPE).toBe('ERR_PAYLOAD_INVALID_PROTOTYPE');
     expect(IPC_ERROR_CODES.PAYLOAD_VALIDATION_FAILED).toBe('ERR_PAYLOAD_VALIDATION_FAILED');
     expect(IPC_ERROR_CODES.PAYLOAD_UNSUPPORTED_TYPE).toBe('ERR_PAYLOAD_UNSUPPORTED_TYPE');
+    expect(IPC_ERROR_CODES.RATE_LIMIT_EXCEEDED).toBe('ERR_RATE_LIMIT_EXCEEDED');
+    expect(IPC_ERROR_CODES.CONCURRENCY_LIMIT_EXCEEDED).toBe('ERR_CONCURRENCY_LIMIT_EXCEEDED');
     expect(IPC_ERROR_CODES.INTERNAL_ERROR).toBe('ERR_INTERNAL_ERROR');
     expect(IPC_ERROR_CODES.PATH_TRAVERSAL).toBe('ERR_PATH_TRAVERSAL');
     expect(IPC_ERROR_CODES.TMP_JUNCTION_ESCAPE).toBe('ERR_TMP_JUNCTION_ESCAPE');
@@ -49,6 +53,16 @@ describe('IPC Errors Specification & Hardened Serialization', () => {
     expect(valErr).toBeInstanceOf(IPCError);
     expect(valErr.name).toBe('IPCValidationError');
     expect(valErr.code).toBe(IPC_ERROR_CODES.PAYLOAD_VALIDATION_FAILED);
+
+    const rateErr = new IPCRateLimitError();
+    expect(rateErr).toBeInstanceOf(IPCError);
+    expect(rateErr.name).toBe('IPCRateLimitError');
+    expect(rateErr.code).toBe(IPC_ERROR_CODES.RATE_LIMIT_EXCEEDED);
+
+    const concErr = new IPCConcurrencyError();
+    expect(concErr).toBeInstanceOf(IPCError);
+    expect(concErr.name).toBe('IPCConcurrencyError');
+    expect(concErr.code).toBe(IPC_ERROR_CODES.CONCURRENCY_LIMIT_EXCEEDED);
   });
 
   describe('Adversarial Zod Issue Sanitization (sanitizeZodIssues)', () => {

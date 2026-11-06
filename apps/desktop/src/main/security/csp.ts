@@ -38,6 +38,20 @@ export class SecurityWebRequestManager {
   }
 
   /**
+   * Retrieves the trusted Session configuration established during initialization.
+   * Returns undefined if the session has not been registered via initialize().
+   */
+  public static getSessionConfig(
+    targetSession?: Electron.Session,
+  ): Readonly<SessionSecurityConfig> | undefined {
+    if (!targetSession) {
+      return undefined;
+    }
+    const config = this.sessionConfigs.get(targetSession);
+    return config ? Object.freeze({ ...config }) : undefined;
+  }
+
+  /**
    * Generates the authoritative Content-Security-Policy string.
    */
   public static buildCsp(isDev: boolean): string {

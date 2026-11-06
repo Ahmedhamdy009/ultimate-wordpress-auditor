@@ -91,6 +91,25 @@ describe('SecurityWebRequestManager & CSP Enforcement', () => {
         SecurityWebRequestManager.initialize({ isDev: true, targetSession: mockSession });
       }).toThrow(/ERR_SESSION_CONFIG_CONFLICT/);
     });
+
+    it('retrieves frozen session security config via getSessionConfig', () => {
+      const mockSession = {
+        webRequest: {
+          onHeadersReceived: vi.fn(),
+        },
+      } as unknown as Session;
+
+      expect(SecurityWebRequestManager.getSessionConfig(mockSession)).toBeUndefined();
+      expect(SecurityWebRequestManager.getSessionConfig(undefined)).toBeUndefined();
+
+      SecurityWebRequestManager.initialize({ isDev: true, targetSession: mockSession });
+
+      const config = SecurityWebRequestManager.getSessionConfig(mockSession);
+      expect(config).toBeDefined();
+      expect(config?.isDev).toBe(true);
+      expect(typeof config?.registeredAt).toBe('number');
+      expect(Object.isFrozen(config)).toBe(true);
+    });
   });
 
   describe('Strict Renderer Origin Validation (isAppRendererOrigin)', () => {

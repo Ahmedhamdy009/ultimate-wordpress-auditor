@@ -61,7 +61,11 @@ import {
   isValidIPv4,
   isValidIPv6,
   canonicalizeIPv6,
+  IPC_CHANNELS,
+  PAYLOAD_BOUNDS_POLICY,
+  validateIPCRequest,
 } from '@auditor/shared';
+import * as sharedNamespace from '@auditor/shared';
 import assert from 'node:assert';
 
 console.log('  [subprocess] Successfully imported from "@auditor/shared".');
@@ -130,7 +134,18 @@ assert.strictEqual(isUrlInScope('https://web.example.com', allowed), true, 'http
 assert.strictEqual(isUrlInScope('http://web.example.com:443', allowed), false, 'http:443 rejected due to protocol mismatch');
 assert.strictEqual(isUrlInScope('https://web.example.com:80', allowed), false, 'https:80 rejected due to protocol mismatch');
 
-// 7. Verify resolved module path is dist/index.js (NOT src/index.ts)
+// 7. Verify IPC exports and validation
+assert.strictEqual(IPC_CHANNELS.APP_PING, 'app:ping', 'IPC channel app:ping must match');
+assert.strictEqual(
+  sharedNamespace.PROJECT_ROOT,
+  undefined,
+  'Machine-specific PROJECT_ROOT must NOT be exported from @auditor/shared',
+);
+assert.strictEqual(PAYLOAD_BOUNDS_POLICY.maxTotalBytes, 1024 * 1024, 'maxTotalBytes must be 1MB');
+const parsedPing = validateIPCRequest(IPC_CHANNELS.APP_PING, { timestamp: 12345 });
+assert.strictEqual(parsedPing.timestamp, 12345, 'validateIPCRequest must validate and return payload');
+
+// 8. Verify resolved module path is dist/index.js (NOT src/index.ts)
 const resolvedUrl = import.meta.resolve('@auditor/shared');
 assert(
   resolvedUrl.includes('packages/shared/dist/index.js'),

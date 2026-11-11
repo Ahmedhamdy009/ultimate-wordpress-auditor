@@ -10,6 +10,8 @@ import { APPLICATION_NAME } from '../../src/main/config/paths.js';
 import { getProductionUserDataDirectory, getDatabasePath } from '../../src/main/db/paths.js';
 import { runCli } from '../../src/main/cli/index.js';
 
+const projectRoot = path.resolve(import.meta.dirname, '../../../../');
+
 interface RendererBridgeInspection {
   exists: boolean;
   isFrozen: boolean;
@@ -129,22 +131,23 @@ describe('Phase 1.2.4.2 — Live Electron Runtime Integration Suite', () => {
       expect(readyEvent.versions.v8.length).toBeGreaterThan(0);
     });
 
-    it('enforces that all Electron storage paths are strictly confined to D:\\ahmed\\.tmp with 0 files on C:', () => {
+    it('enforces that all Electron storage paths are strictly confined to .tmp with 0 files on C:', () => {
       const paths = readyEvent.storagePaths;
       expect(paths).toBeDefined();
 
-      expect(paths.userData).toContain('D:\\ahmed\\.tmp\\userData');
-      expect(paths.sessionData).toContain('D:\\ahmed\\.tmp\\sessionData');
-      expect(paths.crashDumps).toContain('D:\\ahmed\\.tmp\\crashDumps');
-      expect(paths.logs).toContain('D:\\ahmed\\.tmp\\logs');
-      expect(paths.temp).toContain('D:\\ahmed\\.tmp\\appTemp');
+      const expectedTmp = path.resolve(projectRoot, '.tmp');
+      expect(paths.userData).toContain(path.join(expectedTmp, 'userData'));
+      expect(paths.sessionData).toContain(path.join(expectedTmp, 'sessionData'));
+      expect(paths.crashDumps).toContain(path.join(expectedTmp, 'crashDumps'));
+      expect(paths.logs).toContain(path.join(expectedTmp, 'logs'));
+      expect(paths.temp).toContain(path.join(expectedTmp, 'appTemp'));
 
       // Guarantee no storage paths leak onto C: drive
       for (const [key, val] of Object.entries(paths)) {
         expect(val.toUpperCase().startsWith('C:'), `Storage path ${key} leaked to C:`).toBe(false);
         expect(
-          val.toUpperCase().startsWith('D:\\AHMED\\.TMP'),
-          `Storage path ${key} is not on D:`,
+          val.toUpperCase().startsWith(expectedTmp.toUpperCase()),
+          `Storage path ${key} is not in .tmp`,
         ).toBe(true);
       }
     });

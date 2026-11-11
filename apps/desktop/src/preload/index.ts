@@ -15,6 +15,44 @@ import {
   type AppSystemInfoResponse,
   type AuditValidateTargetRequest,
   type AuditValidateTargetResponse,
+  type CreateProjectDTO,
+  type GetProjectDTO,
+  type ListProjectsQueryDTO,
+  type UpdateProjectDTO,
+  type ArchiveProjectDTO,
+  type RestoreProjectDTO,
+  type ProjectDTO,
+  type ProjectListResponseDTO,
+  type ArchiveProjectResultDTO,
+  type CreateSiteDTO,
+  type GetSiteDTO,
+  type ListSitesQueryDTO,
+  type UpdateSiteDTO,
+  type ArchiveSiteDTO,
+  type RestoreSiteDTO,
+  type SiteDTO,
+  type SiteListResponseDTO,
+  type CreateScanRunDTO,
+  type GetScanRunDTO,
+  type ListScanRunsQueryDTO,
+  type CancelScanRunDTO,
+  type GetScanProgressDTO,
+  type ScanProgressDTO,
+  type ScanRunDTO,
+  type ScanRunListResponseDTO,
+  type ListFindingsQueryDTO,
+  type GetFindingDTO,
+  type FindingDTO,
+  type FindingListResponseDTO,
+  type CreateReportDTO,
+  type GetReportDTO,
+  type ListReportsQueryDTO,
+  type ReportDTO,
+  type ReportListResponseDTO,
+  type DeleteReportDTO,
+  type DeleteReportResponseDTO,
+  type GetReportContentDTO,
+  type ReportContentDTO,
 } from '@auditor/shared';
 import type { ElectronAPI } from '../common/ipc/contracts.js';
 
@@ -264,6 +302,63 @@ export function createElectronAPI(
       safeInvoke<AppSystemInfoResponse>(invoker, IPC_CHANNELS.APP_GET_SYSTEM_INFO, {}),
     validateTarget: (request: AuditValidateTargetRequest) =>
       safeInvoke<AuditValidateTargetResponse>(invoker, IPC_CHANNELS.AUDIT_VALIDATE_TARGET, request),
+
+    // Project operations (Phase 2.2)
+    createProject: (request: CreateProjectDTO) =>
+      safeInvoke<ProjectDTO>(invoker, IPC_CHANNELS.PROJECT_CREATE, request),
+    getProject: (request: GetProjectDTO) =>
+      safeInvoke<ProjectDTO>(invoker, IPC_CHANNELS.PROJECT_GET, request),
+    listProjects: (request?: ListProjectsQueryDTO) =>
+      safeInvoke<ProjectListResponseDTO>(invoker, IPC_CHANNELS.PROJECT_LIST, request ?? {}),
+    updateProject: (request: UpdateProjectDTO) =>
+      safeInvoke<ProjectDTO>(invoker, IPC_CHANNELS.PROJECT_UPDATE, request),
+    archiveProject: (request: ArchiveProjectDTO) =>
+      safeInvoke<ArchiveProjectResultDTO>(invoker, IPC_CHANNELS.PROJECT_ARCHIVE, request),
+    restoreProject: (request: RestoreProjectDTO) =>
+      safeInvoke<ProjectDTO>(invoker, IPC_CHANNELS.PROJECT_RESTORE, request),
+
+    // Site operations (Phase 2.2)
+    createSite: (request: CreateSiteDTO) =>
+      safeInvoke<SiteDTO>(invoker, IPC_CHANNELS.SITE_CREATE, request),
+    getSite: (request: GetSiteDTO) => safeInvoke<SiteDTO>(invoker, IPC_CHANNELS.SITE_GET, request),
+    listSites: (request?: ListSitesQueryDTO) =>
+      safeInvoke<SiteListResponseDTO>(invoker, IPC_CHANNELS.SITE_LIST, request ?? {}),
+    updateSite: (request: UpdateSiteDTO) =>
+      safeInvoke<SiteDTO>(invoker, IPC_CHANNELS.SITE_UPDATE, request),
+    archiveSite: (request: ArchiveSiteDTO) =>
+      safeInvoke<SiteDTO>(invoker, IPC_CHANNELS.SITE_ARCHIVE, request),
+    restoreSite: (request: RestoreSiteDTO) =>
+      safeInvoke<SiteDTO>(invoker, IPC_CHANNELS.SITE_RESTORE, request),
+
+    // Scan operations (Phase 2.3)
+    createScanRun: (request: CreateScanRunDTO) =>
+      safeInvoke<ScanRunDTO>(invoker, IPC_CHANNELS.SCAN_CREATE, request),
+    getScanRun: (request: GetScanRunDTO) =>
+      safeInvoke<ScanRunDTO>(invoker, IPC_CHANNELS.SCAN_GET, request),
+    listScanRuns: (request?: ListScanRunsQueryDTO) =>
+      safeInvoke<ScanRunListResponseDTO>(invoker, IPC_CHANNELS.SCAN_LIST, request ?? {}),
+    cancelScanRun: (request: CancelScanRunDTO) =>
+      safeInvoke<ScanRunDTO>(invoker, IPC_CHANNELS.SCAN_CANCEL, request),
+    getScanProgress: (request: GetScanProgressDTO) =>
+      safeInvoke<ScanProgressDTO>(invoker, IPC_CHANNELS.SCAN_PROGRESS, request),
+
+    // Finding operations (Phase 2.3)
+    listFindings: (request: ListFindingsQueryDTO) =>
+      safeInvoke<FindingListResponseDTO>(invoker, IPC_CHANNELS.FINDING_LIST, request),
+    getFinding: (request: GetFindingDTO) =>
+      safeInvoke<FindingDTO>(invoker, IPC_CHANNELS.FINDING_GET, request),
+
+    // Report operations (Phase 2.3)
+    createReport: (request: CreateReportDTO) =>
+      safeInvoke<ReportDTO>(invoker, IPC_CHANNELS.REPORT_CREATE, request),
+    getReport: (request: GetReportDTO) =>
+      safeInvoke<ReportDTO>(invoker, IPC_CHANNELS.REPORT_GET, request),
+    listReports: (request?: ListReportsQueryDTO) =>
+      safeInvoke<ReportListResponseDTO>(invoker, IPC_CHANNELS.REPORT_LIST, request ?? {}),
+    deleteReport: (request: DeleteReportDTO) =>
+      safeInvoke<DeleteReportResponseDTO>(invoker, IPC_CHANNELS.REPORT_DELETE, request),
+    getReportContent: (request: GetReportContentDTO) =>
+      safeInvoke<ReportContentDTO>(invoker, IPC_CHANNELS.REPORT_GET_CONTENT, request),
   });
 }
 

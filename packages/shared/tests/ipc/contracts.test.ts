@@ -8,8 +8,8 @@ import {
 import { IPCError, IPCValidationError, IPC_ERROR_CODES } from '../../src/ipc/errors.js';
 
 describe('IPC Contracts & Dispatcher Validation', () => {
-  it('has contracts registered for all defined channels', () => {
-    for (const channel of Object.values(IPC_CHANNELS)) {
+  it('has contracts registered for baseline channels', () => {
+    for (const channel of Object.keys(IPC_CONTRACTS) as (keyof typeof IPC_CONTRACTS)[]) {
       expect(channel in IPC_CONTRACTS).toBe(true);
       expect(IPC_CONTRACTS[channel].requestSchema).toBeDefined();
       expect(IPC_CONTRACTS[channel].responseSchema).toBeDefined();

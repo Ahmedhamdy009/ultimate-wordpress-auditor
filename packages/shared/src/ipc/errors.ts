@@ -30,6 +30,23 @@ export const IPC_ERROR_CODES = {
   TMP_IS_PROJECT_ROOT: 'ERR_TMP_IS_PROJECT_ROOT',
   TMP_CROSS_DRIVE: 'ERR_TMP_CROSS_DRIVE',
   TMP_OUTSIDE_PROJECT: 'ERR_TMP_OUTSIDE_PROJECT',
+  PROJECT_NOT_FOUND: 'ERR_PROJECT_NOT_FOUND',
+  PROJECT_NAME_EXISTS: 'ERR_PROJECT_NAME_EXISTS',
+  SITE_NOT_FOUND: 'ERR_SITE_NOT_FOUND',
+  SITE_URL_EXISTS: 'ERR_SITE_URL_EXISTS',
+  PARENT_PROJECT_ARCHIVED: 'ERR_PARENT_PROJECT_ARCHIVED',
+  INVALID_TARGET_URL: 'ERR_INVALID_TARGET_URL',
+  DATABASE_ERROR: 'ERR_DATABASE_ERROR',
+  DATABASE_CORRUPTED: 'ERR_DATABASE_CORRUPTED',
+  MIGRATION_FAILED: 'ERR_MIGRATION_FAILED',
+  MIGRATION_CHECKSUM_MISMATCH: 'ERR_MIGRATION_CHECKSUM_MISMATCH',
+  DATABASE_VERSION_NEWER: 'ERR_DATABASE_VERSION_NEWER',
+  SCAN_RUN_NOT_FOUND: 'ERR_SCAN_RUN_NOT_FOUND',
+  SCAN_RUN_ACTIVE: 'ERR_SCAN_RUN_ACTIVE',
+  SCAN_RUN_INVALID_TRANSITION: 'ERR_SCAN_RUN_INVALID_TRANSITION',
+  FINDING_NOT_FOUND: 'ERR_FINDING_NOT_FOUND',
+  REPORT_NOT_FOUND: 'ERR_REPORT_NOT_FOUND',
+  EVIDENCE_TOO_LARGE: 'ERR_EVIDENCE_TOO_LARGE',
 } as const;
 
 export type IPCErrorCode = (typeof IPC_ERROR_CODES)[keyof typeof IPC_ERROR_CODES];
@@ -63,6 +80,24 @@ export const SAFE_IPC_ERROR_MESSAGES: Readonly<Record<IPCErrorCode, string>> = O
   [IPC_ERROR_CODES.TMP_CROSS_DRIVE]: 'Storage directory cannot span across multiple drives',
   [IPC_ERROR_CODES.TMP_OUTSIDE_PROJECT]:
     'Storage directory must remain strictly within project root',
+  [IPC_ERROR_CODES.PROJECT_NOT_FOUND]: 'Requested project does not exist',
+  [IPC_ERROR_CODES.PROJECT_NAME_EXISTS]: 'A project with this name already exists',
+  [IPC_ERROR_CODES.SITE_NOT_FOUND]: 'Requested site does not exist',
+  [IPC_ERROR_CODES.SITE_URL_EXISTS]: 'A site with this URL already exists in the project',
+  [IPC_ERROR_CODES.PARENT_PROJECT_ARCHIVED]: 'Parent project is archived',
+  [IPC_ERROR_CODES.INVALID_TARGET_URL]: 'Invalid target URL format or protocol',
+  [IPC_ERROR_CODES.DATABASE_ERROR]: 'A database operation failed',
+  [IPC_ERROR_CODES.DATABASE_CORRUPTED]: 'Database integrity failure detected',
+  [IPC_ERROR_CODES.MIGRATION_FAILED]: 'Database schema migration failed',
+  [IPC_ERROR_CODES.MIGRATION_CHECKSUM_MISMATCH]: 'Database migration checksum mismatch',
+  [IPC_ERROR_CODES.DATABASE_VERSION_NEWER]:
+    'Database schema version is newer than supported by this application',
+  [IPC_ERROR_CODES.SCAN_RUN_NOT_FOUND]: 'Requested scan run was not found',
+  [IPC_ERROR_CODES.SCAN_RUN_ACTIVE]: 'Scan run is currently active and cannot be modified',
+  [IPC_ERROR_CODES.SCAN_RUN_INVALID_TRANSITION]: 'Invalid scan run lifecycle state transition',
+  [IPC_ERROR_CODES.FINDING_NOT_FOUND]: 'Requested finding was not found',
+  [IPC_ERROR_CODES.REPORT_NOT_FOUND]: 'Requested report was not found',
+  [IPC_ERROR_CODES.EVIDENCE_TOO_LARGE]: 'Finding evidence exceeds maximum allowed size (64KB)',
 });
 
 export function isAllowedIPCCode(code: unknown): code is IPCErrorCode {

@@ -17,6 +17,17 @@ import {
   type AuditValidateTargetResponse,
 } from '@auditor/shared';
 import type { IpcChannelHandler, SecureIpcDispatcher } from './dispatcher.js';
+import type { IProjectService } from '../services/project.service.js';
+import type { ISiteService } from '../services/site.service.js';
+import type { IScanRunService } from '../services/scan-run.service.js';
+import type { IFindingService } from '../services/finding.service.js';
+import type { IReportService } from '../services/report.service.js';
+import type { IScanOrchestrator } from '../scanner/orchestrator/types.js';
+import { registerDatabaseIpcHandlers } from './project-site-handlers.js';
+import { registerScanHandlers } from './scan-handlers.js';
+
+export * from './project-site-handlers.js';
+export * from './scan-handlers.js';
 
 /**
  * Dependency injection contract for deterministic timestamp generation in `app:ping`.
@@ -41,6 +52,12 @@ export interface SystemInfoRuntimeDependencies {
 export interface CoreIpcHandlersDependencies {
   readonly ping?: AppPingHandlerDependencies;
   readonly systemInfo?: SystemInfoRuntimeDependencies;
+  readonly projectService?: IProjectService;
+  readonly siteService?: ISiteService;
+  readonly scanRunService?: IScanRunService;
+  readonly findingService?: IFindingService;
+  readonly reportService?: IReportService;
+  readonly orchestrator?: IScanOrchestrator;
 }
 
 const SUPPORTED_PLATFORMS: ReadonlySet<AppSystemInfoResponse['platform']> = new Set([
@@ -349,4 +366,21 @@ export function registerCoreIpcHandlers(
     createGetSystemInfoHandler(deps?.systemInfo),
   );
   dispatcher.registerHandler(IPC_CHANNELS.AUDIT_VALIDATE_TARGET, createValidateTargetHandler());
+
+  if (deps?.projectService && deps?.siteService) {
+    registerDatabaseIpcHandlers(dispatcher, {
+      projectService: deps.projectService,
+      siteService: deps.siteService,
+    });
+  }
+
+  if (deps?.scanRunService && deps?.findingService && deps?.reportService) {
+    registerScanHandlers(
+      dispatcher,
+      deps.scanRunService,
+      deps.findingService,
+      deps.reportService,
+      deps.orchestrator,
+    );
+  }
 }

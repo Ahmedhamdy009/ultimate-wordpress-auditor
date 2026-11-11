@@ -25,6 +25,136 @@ export const CHANNEL_LIMITS: Readonly<Record<IPCChannel, ChannelPolicyLimits>> =
     maxConcurrency: 3,
     maxPayloadBytes: 8192, // 8 KB
   }),
+
+  // Project Management Channels
+  [IPC_CHANNELS.PROJECT_CREATE]: Object.freeze({
+    maxRequestsPerSecond: 10,
+    maxConcurrency: 2,
+    maxPayloadBytes: 16384, // 16 KB
+  }),
+  [IPC_CHANNELS.PROJECT_GET]: Object.freeze({
+    maxRequestsPerSecond: 20,
+    maxConcurrency: 5,
+    maxPayloadBytes: 2048, // 2 KB
+  }),
+  [IPC_CHANNELS.PROJECT_LIST]: Object.freeze({
+    maxRequestsPerSecond: 20,
+    maxConcurrency: 5,
+    maxPayloadBytes: 8192, // 8 KB
+  }),
+  [IPC_CHANNELS.PROJECT_UPDATE]: Object.freeze({
+    maxRequestsPerSecond: 10,
+    maxConcurrency: 2,
+    maxPayloadBytes: 16384, // 16 KB
+  }),
+  [IPC_CHANNELS.PROJECT_ARCHIVE]: Object.freeze({
+    maxRequestsPerSecond: 10,
+    maxConcurrency: 2,
+    maxPayloadBytes: 2048, // 2 KB
+  }),
+  [IPC_CHANNELS.PROJECT_RESTORE]: Object.freeze({
+    maxRequestsPerSecond: 10,
+    maxConcurrency: 2,
+    maxPayloadBytes: 2048, // 2 KB
+  }),
+
+  // Site Management Channels
+  [IPC_CHANNELS.SITE_CREATE]: Object.freeze({
+    maxRequestsPerSecond: 10,
+    maxConcurrency: 2,
+    maxPayloadBytes: 16384, // 16 KB
+  }),
+  [IPC_CHANNELS.SITE_GET]: Object.freeze({
+    maxRequestsPerSecond: 20,
+    maxConcurrency: 5,
+    maxPayloadBytes: 2048, // 2 KB
+  }),
+  [IPC_CHANNELS.SITE_LIST]: Object.freeze({
+    maxRequestsPerSecond: 20,
+    maxConcurrency: 5,
+    maxPayloadBytes: 8192, // 8 KB
+  }),
+  [IPC_CHANNELS.SITE_UPDATE]: Object.freeze({
+    maxRequestsPerSecond: 10,
+    maxConcurrency: 2,
+    maxPayloadBytes: 16384, // 16 KB
+  }),
+  [IPC_CHANNELS.SITE_ARCHIVE]: Object.freeze({
+    maxRequestsPerSecond: 10,
+    maxConcurrency: 2,
+    maxPayloadBytes: 2048, // 2 KB
+  }),
+  [IPC_CHANNELS.SITE_RESTORE]: Object.freeze({
+    maxRequestsPerSecond: 10,
+    maxConcurrency: 2,
+    maxPayloadBytes: 2048, // 2 KB
+  }),
+
+  // Scan Run Channels (Phase 2.3)
+  [IPC_CHANNELS.SCAN_CREATE]: Object.freeze({
+    maxRequestsPerSecond: 10,
+    maxConcurrency: 2,
+    maxPayloadBytes: 16384, // 16 KB
+  }),
+  [IPC_CHANNELS.SCAN_GET]: Object.freeze({
+    maxRequestsPerSecond: 20,
+    maxConcurrency: 5,
+    maxPayloadBytes: 2048, // 2 KB
+  }),
+  [IPC_CHANNELS.SCAN_LIST]: Object.freeze({
+    maxRequestsPerSecond: 20,
+    maxConcurrency: 5,
+    maxPayloadBytes: 8192, // 8 KB
+  }),
+  [IPC_CHANNELS.SCAN_CANCEL]: Object.freeze({
+    maxRequestsPerSecond: 10,
+    maxConcurrency: 2,
+    maxPayloadBytes: 2048, // 2 KB
+  }),
+  [IPC_CHANNELS.SCAN_PROGRESS]: Object.freeze({
+    maxRequestsPerSecond: 30,
+    maxConcurrency: 5,
+    maxPayloadBytes: 2048, // 2 KB
+  }),
+
+  // Finding Channels (Phase 2.3)
+  [IPC_CHANNELS.FINDING_LIST]: Object.freeze({
+    maxRequestsPerSecond: 20,
+    maxConcurrency: 5,
+    maxPayloadBytes: 8192, // 8 KB
+  }),
+  [IPC_CHANNELS.FINDING_GET]: Object.freeze({
+    maxRequestsPerSecond: 30,
+    maxConcurrency: 5,
+    maxPayloadBytes: 2048, // 2 KB
+  }),
+
+  // Report Channels (Phase 2.3)
+  [IPC_CHANNELS.REPORT_CREATE]: Object.freeze({
+    maxRequestsPerSecond: 5,
+    maxConcurrency: 2,
+    maxPayloadBytes: 32768, // 32 KB
+  }),
+  [IPC_CHANNELS.REPORT_GET]: Object.freeze({
+    maxRequestsPerSecond: 20,
+    maxConcurrency: 5,
+    maxPayloadBytes: 2048, // 2 KB
+  }),
+  [IPC_CHANNELS.REPORT_LIST]: Object.freeze({
+    maxRequestsPerSecond: 20,
+    maxConcurrency: 5,
+    maxPayloadBytes: 8192, // 8 KB
+  }),
+  [IPC_CHANNELS.REPORT_DELETE]: Object.freeze({
+    maxRequestsPerSecond: 10,
+    maxConcurrency: 2,
+    maxPayloadBytes: 2048, // 2 KB
+  }),
+  [IPC_CHANNELS.REPORT_GET_CONTENT]: Object.freeze({
+    maxRequestsPerSecond: 10,
+    maxConcurrency: 2,
+    maxPayloadBytes: 2048, // 2 KB
+  }),
 });
 
 export interface ConcurrencyLease {

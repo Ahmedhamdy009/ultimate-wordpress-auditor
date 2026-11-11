@@ -1,0 +1,178 @@
+/**
+ * Design Tokens — Ultimate WordPress & Website Auditor
+ * Professional Dark Slate/Navy Visual Identity
+ *
+ * All styles are compiled and bundled to adhere to:
+ * CSP: style-src 'self' (No inline style attributes, no style={{}}, no dynamic injection)
+ */
+
+:root {
+  /* Color Palette — Background Surfaces */
+  --auditor-bg-base: #0b0f19;
+  --auditor-bg-surface: #111827;
+  --auditor-bg-surface-elevated: #1e293b;
+  --auditor-bg-surface-hover: #263349;
+  --auditor-bg-surface-active: #334155;
+  --auditor-bg-surface-subtle: #0f172a;
+
+  /* Color Palette — Borders */
+  --auditor-border-subtle: #1e293b;
+  --auditor-border-default: #334155;
+  --auditor-border-hover: #475569;
+  --auditor-border-focus: #3b82f6;
+
+  /* Color Palette — Typography */
+  --auditor-text-primary: #f8fafc;
+  --auditor-text-secondary: #94a3b8;
+  --auditor-text-muted: #64748b;
+  --auditor-text-inverse: #0b0f19;
+  --auditor-text-link: #60a5fa;
+
+  /* Accent Colors */
+  --auditor-accent-primary: #3b82f6;
+  --auditor-accent-hover: #2563eb;
+  --auditor-accent-active: #1d4ed8;
+  --auditor-accent-subtle: rgba(59, 130, 246, 0.15);
+
+  /* Semantic Status Colors */
+  /* Success */
+  --auditor-success-bg: rgba(16, 185, 129, 0.12);
+  --auditor-success-border: #059669;
+  --auditor-success-text: #34d399;
+  --auditor-success-badge-bg: #064e3b;
+
+  /* Warning */
+  --auditor-warning-bg: rgba(245, 158, 11, 0.12);
+  --auditor-warning-border: #d97706;
+  --auditor-warning-text: #fbbf24;
+  --auditor-warning-badge-bg: #78350f;
+
+  /* Danger / Error */
+  --auditor-danger-bg: rgba(239, 68, 68, 0.12);
+  --auditor-danger-border: #dc2626;
+  --auditor-danger-text: #f87171;
+  --auditor-danger-badge-bg: #7f1d1d;
+
+  /* Info / Neutral */
+  --auditor-info-bg: rgba(59, 130, 246, 0.12);
+  --auditor-info-border: #3b82f6;
+  --auditor-info-text: #60a5fa;
+  --auditor-info-badge-bg: #1e3a8a;
+
+  --auditor-neutral-bg: rgba(148, 163, 184, 0.1);
+  --auditor-neutral-border: #475569;
+  --auditor-neutral-text: #cbd5e1;
+  --auditor-neutral-badge-bg: #334155;
+
+  /* Typography Hierarchy */
+  --auditor-font-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --auditor-font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+
+  --auditor-font-size-xs: 0.75rem; /* 12px */
+  --auditor-font-size-sm: 0.875rem; /* 14px */
+  --auditor-font-size-base: 1rem; /* 16px */
+  --auditor-font-size-lg: 1.125rem; /* 18px */
+  --auditor-font-size-xl: 1.25rem; /* 20px */
+  --auditor-font-size-2xl: 1.5rem; /* 24px */
+
+  --auditor-font-weight-normal: 400;
+  --auditor-font-weight-medium: 500;
+  --auditor-font-weight-semibold: 600;
+  --auditor-font-weight-bold: 700;
+
+  --auditor-line-height-tight: 1.25;
+  --auditor-line-height-normal: 1.5;
+  --auditor-line-height-relaxed: 1.625;
+
+  /* Spacing Scale */
+  --auditor-space-1: 4px;
+  --auditor-space-2: 8px;
+  --auditor-space-3: 12px;
+  --auditor-space-4: 16px;
+  --auditor-space-5: 20px;
+  --auditor-space-6: 24px;
+  --auditor-space-8: 32px;
+  --auditor-space-10: 40px;
+
+  /* Border Radii */
+  --auditor-radius-sm: 4px;
+  --auditor-radius-md: 6px;
+  --auditor-radius-lg: 8px;
+  --auditor-radius-xl: 12px;
+  --auditor-radius-full: 9999px;
+
+  /* Shadows */
+  --auditor-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.35);
+  --auditor-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --auditor-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+
+  /* Focus Ring */
+  --auditor-focus-ring: 0 0 0 2px var(--auditor-border-focus);
+
+  /* Transitions */
+  --auditor-transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --auditor-transition-normal: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ==========================================================================
+   Light Mode Theme Token Overrides
+   Activated via [data-theme="light"] attribute on html or body
+   ========================================================================== */
+:root[data-theme='light'] {
+  /* Color Palette — Background Surfaces */
+  --auditor-bg-base: #f8fafc;
+  --auditor-bg-surface: #ffffff;
+  --auditor-bg-surface-elevated: #f1f5f9;
+  --auditor-bg-surface-hover: #e2e8f0;
+  --auditor-bg-surface-active: #cbd5e1;
+  --auditor-bg-surface-subtle: #f8fafc;
+
+  /* Color Palette — Borders */
+  --auditor-border-subtle: #e2e8f0;
+  --auditor-border-default: #cbd5e1;
+  --auditor-border-hover: #94a3b8;
+  --auditor-border-focus: #2563eb;
+
+  /* Color Palette — Typography */
+  --auditor-text-primary: #0f172a;
+  --auditor-text-secondary: #475569;
+  --auditor-text-muted: #64748b;
+  --auditor-text-inverse: #f8fafc;
+  --auditor-text-link: #1d4ed8;
+
+  /* Accent Colors */
+  --auditor-accent-subtle: rgba(59, 130, 246, 0.1);
+
+  /* Semantic Status Colors */
+  --auditor-success-bg: #ecfdf5;
+  --auditor-success-border: #10b981;
+  --auditor-success-text: #065f46;
+  --auditor-success-badge-bg: #d1fae5;
+
+  --auditor-warning-bg: #fffbeb;
+  --auditor-warning-border: #f59e0b;
+  --auditor-warning-text: #92400e;
+  --auditor-warning-badge-bg: #fef3c7;
+
+  --auditor-danger-bg: #fef2f2;
+  --auditor-danger-border: #ef4444;
+  --auditor-danger-text: #991b1b;
+  --auditor-danger-badge-bg: #fee2e2;
+
+  --auditor-info-bg: #eff6ff;
+  --auditor-info-border: #3b82f6;
+  --auditor-info-text: #1e40af;
+  --auditor-info-badge-bg: #dbeafe;
+
+  --auditor-neutral-bg: #f1f5f9;
+  --auditor-neutral-border: #cbd5e1;
+  --auditor-neutral-text: #334155;
+  --auditor-neutral-badge-bg: #e2e8f0;
+
+  /* Shadows */
+  --auditor-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --auditor-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+  --auditor-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+}

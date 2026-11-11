@@ -1,0 +1,248 @@
+/**
+ * Layout Styles — Application Shell
+ * CSP Compliant — No inline styles
+ */
+
+/* ==========================================================================
+   1. App Shell Container
+   ========================================================================== */
+.auditor-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  background-color: var(--auditor-bg-base);
+  color: var(--auditor-text-primary);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ==========================================================================
+   2. Header
+   ========================================================================== */
+.auditor-header {
+  height: 52px;
+  background-color: var(--auditor-bg-surface);
+  border-bottom: 1px solid var(--auditor-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--auditor-space-5);
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.auditor-header__branding {
+  display: flex;
+  align-items: center;
+  gap: var(--auditor-space-3);
+}
+
+.auditor-header__logo {
+  font-size: var(--auditor-font-size-base);
+  font-weight: var(--auditor-font-weight-bold);
+  color: var(--auditor-text-primary);
+  letter-spacing: -0.01em;
+}
+
+.auditor-header__status {
+  display: flex;
+  align-items: center;
+  gap: var(--auditor-space-3);
+}
+
+/* ==========================================================================
+   3. Main Workspace Area (Sidebar + Viewport)
+   ========================================================================== */
+.auditor-workspace {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ==========================================================================
+   4. Sidebar
+   ========================================================================== */
+.auditor-sidebar {
+  width: 250px;
+  background-color: var(--auditor-bg-surface);
+  border-inline-end: 1px solid var(--auditor-border-subtle);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: var(--auditor-space-4) var(--auditor-space-3);
+}
+
+.auditor-sidebar__section-title {
+  font-size: var(--auditor-font-size-xs);
+  font-weight: var(--auditor-font-weight-semibold);
+  color: var(--auditor-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: var(--auditor-space-2) var(--auditor-space-3);
+  margin-top: var(--auditor-space-3);
+}
+
+.auditor-sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.auditor-sidebar__item {
+  margin: 0;
+  padding: 0;
+}
+
+.auditor-nav-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--auditor-space-2);
+  padding: var(--auditor-space-2) var(--auditor-space-3);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--auditor-radius-md);
+  color: var(--auditor-text-secondary);
+  font-size: var(--auditor-font-size-sm);
+  font-weight: var(--auditor-font-weight-medium);
+  text-align: start;
+  cursor: pointer;
+  transition: all var(--auditor-transition-fast);
+}
+
+.auditor-nav-button:hover:not(:disabled) {
+  background-color: var(--auditor-bg-surface-hover);
+  color: var(--auditor-text-primary);
+}
+
+.auditor-nav-button:focus-visible {
+  outline: none;
+  box-shadow: var(--auditor-focus-ring);
+}
+
+.auditor-nav-button--active {
+  background-color: var(--auditor-accent-subtle);
+  color: var(--auditor-accent-primary);
+  border-color: rgba(59, 130, 246, 0.3);
+  font-weight: var(--auditor-font-weight-semibold);
+}
+
+.auditor-nav-button--active:hover {
+  background-color: var(--auditor-accent-subtle);
+  color: var(--auditor-accent-primary);
+}
+
+.auditor-nav-button:disabled,
+.auditor-nav-button--disabled {
+  color: var(--auditor-text-muted);
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+/* ==========================================================================
+   5. Viewport
+   ========================================================================== */
+.auditor-viewport {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: var(--auditor-space-6);
+  background-color: var(--auditor-bg-base);
+  display: flex;
+  flex-direction: column;
+  gap: var(--auditor-space-6);
+}
+
+.auditor-view-header {
+  margin-bottom: var(--auditor-space-4);
+}
+
+.auditor-view-title {
+  font-size: var(--auditor-font-size-2xl);
+  font-weight: var(--auditor-font-weight-bold);
+  color: var(--auditor-text-primary);
+  margin: 0 0 var(--auditor-space-1) 0;
+}
+
+.auditor-view-description {
+  font-size: var(--auditor-font-size-sm);
+  color: var(--auditor-text-secondary);
+  margin: 0;
+}
+
+.auditor-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--auditor-space-5);
+}
+
+.auditor-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--auditor-space-5);
+}
+
+/* ==========================================================================
+   6. Status Bar
+   ========================================================================== */
+.auditor-statusbar {
+  height: 28px;
+  background-color: var(--auditor-bg-surface);
+  border-top: 1px solid var(--auditor-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--auditor-space-4);
+  font-size: var(--auditor-font-size-xs);
+  font-family: var(--auditor-font-mono);
+  color: var(--auditor-text-muted);
+  flex-shrink: 0;
+}
+
+.auditor-statusbar__section {
+  display: flex;
+  align-items: center;
+  gap: var(--auditor-space-4);
+}
+
+.auditor-statusbar__item {
+  display: flex;
+  align-items: center;
+  gap: var(--auditor-space-1);
+}
+
+.auditor-statusbar__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--auditor-radius-full);
+  display: inline-block;
+}
+
+.auditor-statusbar__dot--connected {
+  background-color: var(--auditor-success-text);
+  box-shadow: 0 0 6px var(--auditor-success-border);
+}
+
+.auditor-statusbar__dot--disconnected {
+  background-color: var(--auditor-danger-text);
+  box-shadow: 0 0 6px var(--auditor-danger-border);
+}
+
+/* ==========================================================================
+   7. Bidirectional Layout Rules (Arabic RTL & English LTR)
+   ========================================================================== */
+[dir='rtl'] {
+  direction: rtl;
+  text-align: right;
+}
+
+[dir='ltr'] {
+  direction: ltr;
+  text-align: left;
+}

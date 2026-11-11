@@ -105,14 +105,43 @@ describe('Secure Preload Bridge (window.electronAPI)', () => {
   });
 
   describe('API Surface & Exposure Invariants', () => {
-    it('exposes exactly the three approved functions', () => {
+    it('exposes exactly the 15 approved functions', () => {
       const keys = Object.keys(api);
-      expect(keys.sort()).toEqual(['getSystemInfo', 'ping', 'validateTarget'].sort());
-      expect(keys).toHaveLength(3);
+      const expectedMethods = [
+        'ping',
+        'getSystemInfo',
+        'validateTarget',
+        'createProject',
+        'getProject',
+        'listProjects',
+        'updateProject',
+        'archiveProject',
+        'restoreProject',
+        'createSite',
+        'getSite',
+        'listSites',
+        'updateSite',
+        'archiveSite',
+        'restoreSite',
+        'createScanRun',
+        'getScanRun',
+        'listScanRuns',
+        'cancelScanRun',
+        'getScanProgress',
+        'listFindings',
+        'getFinding',
+        'createReport',
+        'getReport',
+        'listReports',
+        'deleteReport',
+        'getReportContent',
+      ].sort();
+      expect(keys.sort()).toEqual(expectedMethods);
+      expect(keys).toHaveLength(27);
 
-      expect(typeof api.ping).toBe('function');
-      expect(typeof api.getSystemInfo).toBe('function');
-      expect(typeof api.validateTarget).toBe('function');
+      for (const key of keys) {
+        expect(typeof (api as Record<string, unknown>)[key]).toBe('function');
+      }
     });
 
     it('freezes the exposed API object to prevent prototype tampering or extension', () => {
@@ -716,6 +745,118 @@ describe('Secure Preload Bridge (window.electronAPI)', () => {
       const res = await electronAPI.ping();
       expect(mockIpcInvoke).toHaveBeenCalledWith(IPC_CHANNELS.APP_PING, {});
       expect(res.success).toBe(true);
+    });
+  });
+
+  describe('E. Database IPC Operations on Preload API (Phase 2.2)', () => {
+    it('createProject() invokes IPC_CHANNELS.PROJECT_CREATE with payload', async () => {
+      const mockProject = {
+        id: 'p-1',
+        name: 'Test Project',
+        description: null,
+        isArchived: false,
+        createdAt: 100,
+        updatedAt: 100,
+        archivedAt: null,
+      };
+      mockInvoker.mockResolvedValueOnce({ success: true, data: mockProject });
+
+      const res = await api.createProject({ name: 'Test Project' });
+      expect(mockInvoker).toHaveBeenCalledWith(IPC_CHANNELS.PROJECT_CREATE, {
+        name: 'Test Project',
+      });
+      expect(res.success).toBe(true);
+      if (res.success) {
+        expect(res.data.id).toBe('p-1');
+      }
+    });
+
+    it('listProjects() invokes IPC_CHANNELS.PROJECT_LIST with empty object default if omitted', async () => {
+      mockInvoker.mockResolvedValueOnce({
+        success: true,
+        data: { items: [], total: 0, hasMore: false },
+      });
+
+      const res = await api.listProjects();
+      expect(mockInvoker).toHaveBeenCalledWith(IPC_CHANNELS.PROJECT_LIST, {});
+      expect(res.success).toBe(true);
+    });
+
+    it('createSite() invokes IPC_CHANNELS.SITE_CREATE with payload', async () => {
+      const mockSite = {
+        id: 's-1',
+        projectId: 'p-1',
+        name: 'Main Site',
+        baseUrl: 'https://site.com/',
+        platformType: 'wordpress',
+        environmentType: 'production',
+        isArchived: false,
+        createdAt: 100,
+        updatedAt: 100,
+        archivedAt: null,
+      };
+      mockInvoker.mockResolvedValueOnce({ success: true, data: mockSite });
+
+      const res = await api.createSite({
+        projectId: 'p-1',
+        name: 'Main Site',
+        baseUrl: 'https://site.com',
+      });
+      expect(mockInvoker).toHaveBeenCalledWith(IPC_CHANNELS.SITE_CREATE, {
+        projectId: 'p-1',
+        name: 'Main Site',
+        baseUrl: 'https://site.com',
+      });
+      expect(res.success).toBe(true);
+    });
+
+    it('listSites() invokes IPC_CHANNELS.SITE_LIST with query or empty object', async () => {
+      mockInvoker.mockResolvedValueOnce({
+        success: true,
+        data: { items: [], total: 0, hasMore: false },
+      });
+
+      const res = await api.listSites({ projectId: 'p-1' });
+      expect(mockInvoker).toHaveBeenCalledWith(IPC_CHANNELS.SITE_LIST, { projectId: 'p-1' });
+      expect(res.success).toBe(true);
+    });
+
+    it('archiveProject and restoreProject invoke their respective channels', async () => {
+      mockInvoker.mockResolvedValueOnce({
+        success: true,
+        data: { id: 'p-1', isArchived: true, archivedSitesCount: 2 },
+      });
+
+      const archiveRes = await api.archiveProject({ id: 'p-1' });
+      expect(mockInvoker).toHaveBeenCalledWith(IPC_CHANNELS.PROJECT_ARCHIVE, { id: 'p-1' });
+      expect(archiveRes.success).toBe(true);
+
+      mockInvoker.mockResolvedValueOnce({
+        success: true,
+        data: {
+          id: 'p-1',
+          name: 'P1',
+          description: null,
+          isArchived: false,
+          createdAt: 100,
+          updatedAt: 200,
+          archivedAt: null,
+        },
+      });
+
+      const restoreRes = await api.restoreProject({ id: 'p-1' });
+      expect(mockInvoker).toHaveBeenCalledWith(IPC_CHANNELS.PROJECT_RESTORE, { id: 'p-1' });
+      expect(restoreRes.success).toBe(true);
+    });
+
+    it('safely handles bridge invocation rejection without leaking raw exceptions', async () => {
+      mockInvoker.mockRejectedValueOnce(new Error('Fatal IPC channel disconnect'));
+
+      const res = await api.createProject({ name: 'Failing Project' });
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect(res.error).toEqual(FALLBACK_TRANSPORT_ERROR);
+      }
     });
   });
 });

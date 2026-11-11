@@ -3,6 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 
+const projectRoot = path.resolve(__dirname, '../../../../../');
+
 const results = {
   electronVersion: process.versions.electron,
   nodeVersion: process.versions.node,
@@ -14,9 +16,10 @@ const results = {
   steps: [],
 };
 
-const dbPath = path.resolve('D:/ahmed/.tmp/electron_test_real.db');
+const dbPath = path.resolve(projectRoot, '.tmp/electron_test_real.db');
 const electronBinding = path.resolve(
-  'D:/ahmed/apps/desktop/src/main/db/native/electron-v149-win32-x64/better_sqlite3.node',
+  projectRoot,
+  'apps/desktop/src/main/db/native/electron-v149-win32-x64/better_sqlite3.node',
 );
 
 try {
@@ -104,7 +107,8 @@ try {
 
   // 11. Verify that loading host Node ABI 137 binary in Electron strictly fails with ABI mismatch
   const nodeBinding = path.resolve(
-    'D:/ahmed/apps/desktop/src/main/db/native/node-v137-win32-x64/better_sqlite3.node',
+    projectRoot,
+    'apps/desktop/src/main/db/native/node-v137-win32-x64/better_sqlite3.node',
   );
   if (fs.existsSync(nodeBinding)) {
     try {
@@ -130,7 +134,8 @@ try {
 
   // 12. Verify that out/main/native copied production binary loads and operates in Electron
   const outMainBinding = path.resolve(
-    'D:/ahmed/apps/desktop/out/main/native/electron-v149-win32-x64/better_sqlite3.node',
+    projectRoot,
+    'apps/desktop/out/main/native/electron-v149-win32-x64/better_sqlite3.node',
   );
   if (fs.existsSync(outMainBinding)) {
     const outDb = new Database(':memory:', { nativeBinding: outMainBinding });
@@ -153,6 +158,6 @@ try {
   };
 }
 
-const outPath = path.resolve('D:/ahmed/.tmp/electron_sqlite_verification.json');
+const outPath = path.resolve(projectRoot, '.tmp/electron_sqlite_verification.json');
 fs.writeFileSync(outPath, JSON.stringify(results, null, 2), 'utf8');
 process.exit(results.success ? 0 : 1);

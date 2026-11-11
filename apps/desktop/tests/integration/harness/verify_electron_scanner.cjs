@@ -4,6 +4,8 @@ const https = require('node:https');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const projectRoot = path.resolve(__dirname, '../../../../../');
+
 const results = {
   electronVersion: process.versions.electron,
   nodeVersion: process.versions.node,
@@ -17,7 +19,7 @@ const results = {
 async function main() {
   const bundlePath =
     'file:///' +
-    path.resolve('D:/ahmed/.tmp/electron-scanner-bundle/scanner-client.js').replace(/\\/g, '/');
+    path.resolve(projectRoot, '.tmp/electron-scanner-bundle/scanner-client.js').replace(/\\/g, '/');
   const { SafeHttpClient, SCANNER_CLIENT_ERROR_CODES } = await import(bundlePath);
 
   // 1. Verify client instantiation in Electron Main
@@ -62,7 +64,7 @@ async function main() {
   }
 
   // 4. Real local HTTPS server and TLS certificate verification inside Electron Main
-  const fixturesDir = path.resolve('D:/ahmed/apps/desktop/tests/fixtures/tls');
+  const fixturesDir = path.resolve(projectRoot, 'apps/desktop/tests/fixtures/tls');
   const caCert = fs.readFileSync(path.join(fixturesDir, 'ca-cert.pem'));
   const validCert = fs.readFileSync(path.join(fixturesDir, 'valid-cert.pem'));
   const validKey = fs.readFileSync(path.join(fixturesDir, 'valid-key.pem'));
@@ -126,7 +128,7 @@ async function main() {
   results.success = results.steps.every(
     s => s.success !== false && s.expected !== false && s.blocked !== false && s.rejected !== false,
   );
-  const outPath = path.resolve('D:/ahmed/.tmp/electron_scanner_verification.json');
+  const outPath = path.resolve(projectRoot, '.tmp/electron_scanner_verification.json');
   fs.writeFileSync(outPath, JSON.stringify(results, null, 2), 'utf8');
   process.exit(results.success ? 0 : 1);
 }
@@ -134,7 +136,7 @@ async function main() {
 main().catch(err => {
   results.success = false;
   results.error = { message: err.message, stack: err.stack };
-  const outPath = path.resolve('D:/ahmed/.tmp/electron_scanner_verification.json');
+  const outPath = path.resolve(projectRoot, '.tmp/electron_scanner_verification.json');
   fs.writeFileSync(outPath, JSON.stringify(results, null, 2), 'utf8');
   process.exit(1);
 });

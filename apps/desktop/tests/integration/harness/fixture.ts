@@ -64,7 +64,7 @@ self.onmessage = () => {
 
   // 3.2 Ensure node_modules is accessible in test app via junction to apps/desktop/node_modules
   const testNodeModules = path.join(targetDir, 'node_modules');
-  const desktopNodeModules = path.resolve('D:/ahmed/apps/desktop/node_modules');
+  const desktopNodeModules = path.resolve(projectRoot, 'apps/desktop/node_modules');
   if (!fs.existsSync(testNodeModules) && fs.existsSync(desktopNodeModules)) {
     try {
       fs.symlinkSync(desktopNodeModules, testNodeModules, 'junction');

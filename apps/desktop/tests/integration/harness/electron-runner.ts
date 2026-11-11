@@ -175,7 +175,7 @@ export class ElectronProcessRunner {
             stdio: ['pipe', 'pipe', 'pipe'],
             env: {
               ...process.env,
-              PROJECT_ROOT: 'D:\\ahmed',
+              PROJECT_ROOT: projectRoot,
               TEST_IPC_PORT: String(port),
               ELECTRON_ENABLE_LOGGING: '1',
               NODE_ENV: 'test',

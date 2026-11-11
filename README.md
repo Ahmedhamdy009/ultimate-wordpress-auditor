@@ -1,18 +1,53 @@
 # Ultimate WordPress & Website Auditor
 
-[![Version](https://img.shields.io/badge/version-0.1.6--alpha-blue.svg)](https://github.com/Ahmedhamdy009/ultimate-wordpress-auditor)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-1360%20passing-brightgreen.svg)]()
-[![Platform](https://img.shields.io/badge/platform-Windows%20x64-lightgrey.svg)]()
-[![Electron](https://img.shields.io/badge/Electron-44.10.2-informational.svg)](https://www.electronjs.org/)
-[![React](https://img.shields.io/badge/React-19.3.1-61dafb.svg)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-3178c6.svg)](https://www.typescriptlang.org/)
+<p align="center">
+  <img src="docs/assets/social-preview.png" alt="Ultimate WordPress & Website Auditor Social Banner" width="100%" />
+</p>
+
+<p align="center">
+  <a href="https://github.com/Ahmedhamdy009/ultimate-wordpress-auditor/actions/workflows/ci.yml"><img src="https://github.com/Ahmedhamdy009/ultimate-wordpress-auditor/actions/workflows/ci.yml/badge.svg" alt="CI Status" /></a>
+  <a href="https://github.com/Ahmedhamdy009/ultimate-wordpress-auditor/releases/tag/v0.1.6"><img src="https://img.shields.io/badge/release-v0.1.6--alpha-blue.svg" alt="Release v0.1.6" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT" /></a>
+  <img src="https://img.shields.io/badge/tests-1360%20passing-brightgreen.svg" alt="1360 Tests Passing" />
+  <img src="https://img.shields.io/badge/platform-Windows%20x64-lightgrey.svg" alt="Platform: Windows x64" />
+  <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Electron-44.10.2-informational.svg" alt="Electron 44" /></a>
+  <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19.3.1-61dafb.svg" alt="React 19" /></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.8.3-3178c6.svg" alt="TypeScript 5.8" /></a>
+</p>
+
+---
 
 **Ultimate WordPress & Website Auditor** is an open-source, local-first Windows desktop application engineered for developers, QA engineers, and website owners. It performs structured technical SEO, security posture, accessibility, and responsive layout audits of WordPress installations and public websites.
 
 > [!IMPORTANT]
 > **Project Status: Active Developer Preview (v0.1.6 Alpha)**  
 > This software is under active engineering and real-world field validation. It is an alpha release intended for testing, review, and developer preview, not a finished commercial product.
+
+---
+
+## Download & Installation (Windows x64)
+
+The latest pre-packaged Windows installer is available directly from GitHub Releases:
+
+📦 **[Download Ultimate WordPress & Website Auditor Setup 0.1.6.exe](https://github.com/Ahmedhamdy009/ultimate-wordpress-auditor/releases/download/v0.1.6/Ultimate%20WordPress%20%26%20Website%20Auditor%20Setup%200.1.6.exe)**  
+*(Release tag: [`v0.1.6`](https://github.com/Ahmedhamdy009/ultimate-wordpress-auditor/releases/tag/v0.1.6))*
+
+### Package Integrity & Checksum
+- **Installer Filename:** `Ultimate WordPress & Website Auditor Setup 0.1.6.exe`
+- **File Size:** `125,806,288 bytes (~120 MB)`
+- **SHA-256 Checksum:**  
+  `99dfb08b068d5638c9cbefc25d73332d4e2be271e2fb04ccea282f82a179cacd`
+
+You can verify the downloaded installer integrity in PowerShell:
+```powershell
+Get-FileHash -Path ".\Ultimate WordPress & Website Auditor Setup 0.1.6.exe" -Algorithm SHA256
+```
+
+### Note on Windows SmartScreen
+Because this is an open-source alpha developer build without an expensive commercial EV (Extended Validation) code signing certificate, Windows Defender SmartScreen may display a warning dialog stating *"Windows protected your PC / Unknown Publisher"*.  
+To proceed with testing:
+1. Click **More info**.
+2. Click **Run anyway**.
 
 ---
 
@@ -101,18 +136,18 @@ The desktop application enforces the **Principle of Least Privilege**:
 
 ---
 
-## Getting Started
+## Developer Guide & Building from Source
 
 ### System Requirements
 - **OS:** Windows 10 / Windows 11 (x64)
-- **Node.js:** `>= 22.0.0`
-- **Package Manager:** `pnpm >= 9.0.0`
-- **C++ Tools (Optional):** Precompiled dual-ABI native SQLite binaries are included for Windows x64. Visual Studio 2022 C++ Build Tools are only required if you choose to recompile native addons from source.
+- **Node.js:** `>= 22.0.0` (Recommended: Node 24.x)
+- **Package Manager:** `pnpm >= 9.0.0` (Lockfile: `9.15.4`)
+- **C++ Tools (Optional):** Precompiled dual-ABI native SQLite binaries are included in the repository for Windows x64. Visual Studio 2022 C++ Build Tools are only required if recompiling native addons.
 
-### Installation & Development Setup
+### Installation & Quality Gate Commands
 
 ```powershell
-# 1. Clone the repository
+# 1. Clone repository
 git clone https://github.com/Ahmedhamdy009/ultimate-wordpress-auditor.git
 cd ultimate-wordpress-auditor
 
@@ -120,7 +155,7 @@ cd ultimate-wordpress-auditor
 . .\scripts\env.project.ps1
 
 # 3. Install dependencies
-pnpm install
+pnpm install --frozen-lockfile
 
 # 4. Verify package exports and run quality gates
 pnpm test:package-exports
@@ -138,7 +173,7 @@ pnpm --filter @auditor/desktop dev
 pnpm dist
 ```
 
-Upon successful build, the installer is produced at:
+Upon successful build, the installer is produced at:  
 `apps/desktop/dist/Ultimate WordPress & Website Auditor Setup 0.1.6.exe`
 
 ---
@@ -181,5 +216,5 @@ This project is open-source software licensed under the [MIT License](LICENSE).
 
 **Ahmed Hamdy**  
 - GitHub: [@Ahmedhamdy009](https://github.com/Ahmedhamdy009)  
-- Email: `ahmedhamdybayoumi2006@gmail.com`
+- Email: `ahmedhamdybayoumi2006@gmail.com`  
 - Repository: [ultimate-wordpress-auditor](https://github.com/Ahmedhamdy009/ultimate-wordpress-auditor)

@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Quality Gates & Build Verification
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Quality Gate 1 - Package Exports
+        run: pnpm test:package-exports
+
+      - name: Quality Gate 2 - Code Formatting
+        run: pnpm format:check
+
+      - name: Quality Gate 3 - ESLint Strict Verification
+        run: pnpm lint
+
+      - name: Quality Gate 4 - TypeScript Typecheck
+        run: pnpm typecheck
+
+      - name: Quality Gate 5 - Automated Test Suite
+        run: pnpm test
+
+      - name: Quality Gate 6 - Production Build
+        run: pnpm build

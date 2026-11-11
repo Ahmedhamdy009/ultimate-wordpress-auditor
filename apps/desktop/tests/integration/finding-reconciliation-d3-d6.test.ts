@@ -38,7 +38,8 @@ describe('Phase 6 Cross-Layer Reconciliation (D3/D4/D5/D6): SQLite <-> Inspector
 
   beforeEach(async () => {
     const token = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    tmpReportsDir = path.resolve('D:/ahmed/.tmp/reconcile-reports', token);
+    const projectRoot = path.resolve(import.meta.dirname, '../../../../');
+    tmpReportsDir = path.resolve(projectRoot, '.tmp/reconcile-reports', token);
     tmpScreenshotsDir = path.join(tmpReportsDir, 'screenshots');
     fs.mkdirSync(tmpScreenshotsDir, { recursive: true });
 

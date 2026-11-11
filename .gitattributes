@@ -1,6 +1,9 @@
 # Set default behavior to normalize line endings to LF on commit/checkout
 * text=auto eol=lf
 
+# Preserve exact binary bytes of archived IANA CSV snapshot files
+packages/shared/src/scope/iana-snapshots/*.csv binary
+
 # Binary assets
 *.png binary
 *.jpg binary

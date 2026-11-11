@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const TEST_APP_DIR = path.resolve('D:/ahmed/.tmp/electron-runtime-app');
-export const PROD_OUT_DIR = path.resolve('D:/ahmed/apps/desktop/out');
+const projectRoot = path.resolve(import.meta.dirname, '../../../../../');
+export const TEST_APP_DIR = path.resolve(projectRoot, '.tmp/electron-runtime-app');
+export const PROD_OUT_DIR = path.resolve(projectRoot, 'apps/desktop/out');
 
 /**
  * Prepares the temporary Electron test application fixture under D:\ahmed\.tmp\electron-runtime-app.
@@ -14,7 +15,7 @@ export function prepareElectronTestApp(targetDir: string = TEST_APP_DIR): void {
   fs.mkdirSync(targetDir, { recursive: true });
 
   // 2. Ensure package.json with valid Electron application entry point
-  const desktopPkgPath = path.resolve('D:/ahmed/apps/desktop/package.json');
+  const desktopPkgPath = path.resolve(projectRoot, 'apps/desktop/package.json');
   const desktopVersion = fs.existsSync(desktopPkgPath)
     ? JSON.parse(fs.readFileSync(desktopPkgPath, 'utf8')).version
     : '0.1.4';

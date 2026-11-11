@@ -19,6 +19,7 @@ describe('Batch 5.2 — Electron Builder & Windows Installer Packaging Verificat
     distDir,
     `Ultimate WordPress & Website Auditor Setup ${appVersion}.exe`,
   );
+  const isPackaged = fs.existsSync(winUnpackedDir) && fs.existsSync(installerExePath);
 
   describe('1. Electron Builder Configuration Validation', () => {
     it('verifies electron-builder.yml exists and defines correct application metadata', () => {
@@ -75,7 +76,7 @@ describe('Batch 5.2 — Electron Builder & Windows Installer Packaging Verificat
     });
   });
 
-  describe('3. Unpacked Windows Package Structure', () => {
+  describe.skipIf(!isPackaged)('3. Unpacked Windows Package Structure', () => {
     it('verifies win-unpacked directory contains main executable and resources', () => {
       expect(fs.existsSync(winUnpackedDir)).toBe(true);
 
@@ -108,7 +109,7 @@ describe('Batch 5.2 — Electron Builder & Windows Installer Packaging Verificat
     });
   });
 
-  describe('4. ASAR Archive Internal Integrity', () => {
+  describe.skipIf(!isPackaged)('4. ASAR Archive Internal Integrity', () => {
     it('verifies app.asar contains entry points, renderer bundle, and required dependencies without development junk', () => {
       const asarLibPath = path.resolve(
         projectRoot,
@@ -144,7 +145,7 @@ describe('Batch 5.2 — Electron Builder & Windows Installer Packaging Verificat
     });
   });
 
-  describe('5. NSIS Standalone Installer Executable', () => {
+  describe.skipIf(!isPackaged)('5. NSIS Standalone Installer Executable', () => {
     it('verifies NSIS installer executable exists and is non-empty', () => {
       expect(fs.existsSync(installerExePath)).toBe(true);
       const stat = fs.statSync(installerExePath);

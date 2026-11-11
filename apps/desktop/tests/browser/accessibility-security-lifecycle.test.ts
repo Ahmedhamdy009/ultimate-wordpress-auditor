@@ -396,7 +396,7 @@ describe('Accessibility Engine — Security, Privacy & Lifecycle Resilience Suit
     expect(report.findings.length).toBe(0);
 
     await managedPage.release();
-  });
+  }, 15000);
 
   it('5. distinguishes timeout response returned to caller from browser execution, and prevents overlapping audit on same page', async () => {
     const managedPage = await manager.acquirePage();

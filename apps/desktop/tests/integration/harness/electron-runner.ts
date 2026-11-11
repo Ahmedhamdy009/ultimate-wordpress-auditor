@@ -2,7 +2,21 @@ import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import net from 'node:net';
 import path from 'node:path';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import { prepareElectronTestApp } from './fixture.js';
+
+const req = createRequire(import.meta.url);
+const projectRoot = path.resolve(import.meta.dirname, '../../../../../');
+const defaultElectronPath: string = (() => {
+  try {
+    return req('electron');
+  } catch {
+    return path.resolve(
+      projectRoot,
+      'node_modules/.pnpm/electron@44.10.2/node_modules/electron/dist/electron.exe',
+    );
+  }
+})();
 
 export interface RuntimeVersions {
   readonly electron: string;
@@ -41,15 +55,19 @@ export class ElectronProcessRunner {
 
   constructor(
     private readonly appDir: string = path.resolve(
-      `D:/ahmed/.tmp/electron-runtime-app-${process.pid}-${Math.random().toString(36).slice(2, 7)}`,
+      projectRoot,
+      `.tmp/electron-runtime-app-${process.pid}-${Math.random().toString(36).slice(2, 7)}`,
     ),
-    private readonly electronPath: string = path.resolve(
-      'D:/ahmed/node_modules/.pnpm/electron@44.10.2/node_modules/electron/dist/electron.exe',
-    ),
+    private readonly electronPath: string = defaultElectronPath,
     private readonly extraEnv?: Record<string, string>,
   ) {
     if (!extraEnv?.AUDITOR_USER_DATA_DIR && !process.env.AUDITOR_USER_DATA_DIR) {
-      this.isolatedUserDataDir = path.join('D:\\ahmed\\.tmp\\userData', path.basename(this.appDir));
+      this.isolatedUserDataDir = path.join(
+        projectRoot,
+        '.tmp',
+        'userData',
+        path.basename(this.appDir),
+      );
     }
   }
 

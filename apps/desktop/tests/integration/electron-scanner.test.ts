@@ -27,21 +27,22 @@ interface VerificationOutput {
 describe('Live Electron 44 Main Process Network & Scanner Integration', () => {
   const req = createRequire(import.meta.url);
   const electronBinary = req('electron');
+  const projectRoot = path.resolve(import.meta.dirname, '../../../../');
   const harnessPath = path.resolve(import.meta.dirname, 'harness', 'verify_electron_scanner.cjs');
-  const resultJsonPath = path.resolve('D:/ahmed/.tmp/electron_scanner_verification.json');
+  const resultJsonPath = path.resolve(projectRoot, '.tmp/electron_scanner_verification.json');
 
   beforeAll(async () => {
     // Ensure scanner-client is bundled for the Electron harness
     const vite = req('vite');
     await vite.build({
-      root: path.resolve('D:/ahmed/apps/desktop'),
+      root: path.resolve(projectRoot, 'apps/desktop'),
       build: {
         lib: {
-          entry: path.resolve('D:/ahmed/apps/desktop/src/main/scanner/client/index.ts'),
+          entry: path.resolve(projectRoot, 'apps/desktop/src/main/scanner/client/index.ts'),
           formats: ['es'],
           fileName: 'scanner-client',
         },
-        outDir: path.resolve('D:/ahmed/.tmp/electron-scanner-bundle'),
+        outDir: path.resolve(projectRoot, '.tmp/electron-scanner-bundle'),
         emptyOutDir: true,
         rollupOptions: {
           external: [/^node:/, 'electron'],

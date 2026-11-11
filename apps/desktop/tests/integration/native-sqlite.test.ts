@@ -105,7 +105,8 @@ describe('Native SQLite Engine Integration', () => {
     const req = createRequire(import.meta.url);
     const electronBinary = req('electron');
     const scriptPath = path.resolve(import.meta.dirname, 'harness', 'verify_electron_sqlite.cjs');
-    const resultJsonPath = path.resolve('D:/ahmed/.tmp/electron_sqlite_verification.json');
+    const projectRoot = path.resolve(import.meta.dirname, '../../../../');
+    const resultJsonPath = path.resolve(projectRoot, '.tmp/electron_sqlite_verification.json');
 
     const result = await new Promise<VerificationOutput>((resolve, reject) => {
       execFile(electronBinary, [scriptPath], { timeout: 15000 }, (error, stdout, stderr) => {

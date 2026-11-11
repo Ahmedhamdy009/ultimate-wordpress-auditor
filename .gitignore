@@ -17,6 +17,8 @@ out/
 .env.*.local
 *.pem
 *.key
+!apps/desktop/tests/fixtures/tls/*.pem
+!apps/desktop/tests/fixtures/tls/*.key
 credentials.json
 secrets.json
 

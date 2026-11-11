@@ -10,12 +10,22 @@ import { DatabaseConnection } from '../../src/main/db/connection.js';
 import { MigrationRunner } from '../../src/main/db/migrations/runner.js';
 import { getDatabasePath } from '../../src/main/db/paths.js';
 import { ScanRunRepository } from '../../src/main/db/repositories/scan-run.repository.js';
+import { createRequire } from 'node:module';
 import { ElectronProcessRunner } from './harness/electron-runner.js';
 import { prepareElectronTestApp } from './harness/fixture.js';
 
-const ELECTRON_EXECUTABLE_PATH = path.resolve(
-  'D:/ahmed/node_modules/.pnpm/electron@44.10.2/node_modules/electron/dist/electron.exe',
-);
+const req = createRequire(import.meta.url);
+const projectRoot = path.resolve(import.meta.dirname, '../../../../');
+const ELECTRON_EXECUTABLE_PATH = (() => {
+  try {
+    return req('electron');
+  } catch {
+    return path.resolve(
+      projectRoot,
+      'node_modules/.pnpm/electron@44.10.2/node_modules/electron/dist/electron.exe',
+    );
+  }
+})();
 
 interface CreatedRecordResponse {
   success: boolean;
@@ -116,10 +126,11 @@ describe('D1 — Single-Instance Lock & Scan Integrity', () => {
 
     const runToken = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const sharedUserDataDir = path.resolve(
-      'D:/ahmed/.tmp/userData',
+      projectRoot,
+      '.tmp/userData',
       `single-instance-e2e-${runToken}`,
     );
-    const secondAppDir = path.resolve('D:/ahmed/.tmp', `electron-second-instance-${runToken}`);
+    const secondAppDir = path.resolve(projectRoot, '.tmp', `electron-second-instance-${runToken}`);
     tempDirsToCleanup.push(sharedUserDataDir, secondAppDir);
 
     const runner1 = new ElectronProcessRunner(undefined, ELECTRON_EXECUTABLE_PATH, {

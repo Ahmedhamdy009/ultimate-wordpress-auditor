@@ -36,6 +36,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      - name: Download Electron binary
+        run: pnpm --filter @auditor/desktop exec node -e "require('electron/install.js')"
+
       - name: Quality Gate 1 - Package Exports
         run: pnpm test:package-exports
 
@@ -48,8 +51,8 @@ jobs:
       - name: Quality Gate 4 - TypeScript Typecheck
         run: pnpm typecheck
 
-      - name: Quality Gate 5 - Automated Test Suite
-        run: pnpm test
-
-      - name: Quality Gate 6 - Production Build
+      - name: Quality Gate 5 - Production Build
         run: pnpm build
+
+      - name: Quality Gate 6 - Automated Test Suite
+        run: pnpm test

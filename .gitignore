@@ -31,3 +31,37 @@ yarn-error.log*
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# Runtime scan reports and screenshots (Never commit scan results to source)
+reports/screenshots/
+reports/*.html
+reports/*.json
+reports/*.csv
+
+# Local SQLite databases in workspace root
+*.db
+*.db-wal
+*.db-shm
+
+# Forensic and incident diagnostic scripts (exclude from public git tracking)
+scripts/check-*.mjs
+scripts/check-*.ps1
+scripts/find-*.mjs
+scripts/forensic-*.mjs
+scripts/inspect-*.mjs
+scripts/inventory-*.mjs
+scripts/investigate-*.mjs
+scripts/recover-*.mjs
+scripts/restore-*.mjs
+scripts/run-install-*.mjs
+scripts/run-installed-*.mjs
+scripts/search-*.mjs
+scripts/test-incident-*.mjs
+scripts/update-installed-*.mjs
+scripts/update-project-*.mjs
+scripts/update-types.mjs
+scripts/verify-hotfix-*.mjs
+scripts/verify-installed-*.mjs
+scripts/verify-uninstall-*.mjs
+scripts/verify-upgrade-*.mjs
+

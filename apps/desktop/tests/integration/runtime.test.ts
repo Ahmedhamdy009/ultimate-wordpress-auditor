@@ -10,8 +10,6 @@ import { APPLICATION_NAME } from '../../src/main/config/paths.js';
 import { getProductionUserDataDirectory, getDatabasePath } from '../../src/main/db/paths.js';
 import { runCli } from '../../src/main/cli/index.js';
 
-const projectRoot = path.resolve(import.meta.dirname, '../../../../');
-
 interface RendererBridgeInspection {
   exists: boolean;
   isFrozen: boolean;

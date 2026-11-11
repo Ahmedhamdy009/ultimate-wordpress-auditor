@@ -1,0 +1,32 @@
+import fs from 'fs';
+import path from 'path';
+
+const targetDir = 'D:/ahmed/packages/shared/src/scope/iana-snapshots';
+const metadata = {
+  retrievalTimestamp: '2026-11-07T13:42:25.209Z',
+  generatorVersion: '1.0.0',
+  registryParsingVersion: '1.0.0',
+  snapshots: {
+    ipv4: {
+      canonicalSourceUrl:
+        'https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry-1.csv',
+      filename: 'iana-ipv4-special-registry.csv',
+      byteLength: 2445,
+      sha256: 'cbc4b7653c8bc640ba1e8e5d4ebbf11e7c7a1d867e7f1593aad001d3f8632aac',
+    },
+    ipv6: {
+      canonicalSourceUrl:
+        'https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry-1.csv',
+      filename: 'iana-ipv6-special-registry.csv',
+      byteLength: 2300,
+      sha256: 'bf56772aef97fbf9b4a27c98b8511f2bb1ba96da4b9ccc12ab203a2496faba66',
+    },
+  },
+};
+
+fs.writeFileSync(
+  path.join(targetDir, 'snapshot-metadata.json'),
+  JSON.stringify(metadata, null, 2) + '\n',
+  'utf8',
+);
+console.log('Written snapshot-metadata.json');

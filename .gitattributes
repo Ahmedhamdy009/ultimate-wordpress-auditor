@@ -1,0 +1,11 @@
+# Set default behavior to normalize line endings to LF on commit/checkout
+* text=auto eol=lf
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.node binary
+*.exe binary
+*.asar binary

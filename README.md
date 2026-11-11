@@ -29,18 +29,18 @@
 
 The latest pre-packaged Windows installer is available directly from GitHub Releases:
 
-📦 **[Download Ultimate WordPress & Website Auditor Setup 0.1.6.exe](https://github.com/Ahmedhamdy009/ultimate-wordpress-auditor/releases/download/v0.1.6/Ultimate%20WordPress%20%26%20Website%20Auditor%20Setup%200.1.6.exe)**  
+📦 **[Download Ultimate WordPress & Website Auditor Setup 0.1.6 (x64 Installer)](https://github.com/Ahmedhamdy009/ultimate-wordpress-auditor/releases/download/v0.1.6/Ultimate.WordPress.Website.Auditor.Setup.0.1.6.exe)**  
 *(Release tag: [`v0.1.6`](https://github.com/Ahmedhamdy009/ultimate-wordpress-auditor/releases/tag/v0.1.6))*
 
 ### Package Integrity & Checksum
-- **Installer Filename:** `Ultimate WordPress & Website Auditor Setup 0.1.6.exe`
+- **Installer Asset:** `Ultimate.WordPress.Website.Auditor.Setup.0.1.6.exe`
 - **File Size:** `125,806,288 bytes (~120 MB)`
 - **SHA-256 Checksum:**  
   `99dfb08b068d5638c9cbefc25d73332d4e2be271e2fb04ccea282f82a179cacd`
 
 You can verify the downloaded installer integrity in PowerShell:
 ```powershell
-Get-FileHash -Path ".\Ultimate WordPress & Website Auditor Setup 0.1.6.exe" -Algorithm SHA256
+Get-FileHash -Path ".\Ultimate.WordPress.Website.Auditor.Setup.0.1.6.exe" -Algorithm SHA256
 ```
 
 ### Note on Windows SmartScreen

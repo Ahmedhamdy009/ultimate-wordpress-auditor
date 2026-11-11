@@ -1,0 +1,58 @@
+appId: com.auditor.desktop
+productName: Ultimate WordPress & Website Auditor
+artifactName: ${productName} Setup ${version}.${ext}
+copyright: Copyright © 2026 Ultimate WordPress & Website Auditor
+electronVersion: 44.10.2
+
+directories:
+  app: apps/desktop
+  output: apps/desktop/dist
+
+extraMetadata:
+  author:
+    name: Ultimate WordPress & Website Auditor Team
+  description: Local Windows application for comprehensive technical and security auditing of WordPress and web sites.
+
+files:
+  - out/**/*
+  - package.json
+  - '!out/main/native/node-v137-win32-x64/**/*'
+  - '!**/node_modules/**/{test,__tests__,tests,powered-test,example,examples}/**/*'
+  - '!**/node_modules/**/*.{ts,tsx}'
+  - '!**/node_modules/**/*.map'
+  - '!**/node_modules/.bin'
+  - '!**/*.{o,h,obj,cc,c,cpp,hex,iobj,ipdb,lib,exp}'
+  - '!**/*.vcxproj*'
+  - '!**/node_modules/better-sqlite3/build/Release/obj/**/*'
+  - '!**/node_modules/better-sqlite3/build/deps/**/*'
+
+asar: true
+asarUnpack:
+  - '**/*.node'
+  - '**/native/**/*'
+
+npmRebuild: false
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: apps/desktop/resources/icon.ico
+  legalTrademarks: Ultimate WordPress & Website Auditor
+  artifactName: ${productName} Setup ${version}.${ext}
+
+nsis:
+  artifactName: ${productName} Setup ${version}.${ext}
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Ultimate WordPress & Website Auditor
+  uninstallDisplayName: ${productName}
+  deleteAppDataOnUninstall: false
+  installerIcon: apps/desktop/resources/icon.ico
+  uninstallerIcon: apps/desktop/resources/icon.ico
+  installerHeaderIcon: apps/desktop/resources/icon.ico
+  runAfterFinish: true

@@ -1,8 +1,11 @@
 {
   "name": "ultimate-wordpress-and-website-auditor",
-  "version": "0.1.0",
+  "version": "0.1.6",
   "private": true,
   "description": "Local Windows application for comprehensive technical and security auditing of WordPress and web sites.",
+  "author": {
+    "name": "Ultimate WordPress & Website Auditor Team"
+  },
   "type": "module",
   "packageManager": "pnpm@9.15.4",
   "engines": {
@@ -14,7 +17,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && pnpm --filter @auditor/desktop typecheck",
     "test": "vitest run",
     "test:package-exports": "node scripts/test-package-exports.mjs",
-    "build": "pnpm --filter @auditor/shared build && tsc -p tsconfig.build.json && pnpm --filter @auditor/desktop build",
+    "db:cli": "node apps/desktop/out/main/cli.js",
+    "build": "pnpm --filter @auditor/shared build && tsc -p tsconfig.build.json && pnpm --filter @auditor/desktop build && node scripts/copy-build-assets.mjs",
+    "package": "pnpm build && electron-builder --dir --x64",
+    "dist": "pnpm build && electron-builder --win --x64",
+    "build:installer": "pnpm dist",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
@@ -24,8 +31,11 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.6.6",
+    "axe-core": "4.14.0",
+    "electron-builder": "26.18.1",
     "eslint": "^10.14.0",
     "eslint-config-prettier": "^10.1.8",
+    "playwright-core": "^1.65.0",
     "prettier": "^3.9.10",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.72.1",

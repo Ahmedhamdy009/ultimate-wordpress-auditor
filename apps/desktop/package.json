@@ -1,22 +1,33 @@
 {
   "name": "@auditor/desktop",
-  "version": "0.1.0",
+  "productName": "ultimate-wordpress-and-website-auditor",
+  "version": "0.1.6",
   "private": true,
   "description": "Desktop shell for Ultimate WordPress & Website Auditor",
+  "author": {
+    "name": "Ultimate WordPress & Website Auditor Team"
+  },
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev -c electron-vite.config.ts",
     "build": "electron-vite build -c electron-vite.config.ts",
     "preview": "electron-vite preview -c electron-vite.config.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.json",
+    "package": "electron-builder --dir --x64",
+    "dist": "electron-builder --win --x64"
   },
   "dependencies": {
     "@auditor/shared": "workspace:*",
+    "axe-core": "4.14.0",
+    "better-sqlite3": "11.8.1",
+    "htmlparser2": "^12.0.0",
+    "playwright-core": "^1.65.0",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "7.6.12",
     "@types/node": "26.6.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",

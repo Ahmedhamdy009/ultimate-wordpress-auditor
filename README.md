@@ -1,6 +1,7 @@
 # Ultimate WordPress & Website Auditor
 
 [![Version](https://img.shields.io/badge/version-0.1.6--alpha-blue.svg)](https://github.com/Ahmedhamdy009/ultimate-wordpress-auditor)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-1360%20passing-brightgreen.svg)]()
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64-lightgrey.svg)]()
 [![Electron](https://img.shields.io/badge/Electron-44.10.2-informational.svg)](https://www.electronjs.org/)
@@ -172,7 +173,7 @@ Every release candidate is verified against six strict automated quality gates:
 
 ## License
 
-Licensing terms are under review by the maintainer and will be published prior to general availability.
+This project is open-source software licensed under the [MIT License](LICENSE).
 
 ---
 

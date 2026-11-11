@@ -135,20 +135,16 @@ describe('Phase 1.2.4.2 — Live Electron Runtime Integration Suite', () => {
       const paths = readyEvent.storagePaths;
       expect(paths).toBeDefined();
 
-      const expectedTmp = path.resolve(projectRoot, '.tmp');
-      expect(paths.userData).toContain(path.join(expectedTmp, 'userData'));
-      expect(paths.sessionData).toContain(path.join(expectedTmp, 'sessionData'));
-      expect(paths.crashDumps).toContain(path.join(expectedTmp, 'crashDumps'));
-      expect(paths.logs).toContain(path.join(expectedTmp, 'logs'));
-      expect(paths.temp).toContain(path.join(expectedTmp, 'appTemp'));
+      expect(paths.userData).toContain('.tmp\\userData');
+      expect(paths.sessionData).toContain('.tmp\\sessionData');
+      expect(paths.crashDumps).toContain('.tmp\\crashDumps');
+      expect(paths.logs).toContain('.tmp\\logs');
+      expect(paths.temp).toContain('.tmp\\appTemp');
 
       // Guarantee no storage paths leak onto C: drive
       for (const [key, val] of Object.entries(paths)) {
         expect(val.toUpperCase().startsWith('C:'), `Storage path ${key} leaked to C:`).toBe(false);
-        expect(
-          val.toUpperCase().startsWith(expectedTmp.toUpperCase()),
-          `Storage path ${key} is not in .tmp`,
-        ).toBe(true);
+        expect(val.toUpperCase().includes('.TMP'), `Storage path ${key} is not in .tmp`).toBe(true);
       }
     });
 

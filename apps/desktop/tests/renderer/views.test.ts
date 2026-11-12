@@ -9,6 +9,9 @@ import type {
   AppSystemInfoResponse,
   IPCResult,
   AuditValidateTargetResponse,
+  ProjectDTO,
+  SiteDTO,
+  ScanRunDTO,
 } from '@auditor/shared';
 
 const MOCK_SYSTEM_INFO: AppSystemInfoResponse = {
@@ -36,6 +39,18 @@ describe('Phase 1.2.5.2 — Dashboard Views Unit Suite', () => {
           success: true,
           data: { pong: true, serverTimestamp: 1700000000 },
         }),
+        listProjects: vi.fn().mockResolvedValue({
+          success: true,
+          data: { items: [], total: 0, limit: 50, offset: 0 },
+        }),
+        listSites: vi.fn().mockResolvedValue({
+          success: true,
+          data: { items: [], total: 0, limit: 50, offset: 0 },
+        }),
+        listScanRuns: vi.fn().mockResolvedValue({
+          success: true,
+          data: { items: [], total: 0, limit: 50, offset: 0 },
+        }),
       };
 
       const html = renderComponentToHtml(
@@ -45,28 +60,117 @@ describe('Phase 1.2.5.2 — Dashboard Views Unit Suite', () => {
           React.createElement(OverviewView, {
             onNavigate: vi.fn(),
             systemInfo: MOCK_SYSTEM_INFO,
+            initialProjects: [],
+            initialSites: [],
+            initialScans: [],
           }),
         ),
       );
 
       // Verify hero banner
-      expect(html).toContain('Ultimate WordPress &amp; Website Auditor');
+      expect(html).toContain('Audit Operations Dashboard');
       expect(html).toContain('auditor-welcome-banner');
 
       // Verify readiness details
       expect(html).toContain('v0.1.0');
-      expect(html).toContain('win32 (x64)');
 
-      // Verify quick action buttons exist
-      expect(html).toContain('overview-launch-scans');
-      expect(html).toContain('overview-launch-projects');
-      expect(html).toContain('overview-launch-validator');
-      expect(html).toContain('overview-launch-diagnostics');
+      // Verify empty state for brand new workspace
+      expect(html).toContain('No Audits Configured Yet');
+      expect(html).toContain('Create First Project');
+    });
 
-      // Verify upcoming modules are rendered with planned badges
-      expect(html).toContain('WordPress Core');
-      expect(html).toContain('auditor-badge--neutral');
-      expect(html).toContain('Phase 6');
+    it('renders populated state with metrics and recent scan activity', () => {
+      const mockScan = {
+        id: 'scan-1',
+        siteId: 'site-1',
+        scanType: 'full',
+        status: 'completed',
+        targetUrl: 'https://example.com',
+        startedAt: '2026-11-12T10:00:00Z',
+        completedAt: '2026-11-12T10:02:00Z',
+        cancelledAt: null,
+        durationMs: 120000,
+        config: {},
+        summary: {
+          totalFindings: 12,
+          criticalCount: 1,
+          highCount: 3,
+          mediumCount: 4,
+          lowCount: 4,
+          infoCount: 0,
+        },
+        error: null,
+        createdAt: '2026-11-12T10:00:00Z',
+        updatedAt: '2026-11-12T10:02:00Z',
+      };
+
+      const mockProject = {
+        id: 'proj-1',
+        name: 'Client Project Alpha',
+        description: null,
+        isArchived: false,
+        createdAt: '2026-11-10T10:00:00Z',
+        updatedAt: '2026-11-10T10:00:00Z',
+      };
+
+      const mockSite = {
+        id: 'site-1',
+        projectId: 'proj-1',
+        name: 'Production Store',
+        baseUrl: 'https://example.com',
+        platformType: 'wordpress',
+        environmentType: 'production',
+        description: null,
+        isArchived: false,
+        createdAt: '2026-11-10T10:00:00Z',
+        updatedAt: '2026-11-10T10:00:00Z',
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).electronAPI = {
+        ping: vi.fn().mockResolvedValue({
+          success: true,
+          data: { pong: true, serverTimestamp: 1700000000 },
+        }),
+        listProjects: vi.fn().mockResolvedValue({
+          success: true,
+          data: { items: [mockProject], total: 1, limit: 50, offset: 0 },
+        }),
+        listSites: vi.fn().mockResolvedValue({
+          success: true,
+          data: { items: [mockSite], total: 1, limit: 50, offset: 0 },
+        }),
+        listScanRuns: vi.fn().mockResolvedValue({
+          success: true,
+          data: { items: [mockScan], total: 1, limit: 50, offset: 0 },
+        }),
+      };
+
+      const html = renderComponentToHtml(
+        React.createElement(
+          HeartbeatProvider,
+          { intervalMs: 60000 },
+          React.createElement(OverviewView, {
+            onNavigate: vi.fn(),
+            systemInfo: MOCK_SYSTEM_INFO,
+            initialProjects: [mockProject as unknown as ProjectDTO],
+            initialSites: [mockSite as unknown as SiteDTO],
+            initialScans: [mockScan as unknown as ScanRunDTO],
+          }),
+        ),
+      );
+
+      // Verify dashboard cards
+      expect(html).toContain('Target Registry');
+      expect(html).toContain('Audit Execution');
+      expect(html).toContain('Findings Discovered');
+      expect(html).toContain('Audit Engine Sandbox');
+      expect(html).toContain('Recent Scan Activity');
+
+      // Verify quick action buttons exist in launchpad
+      expect(html).toContain('Audit &amp; Scans');
+      expect(html).toContain('Projects &amp; Sites');
+      expect(html).toContain('Reports &amp; Exports');
     });
 
     it('triggers onNavigate callback when quick launch buttons are clicked', async () => {
@@ -76,6 +180,18 @@ describe('Phase 1.2.5.2 — Dashboard Views Unit Suite', () => {
         ping: vi.fn().mockResolvedValue({
           success: true,
           data: { pong: true, serverTimestamp: 1700000000 },
+        }),
+        listProjects: vi.fn().mockResolvedValue({
+          success: true,
+          data: { items: [], total: 0, limit: 50, offset: 0 },
+        }),
+        listSites: vi.fn().mockResolvedValue({
+          success: true,
+          data: { items: [], total: 0, limit: 50, offset: 0 },
+        }),
+        listScanRuns: vi.fn().mockResolvedValue({
+          success: true,
+          data: { items: [], total: 0, limit: 50, offset: 0 },
         }),
       };
 

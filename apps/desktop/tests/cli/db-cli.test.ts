@@ -198,7 +198,7 @@ describe('Phase 2.3 — Database Migration & Maintenance CLI', () => {
       expect(code).toBe(0);
       expect(logs.some(l => l.includes('File does not exist on disk'))).toBe(true);
       expect(logs.some(l => l.includes('Current Schema Version: 0'))).toBe(true);
-      expect(logs.some(l => l.includes('Pending: 2'))).toBe(true);
+      expect(logs.some(l => l.includes('Pending: 3'))).toBe(true);
 
       // Verify that no file was created on disk
       expect(fs.existsSync(nonexistentPath)).toBe(false);
@@ -213,7 +213,7 @@ describe('Phase 2.3 — Database Migration & Maintenance CLI', () => {
       const jsonStatus = JSON.parse(logs[0]);
       expect(jsonStatus.databaseExists).toBe(false);
       expect(jsonStatus.currentVersion).toBe(0);
-      expect(jsonStatus.pendingCount).toBe(2);
+      expect(jsonStatus.pendingCount).toBe(3);
       expect(fs.existsSync(nonexistentPath)).toBe(false);
     });
 
@@ -256,14 +256,14 @@ describe('Phase 2.3 — Database Migration & Maintenance CLI', () => {
       const code1 = await runCli(['status', '--db', testDbPath], h1);
       expect(code1).toBe(0);
       expect(l1.some(l => l.includes('Current Schema Version: 0'))).toBe(true);
-      expect(l1.some(l => l.includes('Pending: 2'))).toBe(true);
+      expect(l1.some(l => l.includes('Pending: 3'))).toBe(true);
       expect(fs.existsSync(testDbPath)).toBe(false);
 
       // Run migration (which creates and initializes the DB)
       const { handler: hMigrate, logs: lMigrate } = createTestOutput();
       const codeMigrate = await runCli(['migrate', '--db', testDbPath], hMigrate);
       expect(codeMigrate).toBe(0);
-      expect(lMigrate.some(l => l.includes('Current Version: 2'))).toBe(true);
+      expect(lMigrate.some(l => l.includes('Current Version: 3'))).toBe(true);
       expect(fs.existsSync(testDbPath)).toBe(true);
 
       // Check status in JSON mode
@@ -272,10 +272,10 @@ describe('Phase 2.3 — Database Migration & Maintenance CLI', () => {
       expect(code2).toBe(0);
       const jsonStatus = JSON.parse(l2[0]);
       expect(jsonStatus.databaseExists).toBe(true);
-      expect(jsonStatus.currentVersion).toBe(2);
-      expect(jsonStatus.appliedCount).toBe(2);
+      expect(jsonStatus.currentVersion).toBe(3);
+      expect(jsonStatus.appliedCount).toBe(3);
       expect(jsonStatus.pendingCount).toBe(0);
-      expect(jsonStatus.migrations).toHaveLength(2);
+      expect(jsonStatus.migrations).toHaveLength(3);
     });
 
     it('performs integrity and checksum verification via verify command', async () => {

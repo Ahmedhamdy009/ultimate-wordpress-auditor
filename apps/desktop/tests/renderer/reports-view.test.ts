@@ -43,6 +43,50 @@ describe('ReportsView & useReports Renderer Suite', () => {
           storagePath: mockReport.storagePath,
         },
       }),
+      listScanRuns: vi.fn().mockResolvedValue({
+        success: true,
+        data: {
+          items: [
+            {
+              id: 'scan-1111-2222-3333-4444',
+              siteId: 'site-1',
+              scanType: 'full',
+              status: 'completed',
+              targetUrl: 'https://example.com',
+              summary: { totalFindings: 5 },
+              completedAt: '2026-11-07T12:00:00.000Z',
+            },
+          ],
+          total: 1,
+          limit: 100,
+          offset: 0,
+        },
+      }),
+      listSites: vi.fn().mockResolvedValue({
+        success: true,
+        data: {
+          items: [
+            {
+              id: 'site-1',
+              projectId: 'proj-1',
+              name: 'Acme Store',
+              baseUrl: 'https://example.com',
+            },
+          ],
+          total: 1,
+          limit: 100,
+          offset: 0,
+        },
+      }),
+      listProjects: vi.fn().mockResolvedValue({
+        success: true,
+        data: {
+          items: [{ id: 'proj-1', name: 'Acme Project' }],
+          total: 1,
+          limit: 100,
+          offset: 0,
+        },
+      }),
     };
     const g = globalThis as Record<string, unknown>;
     g.electronAPI = mockElectronAPI;
@@ -64,9 +108,10 @@ describe('ReportsView & useReports Renderer Suite', () => {
       expect(html).toContain('Reporting Overview');
       expect(html).toContain('Generate New Report');
       expect(html).toContain('Report History &amp; Exports');
-      expect(html).toContain('Scan Run UUID');
+      expect(html).toContain('Select Completed Scan');
       expect(html).toContain('Standalone HTML Report');
       expect(html).toContain('Structured JSON Export');
+      expect(html).toContain('Tabular CSV Export');
       expect(html).toContain('Generate &amp; Export');
     });
   });

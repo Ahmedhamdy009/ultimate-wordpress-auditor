@@ -38,9 +38,9 @@ describe('Migration System', () => {
       const runner = new MigrationRunner(connection);
       const result = await runner.migrate();
 
-      expect(result.appliedCount).toBe(2);
-      expect(result.currentVersion).toBe(2);
-      expect(runner.getCurrentVersion()).toBe(2);
+      expect(result.appliedCount).toBe(3);
+      expect(result.currentVersion).toBe(3);
+      expect(runner.getCurrentVersion()).toBe(3);
 
       const rawDb = connection.getRawDb();
 
@@ -65,6 +65,16 @@ describe('Migration System', () => {
       expect(migration2Row).toBeDefined();
       expect(migration2Row.name).toBe('002_scan_history_and_findings');
       expect(migration2Row.checksum.length).toBe(64);
+
+      const migration3Row = rawDb.prepare('SELECT * FROM _migrations WHERE version = 3').get() as {
+        version: number;
+        name: string;
+        checksum: string;
+        applied_at: string;
+      };
+      expect(migration3Row).toBeDefined();
+      expect(migration3Row.name).toBe('003_add_csv_report_format');
+      expect(migration3Row.checksum.length).toBe(64);
 
       // Check projects table exists
       const projectTableCheck = rawDb
@@ -121,11 +131,11 @@ describe('Migration System', () => {
 
       const runner = new MigrationRunner(connection);
       const firstRun = await runner.migrate();
-      expect(firstRun.appliedCount).toBe(2);
+      expect(firstRun.appliedCount).toBe(3);
 
       const secondRun = await runner.migrate();
       expect(secondRun.appliedCount).toBe(0);
-      expect(secondRun.currentVersion).toBe(2);
+      expect(secondRun.currentVersion).toBe(3);
     });
   });
 

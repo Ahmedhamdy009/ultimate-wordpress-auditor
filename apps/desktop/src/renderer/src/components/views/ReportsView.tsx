@@ -1,17 +1,44 @@
-import React, { useState, useId } from 'react';
+import React, { useState, useId, useEffect, useMemo, useCallback } from 'react';
 import { Card } from '../common/Card.js';
 import { Badge } from '../common/Badge.js';
 import { Alert } from '../common/Alert.js';
+import { SecureReportPreview } from '../reports/SecureReportPreview.js';
 import { useReports } from '../../hooks/useReports.js';
-import type { ReportDTO, ReportFormat, ReportContentDTO } from '@auditor/shared';
+import { useProjects } from '../../hooks/useProjects.js';
+import type { ViewId } from '../../types/navigation.js';
+import type {
+  ReportDTO,
+  ReportFormat,
+  ReportContentDTO,
+  ScanRunDTO,
+  SiteDTO,
+} from '@auditor/shared';
+import type { ElectronAPI } from '../../../../common/ipc/contracts.js';
 
-export const ReportsView: React.FC = () => {
+export interface ReportsViewProps {
+  readonly initialScanRunId?: string;
+  readonly onNavigate?: (view: ViewId) => void;
+}
+
+function getElectronAPI(): ElectronAPI | undefined {
+  const g = globalThis as unknown as { electronAPI?: ElectronAPI };
+  return (typeof window !== 'undefined' && window.electronAPI) || g.electronAPI;
+}
+
+export const ReportsView: React.FC<ReportsViewProps> = ({ initialScanRunId, onNavigate }) => {
   const { reports, loading, error, createReport, deleteReport, getReportContent, clearError } =
     useReports();
 
+  const { projects } = useProjects();
+
+  // Completed scans and sites state
+  const [completedScans, setCompletedScans] = useState<readonly ScanRunDTO[]>([]);
+  const [sites, setSites] = useState<readonly SiteDTO[]>([]);
+  const [scansLoading, setScansLoading] = useState<boolean>(true);
+
   // Generator form state
-  const [scanRunId, setScanRunId] = useState('');
-  const [reportTitle, setReportTitle] = useState('');
+  const [scanRunId, setScanRunId] = useState<string>(initialScanRunId ?? '');
+  const [reportTitle, setReportTitle] = useState<string>('');
   const [reportFormat, setReportFormat] = useState<ReportFormat>('html');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -24,10 +51,83 @@ export const ReportsView: React.FC = () => {
   const titleField = useId();
   const formatField = useId();
 
+  // Load completed scans and sites for dropdown selection
+  const loadScanOptions = useCallback(async () => {
+    const api = getElectronAPI();
+    if (!api) {
+      setScansLoading(false);
+      return;
+    }
+    setScansLoading(true);
+    try {
+      const [scansRes, projectsRes] = await Promise.all([
+        api.listScanRuns({ status: 'completed', limit: 100 }),
+        api.listProjects({ limit: 100 }),
+      ]);
+      if (scansRes.success && scansRes.data) {
+        setCompletedScans(scansRes.data.items);
+      }
+      if (projectsRes.success && projectsRes.data) {
+        const siteResults = await Promise.all(
+          projectsRes.data.items.map(p => api.listSites({ projectId: p.id, limit: 100 })),
+        );
+        const allSites = siteResults.flatMap(r => (r.success && r.data ? r.data.items : []));
+        setSites(allSites);
+      }
+    } catch {
+      // Non-blocking fallback
+    } finally {
+      setScansLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadScanOptions();
+  }, [loadScanOptions]);
+
+  // Project and Site lookup maps
+  const projectMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of projects) {
+      map.set(p.id, p.name);
+    }
+    return map;
+  }, [projects]);
+
+  const siteMap = useMemo(() => {
+    const map = new Map<string, SiteDTO>();
+    for (const s of sites) {
+      map.set(s.id, s);
+    }
+    return map;
+  }, [sites]);
+
+  // Handle external initialScanRunId updates
+  useEffect(() => {
+    if (initialScanRunId) {
+      setScanRunId(initialScanRunId);
+    }
+  }, [initialScanRunId]);
+
+  // When scan is selected, auto-populate title if empty
+  const handleScanSelect = (selectedId: string) => {
+    setScanRunId(selectedId);
+    if (!selectedId) return;
+
+    const scan = completedScans.find(s => s.id === selectedId);
+    if (scan) {
+      const site = siteMap.get(scan.siteId);
+      const siteName = site?.name || new URL(scan.targetUrl).hostname;
+      const dateStr = new Date().toLocaleDateString();
+      setReportTitle(`${siteName} — Audit Report (${dateStr})`);
+    }
+  };
+
   // Overview statistics
   const totalReports = reports.length;
   const htmlReports = reports.filter(r => r.format === 'html').length;
   const jsonReports = reports.filter(r => r.format === 'json').length;
+  const csvReports = reports.filter(r => r.format === 'csv').length;
   const latestReport = reports.length > 0 ? reports[0] : null;
 
   const handleGenerateReport = async (e: React.FormEvent) => {
@@ -46,10 +146,9 @@ export const ReportsView: React.FC = () => {
 
     if (result) {
       setSuccessMessage(
-        `Report "${result.title}" generated successfully! Saved to: ${result.storagePath ?? 'database'}`,
+        `Report "${result.title}" (${result.format.toUpperCase()}) generated successfully! Saved to: ${result.storagePath ?? 'database'}`,
       );
       setReportTitle('');
-      setScanRunId('');
     }
   };
 
@@ -109,12 +208,16 @@ export const ReportsView: React.FC = () => {
               style={{
                 textAlign: 'center',
                 padding: '12px',
-                background: 'var(--auditor-bg-subtle)',
+                background: 'var(--auditor-bg-subtle, #1e293b)',
                 borderRadius: '6px',
               }}
             >
               <div
-                style={{ fontSize: '24px', fontWeight: 800, color: 'var(--auditor-color-accent)' }}
+                style={{
+                  fontSize: '24px',
+                  fontWeight: 800,
+                  color: 'var(--auditor-color-accent, #38bdf8)',
+                }}
               >
                 {totalReports}
               </div>
@@ -122,7 +225,7 @@ export const ReportsView: React.FC = () => {
                 style={{
                   fontSize: '12px',
                   textTransform: 'uppercase',
-                  color: 'var(--auditor-text-muted)',
+                  color: 'var(--auditor-text-muted, #94a3b8)',
                 }}
               >
                 Total Reports
@@ -132,29 +235,47 @@ export const ReportsView: React.FC = () => {
               style={{
                 textAlign: 'center',
                 padding: '12px',
-                background: 'var(--auditor-bg-subtle)',
+                background: 'var(--auditor-bg-subtle, #1e293b)',
                 borderRadius: '6px',
               }}
             >
-              <div style={{ fontSize: '24px', fontWeight: 800 }}>
+              <div style={{ fontSize: '20px', fontWeight: 800 }}>
                 {htmlReports}{' '}
                 <span
-                  style={{ fontSize: '13px', fontWeight: 500, color: 'var(--auditor-text-muted)' }}
+                  style={{
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    color: 'var(--auditor-text-muted, #94a3b8)',
+                  }}
                 >
                   HTML
                 </span>{' '}
                 / {jsonReports}{' '}
                 <span
-                  style={{ fontSize: '13px', fontWeight: 500, color: 'var(--auditor-text-muted)' }}
+                  style={{
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    color: 'var(--auditor-text-muted, #94a3b8)',
+                  }}
                 >
                   JSON
+                </span>{' '}
+                / {csvReports}{' '}
+                <span
+                  style={{
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    color: 'var(--auditor-text-muted, #94a3b8)',
+                  }}
+                >
+                  CSV
                 </span>
               </div>
               <div
                 style={{
                   fontSize: '12px',
                   textTransform: 'uppercase',
-                  color: 'var(--auditor-text-muted)',
+                  color: 'var(--auditor-text-muted, #94a3b8)',
                 }}
               >
                 Formats Breakdown
@@ -163,7 +284,11 @@ export const ReportsView: React.FC = () => {
           </div>
           {latestReport && (
             <div
-              style={{ marginTop: '16px', fontSize: '12px', color: 'var(--auditor-text-muted)' }}
+              style={{
+                marginTop: '16px',
+                fontSize: '12px',
+                color: 'var(--auditor-text-muted, #94a3b8)',
+              }}
             >
               Latest Report: <strong>{latestReport.title}</strong> (
               {new Date(latestReport.createdAt).toLocaleString()})
@@ -176,79 +301,117 @@ export const ReportsView: React.FC = () => {
           title="Generate New Report"
           subtitle="Transform persisted scan findings into standalone reports"
         >
-          <form onSubmit={handleGenerateReport} className="auditor-form">
-            <div className="auditor-form-group">
-              <label htmlFor={scanRunIdField} className="auditor-label">
-                Scan Run UUID
-              </label>
-              <input
-                id={scanRunIdField}
-                type="text"
-                className="auditor-input auditor-input--mono"
-                placeholder="e.g. 550e8400-e29b-41d4-a716-446655440000"
-                value={scanRunId}
-                onChange={e => setScanRunId(e.target.value)}
-                disabled={loading}
-                required
-              />
+          {completedScans.length === 0 && !scansLoading ? (
+            <div className="auditor-empty-state" style={{ padding: '24px 16px' }}>
+              <p style={{ marginBottom: '12px' }}>
+                No completed scans are available to generate a report.
+              </p>
+              {onNavigate && (
+                <button
+                  type="button"
+                  className="auditor-button auditor-button--primary auditor-button--sm"
+                  onClick={() => onNavigate('scans')}
+                >
+                  Go to Audit &amp; Scans
+                </button>
+              )}
             </div>
-
-            <div className="auditor-grid-2">
+          ) : (
+            <form onSubmit={handleGenerateReport} className="auditor-form">
               <div className="auditor-form-group">
-                <label htmlFor={titleField} className="auditor-label">
-                  Report Title (Optional)
-                </label>
-                <input
-                  id={titleField}
-                  type="text"
-                  className="auditor-input"
-                  placeholder="e.g. Q4 WordPress Audit"
-                  value={reportTitle}
-                  onChange={e => setReportTitle(e.target.value)}
-                  disabled={loading}
-                />
-              </div>
-
-              <div className="auditor-form-group">
-                <label htmlFor={formatField} className="auditor-label">
-                  Export Format
+                <label htmlFor={scanRunIdField} className="auditor-label">
+                  Select Completed Scan
                 </label>
                 <select
-                  id={formatField}
+                  id={scanRunIdField}
                   className="auditor-select"
-                  value={reportFormat}
-                  onChange={e => setReportFormat(e.target.value as ReportFormat)}
-                  disabled={loading}
+                  value={scanRunId}
+                  onChange={e => handleScanSelect(e.target.value)}
+                  disabled={loading || scansLoading}
+                  required
                 >
-                  <option value="html">Standalone HTML Report</option>
-                  <option value="json">Structured JSON Export</option>
+                  <option value="">
+                    {scansLoading ? 'Loading completed scans...' : '-- Choose a completed scan --'}
+                  </option>
+                  {completedScans.map(scan => {
+                    const site = siteMap.get(scan.siteId);
+                    const projectName = site?.projectId
+                      ? projectMap.get(site.projectId)
+                      : undefined;
+                    const siteName = site?.name || scan.targetUrl;
+                    const findingsCount = scan.summary?.totalFindings ?? 0;
+                    const dateStr = scan.completedAt
+                      ? new Date(scan.completedAt).toLocaleDateString()
+                      : 'Recent';
+
+                    return (
+                      <option key={scan.id} value={scan.id}>
+                        {projectName ? `[${projectName}] ` : ''}
+                        {siteName} — {dateStr} ({findingsCount} findings)
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
-            </div>
 
-            <div className="auditor-form-actions">
-              <button
-                type="submit"
-                className="auditor-button auditor-button--primary"
-                disabled={loading || !scanRunId.trim()}
-              >
-                {loading ? 'Generating Report...' : 'Generate & Export'}
-              </button>
-            </div>
-          </form>
+              <div className="auditor-grid-2">
+                <div className="auditor-form-group">
+                  <label htmlFor={titleField} className="auditor-label">
+                    Report Title (Optional)
+                  </label>
+                  <input
+                    id={titleField}
+                    type="text"
+                    className="auditor-input"
+                    placeholder="e.g. Q4 WordPress Audit"
+                    value={reportTitle}
+                    onChange={e => setReportTitle(e.target.value)}
+                    disabled={loading}
+                  />
+                </div>
+
+                <div className="auditor-form-group">
+                  <label htmlFor={formatField} className="auditor-label">
+                    Export Format
+                  </label>
+                  <select
+                    id={formatField}
+                    className="auditor-select"
+                    value={reportFormat}
+                    onChange={e => setReportFormat(e.target.value as ReportFormat)}
+                    disabled={loading}
+                  >
+                    <option value="html">Standalone HTML Report (.html)</option>
+                    <option value="json">Structured JSON Export (.json)</option>
+                    <option value="csv">Tabular CSV Export (.csv)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="auditor-form-actions">
+                <button
+                  type="submit"
+                  className="auditor-button auditor-button--primary"
+                  disabled={loading || !scanRunId.trim()}
+                >
+                  {loading ? 'Generating Report...' : 'Generate & Export'}
+                </button>
+              </div>
+            </form>
+          )}
         </Card>
       </div>
 
       {/* Reports Directory & History */}
       <Card
-        title="Report History & Exports"
+        title="Report History &amp; Exports"
         subtitle={`${reports.length} report${reports.length === 1 ? '' : 's'} generated`}
       >
         {reports.length === 0 ? (
           <div className="auditor-empty-state">
             {loading
               ? 'Loading report history...'
-              : 'No reports generated yet. Enter a Scan Run ID above to generate your first audit report.'}
+              : 'No reports generated yet. Select a completed scan above to generate your first audit report.'}
           </div>
         ) : (
           <ul className="auditor-site-list" role="list">
@@ -257,7 +420,16 @@ export const ReportsView: React.FC = () => {
                 <div className="auditor-site-item__main">
                   <div className="auditor-site-item__header">
                     <span className="auditor-site-item__name">{report.title}</span>
-                    <Badge variant={report.format === 'html' ? 'info' : 'neutral'} size="sm">
+                    <Badge
+                      variant={
+                        report.format === 'html'
+                          ? 'info'
+                          : report.format === 'csv'
+                            ? 'warning'
+                            : 'neutral'
+                      }
+                      size="sm"
+                    >
                       {report.format.toUpperCase()}
                     </Badge>
                     <Badge
@@ -272,7 +444,12 @@ export const ReportsView: React.FC = () => {
                     >
                       {report.status}
                     </Badge>
-                    <span style={{ fontSize: '11px', color: 'var(--auditor-text-muted)' }}>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        color: 'var(--auditor-text-muted, #94a3b8)',
+                      }}
+                    >
                       {new Date(report.createdAt).toLocaleString()}
                     </span>
                   </div>
@@ -315,64 +492,27 @@ export const ReportsView: React.FC = () => {
         )}
       </Card>
 
-      {/* Safe In-App Report Viewer Modal / Drawer */}
+      {/* Sandboxed Report Viewer */}
       {selectedReport && (
         <div style={{ marginTop: '24px' }}>
-          <Card
-            title={`Viewing Report: ${selectedReport.title}`}
-            subtitle={`Format: ${selectedReport.format.toUpperCase()} | Location: ${selectedReport.storagePath ?? 'N/A'}`}
-            headerAction={
-              <button
-                type="button"
-                className="auditor-button auditor-button--secondary auditor-button--sm"
-                onClick={() => {
-                  setSelectedReport(null);
-                  setReportContent(null);
-                }}
-              >
-                Close Preview
-              </button>
-            }
-          >
-            {previewLoading ? (
+          {previewLoading ? (
+            <Card title={`Loading: ${selectedReport.title}`}>
               <div className="auditor-empty-state">Loading report contents...</div>
-            ) : reportContent ? (
-              <div>
-                {reportContent.format === 'html' ? (
-                  <iframe
-                    title="Report HTML Preview"
-                    srcDoc={reportContent.content}
-                    sandbox=""
-                    style={{
-                      width: '100%',
-                      height: '500px',
-                      border: '1px solid var(--auditor-border, #e2e8f0)',
-                      borderRadius: '6px',
-                      backgroundColor: '#ffffff',
-                    }}
-                  />
-                ) : (
-                  <pre
-                    style={{
-                      background: 'var(--auditor-bg-subtle)',
-                      padding: '16px',
-                      borderRadius: '6px',
-                      fontFamily: 'var(--font-mono, monospace)',
-                      fontSize: '12px',
-                      maxHeight: '400px',
-                      overflow: 'auto',
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-all',
-                    }}
-                  >
-                    <code>{reportContent.content}</code>
-                  </pre>
-                )}
-              </div>
-            ) : (
+            </Card>
+          ) : reportContent ? (
+            <SecureReportPreview
+              report={selectedReport}
+              content={reportContent}
+              onClose={() => {
+                setSelectedReport(null);
+                setReportContent(null);
+              }}
+            />
+          ) : (
+            <Card title="Error">
               <div className="auditor-empty-state">Could not load report content.</div>
-            )}
-          </Card>
+            </Card>
+          )}
         </div>
       )}
     </div>

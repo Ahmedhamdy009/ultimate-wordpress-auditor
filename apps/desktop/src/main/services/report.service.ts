@@ -20,6 +20,7 @@ import {
   assembleReportData,
   generateHtmlReport,
   generateJsonReport,
+  generateCsvReport,
   sanitizeReportFilename,
   saveReportToFile,
   readReportFile,
@@ -110,9 +111,11 @@ export class ReportService implements IReportService {
         content = generateHtmlReport(model);
       } else if (request.format === 'json') {
         content = generateJsonReport(model);
+      } else if (request.format === 'csv') {
+        content = generateCsvReport(model);
       } else if (request.format === 'pdf') {
         throw new IPCError(
-          'PDF export format is not supported in this version. Use HTML or JSON.',
+          'PDF export format is not supported in this version. Use HTML, JSON, or CSV.',
           IPC_ERROR_CODES.PAYLOAD_VALIDATION_FAILED,
         );
       } else {

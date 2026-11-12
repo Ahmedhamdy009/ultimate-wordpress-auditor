@@ -189,6 +189,30 @@ describe('Report Workflow Integration Suite (SQLite + Filesystem)', () => {
     expect(parsed.findings).toHaveLength(2);
   });
 
+  it('generates, persists, retrieves, and reads CSV reports with UTF-8 BOM and formula defense', () => {
+    const report = reportService.createReport({
+      scanRunId: testScanRunId,
+      title: 'Audit CSV Export',
+      format: 'csv',
+    });
+
+    expect(report.id).toBeDefined();
+    expect(report.scanRunId).toBe(testScanRunId);
+    expect(report.status).toBe('generated');
+    expect(report.format).toBe('csv');
+    expect(report.storagePath).toBeDefined();
+    expect(fs.existsSync(report.storagePath!)).toBe(true);
+
+    // Verify CSV file contents
+    const content = reportService.getReportContent({ id: report.id });
+    expect(content.format).toBe('csv');
+    expect(content.content.startsWith('\uFEFF')).toBe(true);
+    expect(content.content).toContain('"Site Name","Rule ID","Severity"');
+    expect(content.content).toContain('"SEC-TLS-CERT-EXPIRED"');
+    expect(content.content).toContain('"WP-USER-ENUM-REST"');
+    expect(content.content).toContain('"Renew TLS certificate immediately."');
+  });
+
   it('deletes report file from disk and database without touching scan runs or findings', () => {
     const report = reportService.createReport({
       scanRunId: testScanRunId,

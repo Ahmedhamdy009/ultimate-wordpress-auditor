@@ -13,6 +13,7 @@ import { ACTIVE_NAV_ITEMS, type ViewId } from './types/navigation.js';
 
 export const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ViewId>('overview');
+  const [selectedScanRunId, setSelectedScanRunId] = useState<string | undefined>(undefined);
 
   // Verified system metadata from Main process
   const {
@@ -25,16 +26,25 @@ export const App: React.FC = () => {
   const activeItem = ACTIVE_NAV_ITEMS.find(item => item.id === activeView);
   const activeViewTitle = activeItem ? activeItem.label : 'Dashboard';
 
+  const handleNavigate = (view: ViewId, param?: string) => {
+    if (view === 'reports' && param) {
+      setSelectedScanRunId(param);
+    } else if (view !== 'reports') {
+      setSelectedScanRunId(undefined);
+    }
+    setActiveView(view);
+  };
+
   const renderActiveView = (): React.ReactNode => {
     switch (activeView) {
       case 'overview':
-        return <OverviewView onNavigate={setActiveView} systemInfo={systemInfo} />;
+        return <OverviewView onNavigate={handleNavigate} systemInfo={systemInfo} />;
       case 'scans':
-        return <ScansView onNavigate={setActiveView} />;
+        return <ScansView onNavigate={handleNavigate} />;
       case 'projects':
         return <ProjectsView />;
       case 'reports':
-        return <ReportsView />;
+        return <ReportsView initialScanRunId={selectedScanRunId} onNavigate={handleNavigate} />;
       case 'target-validator':
         return <TargetValidatorView />;
       case 'system-diagnostics':
@@ -47,7 +57,7 @@ export const App: React.FC = () => {
           />
         );
       default:
-        return <OverviewView onNavigate={setActiveView} systemInfo={systemInfo} />;
+        return <OverviewView onNavigate={handleNavigate} systemInfo={systemInfo} />;
     }
   };
 

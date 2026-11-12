@@ -145,4 +145,38 @@ CREATE INDEX IF NOT EXISTS idx_reports_status
   ON reports(status);
 `.trim(),
   },
+  {
+    version: 3,
+    name: '003_add_csv_report_format',
+    up: `
+CREATE TABLE IF NOT EXISTS reports_new (
+  id TEXT PRIMARY KEY,
+  scan_run_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  format TEXT NOT NULL,
+  status TEXT NOT NULL,
+  summary_json TEXT,
+  storage_path TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (scan_run_id) REFERENCES scan_runs(id) ON DELETE RESTRICT,
+  CHECK (format IN ('json', 'html', 'pdf', 'csv')),
+  CHECK (status IN ('pending', 'generated', 'failed')),
+  CHECK (length(title) >= 1 AND length(title) <= 255)
+);
+
+INSERT INTO reports_new (id, scan_run_id, title, format, status, summary_json, storage_path, created_at, updated_at)
+  SELECT id, scan_run_id, title, format, status, summary_json, storage_path, created_at, updated_at FROM reports;
+
+DROP TABLE reports;
+
+ALTER TABLE reports_new RENAME TO reports;
+
+CREATE INDEX IF NOT EXISTS idx_reports_scan_run_id
+  ON reports(scan_run_id);
+
+CREATE INDEX IF NOT EXISTS idx_reports_status
+  ON reports(status);
+`.trim(),
+  },
 ]);

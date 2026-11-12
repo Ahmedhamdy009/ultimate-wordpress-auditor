@@ -227,5 +227,30 @@ describe('Report Generators (HTML, JSON, CSV)', () => {
       expect(csv).toContain("\"'+2+5\"");
       expect(csv).toContain("\"'@SUM(1,2)\"");
     });
+
+    it('accurately encodes Arabic, Unicode, and multi-byte characters in CSV output with UTF-8 BOM', () => {
+      const arabicModel: ReportModel = {
+        ...sampleModel,
+        site: {
+          ...sampleModel.site,
+          name: 'متجر ووردبريس العربي التجريبي',
+        },
+        findings: [
+          {
+            ...sampleModel.findings[0],
+            title: 'غياب شهادة التشفير الآمنة TLS',
+            description: 'الموقع يعمل عبر بروتوكول غير مشفر مما يعرض البيانات للاعتراض.',
+            remediation: 'قم بتثبيت شهادة SSL صالحة وتفعيل إعادة التوجيه إلى HTTPS.',
+          },
+        ],
+      };
+
+      const csv = generateCsvReport(arabicModel);
+      expect(csv.startsWith('\uFEFF')).toBe(true);
+      expect(csv).toContain('متجر ووردبريس العربي التجريبي');
+      expect(csv).toContain('غياب شهادة التشفير الآمنة TLS');
+      expect(csv).toContain('الموقع يعمل عبر بروتوكول غير مشفر');
+      expect(csv).toContain('قم بتثبيت شهادة SSL صالحة');
+    });
   });
 });

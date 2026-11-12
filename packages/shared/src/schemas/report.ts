@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const REPORT_FORMATS = ['json', 'html', 'pdf'] as const;
+export const REPORT_FORMATS = ['json', 'html', 'pdf', 'csv'] as const;
 export type ReportFormat = (typeof REPORT_FORMATS)[number];
 
 export const REPORT_STATUSES = ['pending', 'generated', 'failed'] as const;

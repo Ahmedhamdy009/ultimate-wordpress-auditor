@@ -103,8 +103,10 @@ export class RedirectEngine {
           // ignore
         }
 
-        // Broken destination: final page returned 4xx or 5xx
-        const isBrokenDestination = Boolean(page.statusCode && page.statusCode >= 400);
+        // Broken destination: final page returned 4xx/5xx or network/transport error
+        const isBrokenDestination = Boolean(
+          (page.statusCode && page.statusCode >= 400) || page.error,
+        );
 
         const trace: RedirectTraceResult = {
           initialUrl,
@@ -190,16 +192,25 @@ export class RedirectEngine {
 
         // C. Broken Destination
         if (isBrokenDestination) {
+          const statusText = page.statusCode
+            ? `HTTP ${page.statusCode}`
+            : (page.error?.message ?? 'Network Failure');
           findings.push({
             ruleId: 'SEO_REDIRECT_BROKEN_DESTINATION',
             category: 'technical-seo',
-            title: `Redirect Leads to Broken Destination (HTTP ${page.statusCode})`,
-            description: `The URL ${initialUrl} redirects to ${finalUrl}, but the final destination returned HTTP error status ${page.statusCode}.`,
+            title: `Redirect Leads to Broken Destination (${page.statusCode ? `HTTP ${page.statusCode}` : 'Connection Error'})`,
+            description: `The URL ${initialUrl} redirects to ${finalUrl}, but the final destination returned error status (${statusText}).`,
             severity: 'medium',
             confidence: 'confirmed',
             status: 'confirmed',
             targetUrl: initialUrl,
-            evidence: { initialUrl, finalUrl, finalStatusCode: page.statusCode, hops },
+            evidence: {
+              initialUrl,
+              finalUrl,
+              finalStatusCode: page.statusCode,
+              error: page.error,
+              hops,
+            },
             remediation:
               'Update or remove the redirect so it targets an active, valid HTTP 200 resource.',
             references: [

@@ -91,10 +91,19 @@ export function isPathAllowed(
 }
 
 /**
+ * Maximum robots.txt file size parsed (512 KiB / 524,288 bytes) per RFC 9309 Section 2.4.
+ */
+export const MAX_ROBOTS_TXT_BYTES = 512 * 1024;
+
+/**
  * Parses raw robots.txt content according to RFC 9309.
  */
 export function parseRobotsTxt(content: string): ParsedRobotsRecord {
-  const lines = content.split(/\r?\n/);
+  // RFC 9309 Section 2.4: Crawlers imposing a size limit should ignore content beyond 500+ KiB
+  const effectiveContent =
+    content.length > MAX_ROBOTS_TXT_BYTES ? content.slice(0, MAX_ROBOTS_TXT_BYTES) : content;
+
+  const lines = effectiveContent.split(/\r?\n/);
   const groups: RobotsRuleGroup[] = [];
   const sitemaps: string[] = [];
   const syntaxErrors: string[] = [];
@@ -291,23 +300,33 @@ export class RobotsEngine {
     // 2. Parse robots.txt
     const parsed = parseRobotsTxt(responseText);
 
-    // 3. Find effective rule group for this auditor (prefer specific agent, fallback to *)
+    // 3. Find effective rule groups for this auditor (RFC 9309 §2.2.1 multi-group merging)
     const normalizedBot = botUserAgent.toLowerCase();
-    let matchedGroup: RobotsRuleGroup | undefined;
+    const specificGroups = parsed.groups.filter(g =>
+      g.userAgents.some(ua => ua.toLowerCase() === normalizedBot),
+    );
+    const matchingGroups =
+      specificGroups.length > 0
+        ? specificGroups
+        : parsed.groups.filter(g => g.userAgents.includes('*'));
 
-    for (const group of parsed.groups) {
-      if (group.userAgents.includes(normalizedBot)) {
-        matchedGroup = group;
-        break;
+    const effectiveAllows: string[] = [];
+    const effectiveDisallows: string[] = [];
+    let effectiveCrawlDelay: number | undefined;
+    const matchedAgents = new Set<string>();
+
+    for (const group of matchingGroups) {
+      for (const ua of group.userAgents) {
+        matchedAgents.add(ua);
+      }
+      effectiveAllows.push(...group.allows);
+      effectiveDisallows.push(...group.disallows);
+      if (group.crawlDelay !== undefined && effectiveCrawlDelay === undefined) {
+        effectiveCrawlDelay = group.crawlDelay;
       }
     }
 
-    if (!matchedGroup) {
-      matchedGroup = parsed.groups.find(g => g.userAgents.includes('*'));
-    }
-
-    const effectiveAllows = matchedGroup?.allows ?? [];
-    const effectiveDisallows = matchedGroup?.disallows ?? [];
+    const matchedAgentLabel = matchedAgents.size > 0 ? Array.from(matchedAgents).join(', ') : '*';
 
     // 4. Check for Disallow All (Disallow: /)
     const disallowAllPattern = effectiveDisallows.find(d => d === '/' || d === '/*');
@@ -322,7 +341,7 @@ export class RobotsEngine {
         status: 'confirmed',
         targetUrl: robotsUrl,
         evidence: {
-          userAgent: matchedGroup?.userAgents.join(', ') ?? '*',
+          userAgent: matchedAgentLabel,
           disallowDirective: disallowAllPattern,
         },
         remediation:
@@ -334,10 +353,10 @@ export class RobotsEngine {
     }
 
     // 5. Check for Conflicting Allow / Disallow Rules on the same pattern
-    if (matchedGroup) {
+    if (matchingGroups.length > 0) {
       const conflictSet = new Set<string>();
-      for (const allow of matchedGroup.allows) {
-        if (matchedGroup.disallows.includes(allow)) {
+      for (const allow of effectiveAllows) {
+        if (effectiveDisallows.includes(allow)) {
           conflictSet.add(allow);
         }
       }
@@ -361,6 +380,27 @@ export class RobotsEngine {
           references: ['https://datatracker.ietf.org/doc/html/rfc9309#section-2.2.2'],
         });
       }
+    }
+
+    // 6. Check for Non-Standard Crawl-delay
+    if (effectiveCrawlDelay !== undefined && effectiveCrawlDelay > 10) {
+      findings.push({
+        ruleId: 'SEO_ROBOTS_HIGH_CRAWL_DELAY',
+        category: 'technical-seo',
+        title: `High Crawl-Delay Directive (${effectiveCrawlDelay}s) in robots.txt`,
+        description: `The robots.txt specifies Crawl-delay: ${effectiveCrawlDelay}. Note: Crawl-delay is a non-standard extension not part of RFC 9309 and is ignored by Googlebot.`,
+        severity: 'info',
+        confidence: 'confirmed',
+        status: 'confirmed',
+        targetUrl: robotsUrl,
+        evidence: {
+          userAgent: matchedAgentLabel,
+          crawlDelay: effectiveCrawlDelay,
+        },
+        remediation:
+          'Search engines recommend server performance scaling rather than high crawl-delay directives.',
+        references: ['https://developers.google.com/search/docs/crawling-indexing/robots/intro'],
+      });
     }
 
     // 6. Check for Malformed Directives / Syntax Errors
@@ -425,7 +465,7 @@ export class RobotsEngine {
       sitemapDirectives: parsed.sitemaps,
       groups: parsed.groups,
       effectiveRulesForAuditor: {
-        matchedAgent: matchedGroup?.userAgents.join(', ') ?? '*',
+        matchedAgent: matchedAgentLabel,
         allows: effectiveAllows,
         disallows: effectiveDisallows,
       },

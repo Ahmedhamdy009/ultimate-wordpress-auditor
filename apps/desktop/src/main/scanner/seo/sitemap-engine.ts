@@ -198,12 +198,25 @@ export class SitemapEngine {
       };
     }
 
+    const normOrigin = authorizedOrigin.toLowerCase().replace(/\/$/, '');
+    const crossOriginUrls: string[] = [];
+
     // 1. Compile discovery candidates
     const candidateUrls = new Set<string>();
 
     for (const sm of robotsSitemaps) {
       if (sm && typeof sm === 'string' && sm.trim().length > 0) {
-        candidateUrls.add(sm.trim());
+        const trimmedSm = sm.trim();
+        try {
+          const u = new URL(trimmedSm);
+          if (u.origin.toLowerCase() === normOrigin) {
+            candidateUrls.add(trimmedSm);
+          } else {
+            crossOriginUrls.push(trimmedSm);
+          }
+        } catch {
+          // ignore unparseable robots sitemap entries
+        }
       }
     }
 
@@ -276,6 +289,18 @@ export class SitemapEngine {
         // Add sub-sitemaps from sitemap index
         for (const idx of parsed.sitemapIndexes) {
           allIndexes.push(idx);
+
+          // Scope check: Child sitemaps must remain on the authorized origin
+          try {
+            const childUrl = new URL(idx.loc);
+            if (childUrl.origin.toLowerCase() !== normOrigin) {
+              crossOriginUrls.push(idx.loc);
+              continue; // Never enqueue cross-origin child sitemaps
+            }
+          } catch {
+            continue; // Skip invalid child URLs
+          }
+
           if (
             !fetchedSitemapUrls.has(idx.loc) &&
             !sitemapsToFetch.includes(idx.loc) &&
@@ -339,6 +364,26 @@ export class SitemapEngine {
         ],
       });
 
+      if (crossOriginUrls.length > 0) {
+        findings.push({
+          ruleId: 'SEO_SITEMAP_CROSS_ORIGIN_URL',
+          category: 'technical-seo',
+          title: `Cross-Origin Sitemap Declared (${crossOriginUrls.length} entries)`,
+          description: `Sitemap directives reference locations outside the authorized domain (${normOrigin}). Sitemaps outside the target host are rejected to preserve security boundaries.`,
+          severity: 'low',
+          confidence: 'confirmed',
+          status: 'confirmed',
+          targetUrl: crossOriginUrls[0],
+          evidence: {
+            crossOriginCount: crossOriginUrls.length,
+            sampleUrls: crossOriginUrls.slice(0, 5),
+            authorizedOrigin: normOrigin,
+          },
+          remediation: 'Ensure all sitemaps belong strictly to the authoritative domain.',
+          references: ['https://www.sitemaps.org/protocol.html#location'],
+        });
+      }
+
       return {
         discoveredSitemaps: [],
         totalUrlsDiscovered: 0,
@@ -352,11 +397,8 @@ export class SitemapEngine {
 
     // 3. Validate entries in discovered sitemaps
     const seenLocs = new Map<string, string>();
-    const crossOriginUrls: string[] = [];
     const duplicateUrls: string[] = [];
     const invalidDateUrls: string[] = [];
-
-    const normOrigin = authorizedOrigin.toLowerCase().replace(/\/$/, '');
 
     for (const entry of allUrls) {
       const loc = entry.loc.trim();

@@ -224,16 +224,34 @@ export class SafeHttpClient {
       });
 
       const nextHop = responseResult.nextHopCount ?? currentHop + 1;
-      return this.executeWithRedirects(
-        {
-          ...req,
-          url: responseResult.redirectUrl,
-        },
-        options,
-        testHooks,
-        nextHop,
-        redirectChain,
-      );
+      try {
+        return await this.executeWithRedirects(
+          {
+            ...req,
+            url: responseResult.redirectUrl,
+          },
+          options,
+          testHooks,
+          nextHop,
+          redirectChain,
+        );
+      } catch (err: unknown) {
+        if (redirectChain.length > 0) {
+          if (err instanceof ScannerClientError) {
+            const currentDetails =
+              err.details && typeof err.details === 'object'
+                ? { ...err.details }
+                : ({} as Record<string, unknown>);
+            currentDetails.redirectChain = Object.freeze([...redirectChain]);
+            (err as { details?: Record<string, unknown> }).details = currentDetails;
+          } else if (err && typeof err === 'object') {
+            (err as { redirectChain?: readonly RedirectHopInfo[] }).redirectChain = Object.freeze([
+              ...redirectChain,
+            ]);
+          }
+        }
+        throw err;
+      }
     }
 
     const finalResponse = responseResult.response!;

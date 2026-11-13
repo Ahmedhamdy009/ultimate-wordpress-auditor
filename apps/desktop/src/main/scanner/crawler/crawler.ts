@@ -9,6 +9,7 @@ import { SafeHttpClient } from '../client/http-client.js';
 import { ScannerClientError } from '../client/errors.js';
 import {
   SCANNER_CLIENT_ERROR_CODES,
+  type RedirectHopInfo,
   type SafeHttpClientOptions,
   type SafeHttpResponse,
 } from '../client/types.js';
@@ -360,6 +361,14 @@ export class BoundedCrawler {
 
           errors.push({ url: item.url, code, message });
 
+          let redirectChainOnErr: readonly RedirectHopInfo[] | undefined;
+          if (err instanceof ScannerClientError && err.details?.redirectChain) {
+            redirectChainOnErr = err.details.redirectChain as readonly RedirectHopInfo[];
+          } else if (err && typeof err === 'object' && 'redirectChain' in err) {
+            redirectChainOnErr = (err as { redirectChain?: readonly RedirectHopInfo[] })
+              .redirectChain;
+          }
+
           pages.push({
             requestedUrl: item.url,
             finalUrl: item.url,
@@ -374,6 +383,7 @@ export class BoundedCrawler {
             encodedBodyBytes: 0,
             decompressedBodyBytes: 0,
             parsedDocument: null,
+            redirectChain: redirectChainOnErr,
             error: { code, message },
           });
         }

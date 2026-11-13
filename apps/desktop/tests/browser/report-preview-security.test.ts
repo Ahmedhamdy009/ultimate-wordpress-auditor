@@ -2,10 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import http from 'node:http';
 import type net from 'node:net';
 import { BrowserManager } from '../../src/main/browser/manager.js';
-import {
-  prepareSandboxedHtml,
-  REPORT_PREVIEW_CSP,
-} from '../../src/renderer/src/components/reports/SecureReportPreview.js';
+import { prepareSandboxedHtml } from '../../src/renderer/src/components/reports/SecureReportPreview.js';
 
 describe('Live Browser Security & Report Preview Hardening Suite', () => {
   let fixtureServer: http.Server;

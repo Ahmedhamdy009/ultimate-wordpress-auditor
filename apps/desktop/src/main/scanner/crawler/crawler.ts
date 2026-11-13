@@ -246,6 +246,7 @@ export class BoundedCrawler {
               encodedBodyBytes: response.encodedBodyBytes,
               decompressedBodyBytes: response.decompressedBodyBytes,
               parsedDocument: null,
+              redirectChain: response.redirectChain,
               tls: response.tls ?? null,
             });
             return;
@@ -314,6 +315,7 @@ export class BoundedCrawler {
             encodedBodyBytes: response.encodedBodyBytes,
             decompressedBodyBytes: response.decompressedBodyBytes,
             parsedDocument: parsedDoc,
+            redirectChain: response.redirectChain,
             tls: response.tls ?? null,
           });
         } catch (err: unknown) {

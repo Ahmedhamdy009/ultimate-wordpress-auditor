@@ -19,6 +19,8 @@ import { SecurityHeadersAnalyzer } from './security-headers-analyzer.js';
 import { SeoPerformanceAnalyzer } from './seo-performance-analyzer.js';
 import { QualityContentAnalyzer } from './quality-content-analyzer.js';
 import { CrossPageAnalyzer } from './cross-page-analyzer.js';
+import { StructuredDataAnalyzer } from './structured-data-analyzer.js';
+import { AdvancedSeoSiteAnalyzer } from './advanced-seo-analyzer.js';
 
 export interface AnalyzerEngineStats {
   readonly totalFindings: number;
@@ -49,6 +51,31 @@ export const SITE_LEVEL_RULE_IDS = new Set<string>([
   'SEC_HEADER_HSTS_PRELOAD_NOT_DECLARED',
   'SEC_HEADER_PERMISSIONS_POLICY_MISSING',
   'SEC_HEADER_X_CONTENT_TYPE_OPTIONS_MISSING',
+  // Advanced Technical SEO - Sitemaps
+  'SEO_SITEMAP_MISSING',
+  'SEO_SITEMAP_MALFORMED',
+  'SEO_SITEMAP_HTTP_ERROR',
+  'SEO_SITEMAP_UNREACHABLE',
+  'SEO_SITEMAP_CROSS_ORIGIN_URL',
+  'SEO_SITEMAP_DUPLICATE_URL',
+  'SEO_SITEMAP_INVALID_DATE',
+  'SEO_SITEMAP_PAGE_NOT_IN_SITEMAP',
+  'SEO_SITEMAP_URL_NOT_CRAWLED',
+  // Advanced Technical SEO - Robots.txt
+  'SEO_ROBOTS_MISSING',
+  'SEO_ROBOTS_DISALLOW_ALL',
+  'SEO_ROBOTS_CONFLICTING_RULES',
+  'SEO_ROBOTS_MALFORMED_SYNTAX',
+  'SEO_ROBOTS_IMPORTANT_PAGE_BLOCKED',
+  // Advanced Technical SEO - Redirects
+  'SEO_REDIRECT_CHAIN',
+  'SEO_REDIRECT_LOOP',
+  'SEO_REDIRECT_EXCESSIVE_HOPS',
+  'SEO_REDIRECT_TEMPORARY_FOR_PERMANENT',
+  'SEO_REDIRECT_TRAILING_SLASH',
+  'SEO_REDIRECT_HTTP_TO_HTTPS',
+  'SEO_REDIRECT_BROKEN_DESTINATION',
+  'SEO_REDIRECT_INTERNAL_LINK_TO_REDIRECT',
 ]);
 
 export class AnalyzerEngine {
@@ -72,9 +99,13 @@ export class AnalyzerEngine {
       new SecurityHeadersAnalyzer(),
       new SeoPerformanceAnalyzer(),
       new QualityContentAnalyzer(),
+      new StructuredDataAnalyzer(),
     ];
 
-    this.siteAnalyzers = customSiteAnalyzers ?? [new CrossPageAnalyzer()];
+    this.siteAnalyzers = customSiteAnalyzers ?? [
+      new CrossPageAnalyzer(),
+      new AdvancedSeoSiteAnalyzer(),
+    ];
   }
 
   /**
@@ -90,6 +121,8 @@ export class AnalyzerEngine {
       authorizedOrigin: context?.authorizedOrigin ?? crawlResult.summary.authorizedOrigin,
       entryUrl: context?.entryUrl ?? crawlResult.summary.entryUrl,
       scanRunId: context?.scanRunId,
+      httpClient: context?.httpClient,
+      signal: context?.signal,
     };
 
     const aggregatedFindings: AnalyzerFinding[] = [];

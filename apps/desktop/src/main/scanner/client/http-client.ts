@@ -5,6 +5,7 @@ import type tls from 'node:tls';
 import { URL } from 'node:url';
 import {
   SCANNER_CLIENT_ERROR_CODES,
+  type RedirectHopInfo,
   type SafeHttpClientOptions,
   type SafeHttpClientTestHooks,
   type SafeHttpRequest,
@@ -165,6 +166,7 @@ export class SafeHttpClient {
     options: SafeHttpClientOptions,
     testHooks: SafeHttpClientTestHooks | undefined,
     currentHop: number,
+    redirectChain: RedirectHopInfo[] = [],
   ): Promise<SafeHttpResponse> {
     const currentUrl = req.url;
     let urlObj: URL;
@@ -213,6 +215,14 @@ export class SafeHttpClient {
 
     // 3. Handle redirects if indicated
     if (responseResult.redirectUrl) {
+      redirectChain.push({
+        fromUrl: currentUrl,
+        toUrl: responseResult.redirectUrl,
+        statusCode: responseResult.statusCode ?? 302,
+        location: responseResult.location ?? responseResult.redirectUrl,
+        headers: responseResult.headers,
+      });
+
       const nextHop = responseResult.nextHopCount ?? currentHop + 1;
       return this.executeWithRedirects(
         {
@@ -222,10 +232,19 @@ export class SafeHttpClient {
         options,
         testHooks,
         nextHop,
+        redirectChain,
       );
     }
 
-    return responseResult.response!;
+    const finalResponse = responseResult.response!;
+    if (redirectChain.length > 0) {
+      return {
+        ...finalResponse,
+        redirectChain: Object.freeze([...redirectChain]),
+      };
+    }
+
+    return finalResponse;
   }
 
   private async dispatchSingleHop(args: {
@@ -240,7 +259,14 @@ export class SafeHttpClient {
     readonly options: SafeHttpClientOptions;
     readonly testHooks?: SafeHttpClientTestHooks;
     readonly currentHop: number;
-  }): Promise<{ redirectUrl?: string; nextHopCount?: number; response?: SafeHttpResponse }> {
+  }): Promise<{
+    redirectUrl?: string;
+    nextHopCount?: number;
+    statusCode?: number;
+    location?: string;
+    headers?: http.IncomingHttpHeaders;
+    response?: SafeHttpResponse;
+  }> {
     const {
       urlObj,
       hostname,
@@ -292,6 +318,9 @@ export class SafeHttpClient {
       const settleSuccess = (val: {
         redirectUrl?: string;
         nextHopCount?: number;
+        statusCode?: number;
+        location?: string;
+        headers?: http.IncomingHttpHeaders;
         response?: SafeHttpResponse;
       }): void => {
         if (isSettled) return;
@@ -377,10 +406,19 @@ export class SafeHttpClient {
           });
 
           if (redirectEval.shouldRedirect && redirectEval.targetUrl) {
+            const locHeader =
+              typeof res.headers['location'] === 'string'
+                ? res.headers['location']
+                : redirectEval.targetUrl;
+            const statusCode = res.statusCode ?? 302;
+            const resHeaders = res.headers;
             res.destroy(); // Destroy redirect stream immediately without reading body
             settleSuccess({
               redirectUrl: redirectEval.targetUrl,
               nextHopCount: redirectEval.nextHopCount,
+              statusCode,
+              location: locHeader,
+              headers: resHeaders,
             });
             return;
           }

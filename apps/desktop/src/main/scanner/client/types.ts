@@ -160,6 +160,14 @@ export interface TlsConnectionMetadata {
   readonly peerCertificate?: TlsCertificateInfo | null;
 }
 
+export interface RedirectHopInfo {
+  readonly fromUrl: string;
+  readonly toUrl: string;
+  readonly statusCode: number;
+  readonly location: string;
+  readonly headers?: IncomingHttpHeaders;
+}
+
 export interface SafeHttpResponse {
   readonly statusCode: number;
   readonly statusMessage: string;
@@ -167,6 +175,7 @@ export interface SafeHttpResponse {
   readonly resolvedIp: string;
   readonly finalUrl: string;
   readonly redirectHops: number;
+  readonly redirectChain?: readonly RedirectHopInfo[];
   readonly encodedBodyBytes: number;
   readonly decompressedBodyBytes: number;
   readonly body: ArrayBuffer;

@@ -63,11 +63,14 @@ The application operates on a **Local-First, Privacy-Conscious Architecture**:
 
 ## Auditing & Workflow Capabilities (v0.1.7)
 
-### 1. Technical SEO & Content Quality
+### 1. Advanced Technical SEO & Content Quality
+- **XML Sitemap Engine:** Safe XXE-immune parser for standard `<urlset>` and `<sitemapindex>` hierarchies; automatic discovery via `robots.txt`, `/sitemap.xml`, `/sitemap_index.xml`, and `/wp-sitemap.xml`; cross-references crawled pages against sitemap declarations to detect orphaned pages, uncrawled sitemap URLs, cross-origin entries, and missing indexable content.
+- **Standards-Aware robots.txt Engine (RFC 9309):** Parses user-agent rule groups, longest-match precedence resolution, wildcard (`*`) and end-anchor (`$`) pattern matching, empty directive normalization, and detects site-wide blocks or crawled resources blocked by crawler access rules.
+- **Structured Data / Schema.org Engine:** Local JSON-LD extraction (`<script type="application/ld+json">`) with multi-block and `@graph` support; syntax error localization; structural validation (`@context`, `@type`, `@id` collisions); type-specific Profile v1 diagnostics (Article, BlogPosting, Product, BreadcrumbList, WebSite, Organization, LocalBusiness) with zero external network context fetching (100% SSRF-safe).
+- **Redirect Mapping & Diagnostics Engine:** Tracks full per-hop redirect chains; detects multi-hop chains (>1 hop), redirect loops, excessive hops (>=4), temporary 302/307 redirects used for permanent structures, trailing slash normalization drift, HTTP-to-HTTPS upgrades, broken destinations, and internal links pointing directly to redirecting endpoints.
 - **Canonical URL Integrity:** Identifies self-referencing loops, cross-domain canonical mismatches, missing canonical links, and canonical-to-redirect regressions.
 - **Metadata Analysis:** Validates title tags, meta descriptions, viewport tags, OpenGraph attributes, and robots directives.
 - **Content Structure Heuristics:** Detects empty or thin pages while intelligently differentiating WordPress taxonomy archives (category, tag, and custom taxonomy pages) from single content articles to prevent false alarms.
-- **Robots & Sitemap Verification:** Checks `robots.txt` access policies and XML sitemap discoverability.
 
 ### 2. Security Posture Checks
 - **HTTP Security Headers:** Audits response headers for `Content-Security-Policy` (CSP), `Strict-Transport-Security` (HSTS), `X-Frame-Options`, `X-Content-Type-Options`, and `Referrer-Policy`.

@@ -34,6 +34,7 @@ import {
 import { redactSecrets } from '../../services/finding.service.js';
 import { BoundedCrawler } from '../crawler/crawler.js';
 import type { CrawlConfig, CrawlProgress, CrawlResult } from '../crawler/types.js';
+import { SafeHttpClient } from '../client/http-client.js';
 import { AnalyzerEngine } from '../analyzers/analyzer-engine.js';
 import type { AnalyzerFinding } from '../analyzers/types.js';
 import {
@@ -406,10 +407,13 @@ export class ScanOrchestrator implements IScanOrchestrator {
       this.notifyProgress(context, onProgress, true);
 
       const analyzerEngine = this.options.analyzerEngineFactory();
+      const httpClient = new SafeHttpClient(this.options.clientOptions, this.options.testHooks);
       const analyzerResult = await analyzerEngine.runAnalysis(crawlResult, {
         authorizedOrigin: context.authorizedOrigin,
         entryUrl: context.entryUrl,
         scanRunId: context.scanId,
+        httpClient,
+        signal: abortController.signal,
       });
 
       context.analyzerResult = analyzerResult;

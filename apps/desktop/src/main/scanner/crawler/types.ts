@@ -4,6 +4,7 @@
 
 import type { IncomingHttpHeaders } from 'node:http';
 import type {
+  RedirectHopInfo,
   SafeHttpClientOptions,
   SafeHttpClientTestHooks,
   TlsConnectionMetadata,
@@ -115,6 +116,7 @@ export interface CrawledPageResult {
   readonly encodedBodyBytes: number;
   readonly decompressedBodyBytes: number;
   readonly parsedDocument: ParsedHtmlDocument | null;
+  readonly redirectChain?: readonly RedirectHopInfo[];
   readonly tls?: TlsConnectionMetadata | null;
   readonly error?: {
     readonly code: string;

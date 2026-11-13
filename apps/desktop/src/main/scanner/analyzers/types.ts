@@ -6,11 +6,14 @@
 
 import type { FindingSeverity, FindingConfidence, FindingStatus } from '@auditor/shared';
 import type { CrawledPageResult, CrawlResult } from '../crawler/types.js';
+import type { SafeHttpClient } from '../client/http-client.js';
 
 export interface AnalyzerContext {
   readonly authorizedOrigin: string;
   readonly entryUrl: string;
   readonly scanRunId?: string;
+  readonly httpClient?: SafeHttpClient;
+  readonly signal?: AbortSignal;
 }
 
 export interface AnalyzerFinding {

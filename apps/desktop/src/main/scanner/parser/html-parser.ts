@@ -262,6 +262,7 @@ export class HtmlParserEngine {
     // 7. Structure & Security attributes
     const elementIds: string[] = [];
     const inlineEventHandlers: InlineEventHandlerInfo[] = [];
+    const jsonLdScripts: string[] = [];
 
     for (const el of allElements) {
       const tag = el.name.toLowerCase();
@@ -428,18 +429,26 @@ export class HtmlParserEngine {
       }
 
       // Scripts
-      if (tag === 'script' && attribs.src && resources.length < effectiveOptions.maxResources) {
-        const normalized = normalizeCrawlUrl(attribs.src, pageUrl);
-        const extra: Record<string, string> = {};
-        if ('async' in attribs) extra.async = 'true';
-        if ('defer' in attribs) extra.defer = 'true';
-        if (attribs.type) extra.type = attribs.type.trim();
-        resources.push({
-          type: 'script',
-          url: normalized ? normalized.href : null,
-          originalValue: attribs.src.trim(),
-          extra: Object.keys(extra).length > 0 ? extra : undefined,
-        });
+      if (tag === 'script') {
+        const typeAttr = (attribs.type || '').trim().toLowerCase();
+        if (typeAttr === 'application/ld+json') {
+          const rawContent = DomUtils.getText(el).trim();
+          if (rawContent.length > 0) {
+            jsonLdScripts.push(rawContent);
+          }
+        } else if (attribs.src && resources.length < effectiveOptions.maxResources) {
+          const normalized = normalizeCrawlUrl(attribs.src, pageUrl);
+          const extra: Record<string, string> = {};
+          if ('async' in attribs) extra.async = 'true';
+          if ('defer' in attribs) extra.defer = 'true';
+          if (attribs.type) extra.type = attribs.type.trim();
+          resources.push({
+            type: 'script',
+            url: normalized ? normalized.href : null,
+            originalValue: attribs.src.trim(),
+            extra: Object.keys(extra).length > 0 ? extra : undefined,
+          });
+        }
       }
 
       // Iframes
@@ -610,6 +619,7 @@ export class HtmlParserEngine {
       structure,
       metrics,
       visibleWordCount,
+      jsonLdScripts: Object.freeze(jsonLdScripts),
     };
   }
 }

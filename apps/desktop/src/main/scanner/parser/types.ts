@@ -121,6 +121,7 @@ export interface ParsedHtmlDocument {
   readonly structure: HtmlStructureInfo;
   readonly metrics: ParserMetrics;
   readonly visibleWordCount?: number;
+  readonly jsonLdScripts?: readonly string[];
 }
 
 export interface HtmlParserOptions {

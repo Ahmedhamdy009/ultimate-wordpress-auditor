@@ -134,9 +134,42 @@ describe('Phase 7 Batch 7.2 Independent Acceptance Audit Tests', () => {
       // htmlparser2 tolerates streaming/unclosed tags and extracts what is present safely
       expect(parsed.urls.length).toBeGreaterThanOrEqual(0);
     });
+
+    it('safely handles parameter entities and external DTD references without outbound resolution', () => {
+      const externalDtdXml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE test [
+  <!ENTITY % pe SYSTEM "http://127.0.0.1:9999/nonexistent.dtd">
+  %pe;
+]>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://example.com/valid-entry</loc>
+  </url>
+</urlset>`;
+
+      const parsed = parseSitemapXml(externalDtdXml, 'https://example.com/sitemap.xml');
+      expect(parsed.urls).toHaveLength(1);
+      expect(parsed.urls[0].loc).toBe('https://example.com/valid-entry');
+      expect(parsed.errors).toHaveLength(0);
+    });
   });
 
   describe('B. Robots.txt Engine RFC 9309 Compliance', () => {
+    it('verifies RFC 9309 §2.2.1: empty Disallow directive does not erase previously defined rules', () => {
+      const robotsContent = `
+User-agent: *
+Disallow: /private
+Disallow:
+`;
+      const parsed = parseRobotsTxt(robotsContent);
+      expect(parsed.groups[0].disallows).toEqual(['/private']);
+
+      const checkPrivate = isPathAllowed('/private', [], parsed.groups[0].disallows);
+      expect(checkPrivate.allowed).toBe(false);
+
+      const checkOther = isPathAllowed('/other', [], parsed.groups[0].disallows);
+      expect(checkOther.allowed).toBe(true);
+    });
     it('merges rules from multiple matching groups for the same user agent (§2.2.1)', () => {
       const robotsContent = `
 User-agent: *

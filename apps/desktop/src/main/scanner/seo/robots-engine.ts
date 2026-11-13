@@ -19,7 +19,10 @@ export interface ParsedRobotsRecord {
  * Checks if a path matches a robots.txt pattern supporting wildcard (*) and end anchor ($).
  */
 export function matchesRobotsPattern(targetPath: string, pattern: string): boolean {
-  if (pattern === '' || pattern === '/') {
+  if (!pattern) {
+    return false;
+  }
+  if (pattern === '/') {
     return targetPath.startsWith('/');
   }
 
@@ -168,10 +171,9 @@ export function parseRobotsTxt(content: string): ParsedRobotsRecord {
       }
       if (value) {
         currentDisallows.push(value);
-      } else {
-        // Disallow with empty value resets previous disallows in this group (means Allow all)
-        currentDisallows = [];
       }
+      // Note: per RFC 9309 §2.2.1, a Disallow directive with an empty value specifies
+      // no path pattern and disallows nothing. It does not cancel or erase previously declared rules.
     } else if (directive === 'sitemap') {
       if (value) {
         sitemaps.push(value);

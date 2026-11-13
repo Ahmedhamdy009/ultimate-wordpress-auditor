@@ -1,6 +1,7 @@
 /**
  * Comprehensive XML Sitemap Discovery, Parsing, Validation & Cross-Referencing Engine.
- * Supports sitemap indexes, standard URL sets, safe entity handling (XXE immune via htmlparser2),
+ * Supports sitemap indexes, standard URL sets, safe entity handling (neutralizes external entities
+ * and entity expansion via htmlparser2 and DOCTYPE sanitization),
  * and truthful discrepancy analysis against crawled pages.
  */
 

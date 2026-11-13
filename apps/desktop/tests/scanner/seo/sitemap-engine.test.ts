@@ -51,7 +51,7 @@ describe('XML Sitemap Analysis Engine', () => {
       expect(parsed.errors).toHaveLength(0);
     });
 
-    it('is immune to XXE injections and parses entity injection attempts safely as raw text', () => {
+    it('neutralizes DTD and external entity injection attempts safely', () => {
       const maliciousXml = `<?xml version="1.0" encoding="ISO-8859-1"?>
 <!DOCTYPE foo [  
   <!ELEMENT foo ANY>

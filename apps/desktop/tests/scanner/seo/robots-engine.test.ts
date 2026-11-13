@@ -57,13 +57,42 @@ Sitemap: https://example.com/sitemap-news.xml
       expect(parsed.syntaxErrors).toHaveLength(0);
     });
 
-    it('treats empty Disallow as allow-all (RFC 9309 §2.2.1)', () => {
+    it('treats standalone empty Disallow as disallowing nothing (RFC 9309 §2.2.1)', () => {
       const robotsContent = `
 User-agent: *
 Disallow:
 `;
       const parsed = parseRobotsTxt(robotsContent);
       expect(parsed.groups[0].disallows).toHaveLength(0);
+    });
+
+    it('does not erase previously declared Disallow directives when followed by empty Disallow (RFC 9309 §2.2.1)', () => {
+      const robotsContent = `
+User-agent: *
+Disallow: /private
+Disallow:
+`;
+      const parsed = parseRobotsTxt(robotsContent);
+      expect(parsed.groups[0].disallows).toEqual(['/private']);
+
+      const checkPrivate = isPathAllowed('/private/data', [], parsed.groups[0].disallows);
+      expect(checkPrivate.allowed).toBe(false);
+
+      const checkPublic = isPathAllowed('/public/data', [], parsed.groups[0].disallows);
+      expect(checkPublic.allowed).toBe(true);
+    });
+
+    it('preserves subsequent Disallow directives when preceded by empty Disallow (RFC 9309 §2.2.1)', () => {
+      const robotsContent = `
+User-agent: *
+Disallow:
+Disallow: /restricted
+`;
+      const parsed = parseRobotsTxt(robotsContent);
+      expect(parsed.groups[0].disallows).toEqual(['/restricted']);
+
+      const checkRestricted = isPathAllowed('/restricted/file', [], parsed.groups[0].disallows);
+      expect(checkRestricted.allowed).toBe(false);
     });
 
     it('applies longest-match precedence rule (RFC 9309 §2.2.2)', () => {

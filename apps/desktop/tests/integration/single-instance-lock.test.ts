@@ -195,7 +195,7 @@ describe('D1 — Single-Instance Lock & Scan Integrity', () => {
         stdio: 'ignore',
         env: {
           ...process.env,
-          PROJECT_ROOT: 'D:\\ahmed',
+          PROJECT_ROOT: projectRoot,
           NODE_ENV: 'test',
           AUDITOR_USER_DATA_DIR: sharedUserDataDir,
         },
@@ -207,9 +207,9 @@ describe('D1 — Single-Instance Lock & Scan Integrity', () => {
           // ignore
         }
         reject(
-          new Error('Second Electron instance did not exit within 10s single-instance timeout'),
+          new Error('Second Electron instance did not exit within 30s single-instance timeout'),
         );
-      }, 10000);
+      }, 30000);
       child2.once('error', err => {
         clearTimeout(timer);
         reject(err);

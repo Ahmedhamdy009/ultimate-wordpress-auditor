@@ -9,43 +9,240 @@ export interface SecureReportPreviewProps {
   readonly onClose: () => void;
 }
 
+export interface ParsedCsvPreview {
+  readonly headers: readonly string[];
+  readonly rows: readonly (readonly string[])[];
+  readonly totalRowsParsed: number;
+  readonly hasMalformedRecords: boolean;
+}
+
 /**
- * Safely parses RFC 4180 CSV content into headers and rows for preview display.
- * Purely algorithmic parser, no eval or external execution.
+ * Restrictive Content Security Policy enforced on HTML report preview documents.
+ * - default-src 'none': Disallow everything by default.
+ * - style-src 'unsafe-inline': Allow self-contained inline report stylesheets and CSS variables.
+ * - img-src data:: Allow only inline base64 visual evidence screenshots. Blocks all external/local network requests.
+ * - font-src 'none': Forbid all external or custom web fonts.
+ * - script-src 'none': Forbid all scripts (inline or external).
+ * - connect-src 'none': Forbid all fetch, XHR, WebSocket, EventSource, sendBeacon.
+ * - media-src 'none': Forbid all audio and video.
+ * - object-src 'none': Forbid all plugins (Flash, Java, PDF).
+ * - child-src 'none' & frame-src 'none': Forbid nested frames.
+ * - worker-src 'none': Forbid Web Workers & Service Workers.
+ * - form-action 'none': Forbid form submissions.
+ * - base-uri 'none': Forbid <base> tag URL manipulation.
  */
-function parseCsvForPreview(csvText: string): { headers: string[]; rows: string[][] } {
+export const REPORT_PREVIEW_CSP = [
+  "default-src 'none'",
+  "style-src 'unsafe-inline'",
+  "img-src data:",
+  "font-src 'none'",
+  "script-src 'none'",
+  "connect-src 'none'",
+  "media-src 'none'",
+  "object-src 'none'",
+  "child-src 'none'",
+  "frame-src 'none'",
+  "worker-src 'none'",
+  "form-action 'none'",
+  "base-uri 'none'",
+].join('; ');
+
+/**
+ * Prepares and hardens HTML content for isolated rendering in a sandboxed iframe.
+ * 1. Strips any pre-existing or adversary-controlled <meta ... Content-Security-Policy ...> tags.
+ * 2. Strips any <base ...> tags to prevent base URL hijacking.
+ * 3. Injects the authoritative REPORT_PREVIEW_CSP meta tag at the top of <head>.
+ */
+export function prepareSandboxedHtml(rawHtml: string): string {
+  if (!rawHtml || typeof rawHtml !== 'string') {
+    return `<!DOCTYPE html>\n<html>\n<head>\n  <meta charset="UTF-8">\n  <meta http-equiv="Content-Security-Policy" content="${REPORT_PREVIEW_CSP}">\n</head>\n<body></body>\n</html>`;
+  }
+
+  // 1. Strip existing CSP meta tags to prevent policy conflicts or overrides
+  let sanitized = rawHtml.replace(
+    /<meta\s+[^>]*http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi,
+    '',
+  );
+
+  // 2. Strip any <base> tags to prevent relative URL hijacking
+  sanitized = sanitized.replace(/<base\b[^>]*>/gi, '');
+
+  const cspMetaTag = `<meta http-equiv="Content-Security-Policy" content="${REPORT_PREVIEW_CSP}">`;
+
+  // 3. Inject authoritative CSP tag into <head>
+  if (/<head\b[^>]*>/i.test(sanitized)) {
+    return sanitized.replace(/(<head\b[^>]*>)/i, `$1\n  ${cspMetaTag}`);
+  }
+
+  if (/<html\b[^>]*>/i.test(sanitized)) {
+    return sanitized.replace(/(<html\b[^>]*>)/i, `$1\n<head>\n  ${cspMetaTag}\n</head>`);
+  }
+
+  // If no html or head tags exist, wrap safely
+  return `<!DOCTYPE html>\n<html>\n<head>\n  <meta charset="UTF-8">\n  ${cspMetaTag}\n</head>\n<body>\n${sanitized}\n</body>\n</html>`;
+}
+
+/**
+ * Full RFC 4180 compliant CSV state-machine parser.
+ * Properly handles embedded newlines inside quoted fields, escaped double quotes (""),
+ * quoted commas, UTF-8 BOM, empty/trailing fields, and malformed records.
+ */
+export function parseCsvForPreview(
+  csvText: string,
+  maxDataRows = 100,
+): ParsedCsvPreview {
+  if (!csvText || typeof csvText !== 'string') {
+    return { headers: [], rows: [], totalRowsParsed: 0, hasMalformedRecords: false };
+  }
+
   // Strip UTF-8 BOM if present
   const clean = csvText.startsWith('\uFEFF') ? csvText.slice(1) : csvText;
-  const lines = clean.split(/\r?\n/).filter(l => l.trim().length > 0);
-  if (lines.length === 0) return { headers: [], rows: [] };
+  if (clean.length === 0) {
+    return { headers: [], rows: [], totalRowsParsed: 0, hasMalformedRecords: false };
+  }
 
-  const parseLine = (line: string): string[] => {
-    const fields: string[] = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
+  const allRecords: string[][] = [];
+  let currentRecord: string[] = [];
+  let currentField = '';
+  let inQuotes = false;
+  let hasMalformed = false;
+  let quoteClosed = false;
+
+  const len = clean.length;
+  let i = 0;
+
+  while (i < len) {
+    const char = clean[i];
+
+    if (inQuotes) {
       if (char === '"') {
-        if (inQuotes && line[i + 1] === '"') {
-          current += '"';
-          i++;
+        if (i + 1 < len && clean[i + 1] === '"') {
+          // Escaped double quote ("")
+          currentField += '"';
+          i += 2;
+          continue;
         } else {
-          inQuotes = !inQuotes;
+          // Closing quote of quoted field
+          inQuotes = false;
+          quoteClosed = true;
+          i++;
+          continue;
         }
-      } else if (char === ',' && !inQuotes) {
-        fields.push(current);
-        current = '';
       } else {
-        current += char;
+        // Literal character inside quoted field (including \r, \n, commas, unicode)
+        currentField += char;
+        i++;
+        continue;
       }
     }
-    fields.push(current);
-    return fields;
-  };
 
-  const headers = parseLine(lines[0]);
-  const rows = lines.slice(1, 101).map(parseLine); // Preview up to 100 rows
-  return { headers, rows };
+    if (quoteClosed) {
+      if (char === ',') {
+        currentRecord.push(currentField);
+        currentField = '';
+        quoteClosed = false;
+        i++;
+        continue;
+      } else if (char === '\r') {
+        currentRecord.push(currentField);
+        currentField = '';
+        quoteClosed = false;
+        if (i + 1 < len && clean[i + 1] === '\n') {
+          i += 2;
+        } else {
+          i++;
+        }
+        allRecords.push(currentRecord);
+        currentRecord = [];
+        if (allRecords.length > maxDataRows) break;
+        continue;
+      } else if (char === '\n') {
+        currentRecord.push(currentField);
+        currentField = '';
+        quoteClosed = false;
+        i++;
+        allRecords.push(currentRecord);
+        currentRecord = [];
+        if (allRecords.length > maxDataRows) break;
+        continue;
+      } else if (char === ' ' || char === '\t') {
+        i++;
+        continue;
+      } else {
+        hasMalformed = true;
+        currentField += char;
+        quoteClosed = false;
+        i++;
+        continue;
+      }
+    }
+
+    // Unquoted field
+    if (char === '"') {
+      if (currentField.length === 0) {
+        inQuotes = true;
+        i++;
+        continue;
+      } else {
+        hasMalformed = true;
+        currentField += '"';
+        i++;
+        continue;
+      }
+    } else if (char === ',') {
+      currentRecord.push(currentField);
+      currentField = '';
+      i++;
+      continue;
+    } else if (char === '\r') {
+      currentRecord.push(currentField);
+      currentField = '';
+      if (i + 1 < len && clean[i + 1] === '\n') {
+        i += 2;
+      } else {
+        i++;
+      }
+      allRecords.push(currentRecord);
+      currentRecord = [];
+      if (allRecords.length > maxDataRows) break;
+      continue;
+    } else if (char === '\n') {
+      currentRecord.push(currentField);
+      currentField = '';
+      i++;
+      allRecords.push(currentRecord);
+      currentRecord = [];
+      if (allRecords.length > maxDataRows) break;
+      continue;
+    } else {
+      currentField += char;
+      i++;
+      continue;
+    }
+  }
+
+  if (inQuotes) {
+    hasMalformed = true;
+  }
+
+  if (currentField.length > 0 || quoteClosed || currentRecord.length > 0) {
+    currentRecord.push(currentField);
+    allRecords.push(currentRecord);
+  }
+
+  if (allRecords.length === 0) {
+    return { headers: [], rows: [], totalRowsParsed: 0, hasMalformedRecords: hasMalformed };
+  }
+
+  const headers = allRecords[0];
+  const rows = allRecords.slice(1, maxDataRows + 1);
+
+  return {
+    headers,
+    rows,
+    totalRowsParsed: Math.max(0, allRecords.length - 1),
+    hasMalformedRecords: hasMalformed,
+  };
 }
 
 export const SecureReportPreview: React.FC<SecureReportPreviewProps> = ({
@@ -57,11 +254,18 @@ export const SecureReportPreview: React.FC<SecureReportPreviewProps> = ({
   const [showRawCsv, setShowRawCsv] = useState<boolean>(false);
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
 
+  const preparedHtml = useMemo(() => {
+    if (content.format === 'html') {
+      return prepareSandboxedHtml(content.content);
+    }
+    return '';
+  }, [content]);
+
   const parsedCsv = useMemo(() => {
     if (content.format === 'csv') {
       return parseCsvForPreview(content.content);
     }
-    return { headers: [], rows: [] };
+    return { headers: [], rows: [], totalRowsParsed: 0, hasMalformedRecords: false };
   }, [content]);
 
   const handleCopy = async () => {
@@ -85,7 +289,7 @@ export const SecureReportPreview: React.FC<SecureReportPreviewProps> = ({
         subtitle={`Format: ${report.format.toUpperCase()} · Location: ${report.storagePath ?? 'Database Record'}`}
         headerAction={
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <Badge variant="info" size="sm" title="Zero script execution, zero network access">
+            <Badge variant="info" size="sm" title="Zero script execution, zero external network access">
               Sandboxed Preview · Isolated
             </Badge>
             <button
@@ -123,7 +327,12 @@ export const SecureReportPreview: React.FC<SecureReportPreviewProps> = ({
         >
           <span>
             <strong>Security Boundary:</strong> Report content is isolated from the desktop
-            application shell. Scripts and external network calls are disabled.
+            application shell. Scripts and external network calls are disabled via strict sandbox and Content Security Policy.
+            {content.format === 'csv' && parsedCsv.hasMalformedRecords && (
+              <span style={{ color: '#f59e0b', marginLeft: '8px' }}>
+                (Notice: Malformed CSV records detected and safely recovered for preview)
+              </span>
+            )}
           </span>
           <div style={{ display: 'flex', gap: '8px' }}>
             {content.format !== 'html' && (
@@ -151,7 +360,7 @@ export const SecureReportPreview: React.FC<SecureReportPreviewProps> = ({
         {content.format === 'html' ? (
           <iframe
             title="Sandboxed HTML Report Preview"
-            srcDoc={content.content}
+            srcDoc={preparedHtml}
             sandbox=""
             data-testid="sandboxed-html-iframe"
             style={{

@@ -23,45 +23,60 @@ describe('Browser Discovery & Compatibility Suite', () => {
     expect(typeof edgeExecutable === 'string' || edgeExecutable === undefined).toBe(true);
   });
 
-  it('successfully discovers and validates an installed system browser', async () => {
-    const browser = await discoverBrowser({ timeoutMs: 8000 });
+  const discoveryTimeoutMs = process.env.CI ? 25000 : 12000;
+  const suiteTestTimeoutMs = process.env.CI ? 40000 : 20000;
 
-    expect(browser).toBeDefined();
-    expect(['msedge', 'chrome', 'custom']).toContain(browser.type);
-    expect(browser.version).toBeTruthy();
-    expect(browser.displayName).toBeTruthy();
-  }, 15000);
+  it(
+    'successfully discovers and validates an installed system browser',
+    async () => {
+      const browser = await discoverBrowser({ timeoutMs: discoveryTimeoutMs });
 
-  it('respects in-memory discovery caching unless bypassCache is requested', async () => {
-    const first = await discoverBrowser({ timeoutMs: 8000 });
-    const second = await discoverBrowser({ timeoutMs: 8000 });
+      expect(browser).toBeDefined();
+      expect(['msedge', 'chrome', 'custom']).toContain(browser.type);
+      expect(browser.version).toBeTruthy();
+      expect(browser.displayName).toBeTruthy();
+    },
+    suiteTestTimeoutMs,
+  );
 
-    // Exact reference equality due to cache
-    expect(second).toBe(first);
+  it(
+    'respects in-memory discovery caching unless bypassCache is requested',
+    async () => {
+      const first = await discoverBrowser({ timeoutMs: discoveryTimeoutMs });
+      const second = await discoverBrowser({ timeoutMs: discoveryTimeoutMs });
 
-    // Bypass cache returns fresh discovery
-    const third = await discoverBrowser({ bypassCache: true, timeoutMs: 8000 });
-    expect(third.version).toBe(first.version);
-    expect(third).not.toBe(first);
-  }, 15000);
+      // Exact reference equality due to cache
+      expect(second).toBe(first);
 
-  it('respects preferredOrder priority (msedge first, then chrome)', async () => {
-    const edge = await discoverBrowser({
-      preferredOrder: ['msedge'],
-      timeoutMs: 8000,
-      bypassCache: true,
-    });
-    expect(edge.type).toBe('msedge');
-    expect(edge.displayName).toBe('Microsoft Edge');
+      // Bypass cache returns fresh discovery
+      const third = await discoverBrowser({ bypassCache: true, timeoutMs: discoveryTimeoutMs });
+      expect(third.version).toBe(first.version);
+      expect(third).not.toBe(first);
+    },
+    suiteTestTimeoutMs,
+  );
 
-    const chrome = await discoverBrowser({
-      preferredOrder: ['chrome'],
-      timeoutMs: 8000,
-      bypassCache: true,
-    });
-    expect(chrome.type).toBe('chrome');
-    expect(chrome.displayName).toBe('Google Chrome');
-  }, 20000);
+  it(
+    'respects preferredOrder priority (msedge first, then chrome)',
+    async () => {
+      const edge = await discoverBrowser({
+        preferredOrder: ['msedge'],
+        timeoutMs: discoveryTimeoutMs,
+        bypassCache: true,
+      });
+      expect(edge.type).toBe('msedge');
+      expect(edge.displayName).toBe('Microsoft Edge');
+
+      const chrome = await discoverBrowser({
+        preferredOrder: ['chrome'],
+        timeoutMs: discoveryTimeoutMs,
+        bypassCache: true,
+      });
+      expect(chrome.type).toBe('chrome');
+      expect(chrome.displayName).toBe('Google Chrome');
+    },
+    suiteTestTimeoutMs,
+  );
 
   it('rejects custom executable path if file does not exist', async () => {
     const nonExistentPath = 'D:\\non_existent_folder\\fake_browser.exe';

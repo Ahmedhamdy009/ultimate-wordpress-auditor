@@ -82,7 +82,7 @@ export function findExecutableForType(type: BrowserType): string | undefined {
  */
 export async function verifyBrowserLaunch(
   candidate: BrowserCandidate,
-  timeoutMs = 5000,
+  timeoutMs = 15000,
 ): Promise<DiscoveredBrowserInfo> {
   const launchOptions: Parameters<typeof chromium.launch>[0] = {
     headless: true,

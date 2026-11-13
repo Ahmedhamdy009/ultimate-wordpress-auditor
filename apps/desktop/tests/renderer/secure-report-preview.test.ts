@@ -399,7 +399,7 @@ describe('SecureReportPreview Component & Helper Suite', () => {
     it('renders formatted JSON in a preformatted code block', () => {
       const jsonContent = JSON.stringify(
         {
-          version: '0.1.6',
+          version: '0.1.7',
           scanId: 'scan-1234',
           findings: [{ id: 'F-1', ruleId: 'SEC-001', severity: 'critical' }],
         },

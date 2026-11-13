@@ -118,7 +118,7 @@ draw.line([(60, 530), (WIDTH - 60, 530)], fill=(51, 65, 85, 140), width=1)
 footer_text = "Built with Electron · React · Vite · TypeScript · SQLite · Playwright · axe-core"
 draw.text((60, 560), footer_text, font=footer_font, fill=(100, 116, 139, 255))
 
-version_text = "v0.1.6  |  Open Source  |  MIT License"
+version_text = "v0.1.7  |  Open Source  |  MIT License"
 v_bbox = draw.textbbox((0, 0), version_text, font=footer_font)
 v_w = v_bbox[2] - v_bbox[0]
 draw.text((WIDTH - 60 - v_w, 560), version_text, font=footer_font, fill=(148, 163, 184, 255))

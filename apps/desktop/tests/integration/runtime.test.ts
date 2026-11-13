@@ -277,7 +277,7 @@ describe('Phase 1.2.4.2 — Live Electron Runtime Integration Suite', () => {
       expect(result.data).toBeDefined();
       expect(result.data.platform).toBe('win32');
       expect(typeof result.data.arch).toBe('string');
-      expect(result.data.appVersion).toBe('0.1.6');
+      expect(result.data.appVersion).toBe('0.1.7');
       expect(result.data.electronVersion).toBe('44.10.2');
       expect(result.data.chromeVersion).toBe('152.0.7977.169');
       expect(result.data.nodeVersion).toBe('24.22.2');

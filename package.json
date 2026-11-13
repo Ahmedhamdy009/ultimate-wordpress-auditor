@@ -1,6 +1,6 @@
 {
   "name": "ultimate-wordpress-and-website-auditor",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "description": "Local Windows application for comprehensive technical and security auditing of WordPress and web sites.",
   "author": {

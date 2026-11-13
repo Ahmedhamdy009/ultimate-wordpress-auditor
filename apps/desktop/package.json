@@ -1,7 +1,7 @@
 {
   "name": "@auditor/desktop",
   "productName": "ultimate-wordpress-and-website-auditor",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "description": "Desktop shell for Ultimate WordPress & Website Auditor",
   "author": {

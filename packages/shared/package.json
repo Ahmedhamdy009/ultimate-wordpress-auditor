@@ -1,6 +1,6 @@
 {
   "name": "@auditor/shared",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "description": "Shared domain schemas, scope guard utilities, and contracts for Ultimate WordPress & Website Auditor",
   "type": "module",

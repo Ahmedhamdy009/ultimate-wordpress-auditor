@@ -9,6 +9,7 @@ import {
 } from '@auditor/shared';
 import type { FindingRepository } from '../db/repositories/finding.repository.js';
 import type { ScanRunRepository } from '../db/repositories/scan-run.repository.js';
+import { redactUrl } from '../browser/redactor.js';
 
 export const MAX_EVIDENCE_SIZE_BYTES = 64 * 1024; // 64 KB
 
@@ -19,13 +20,30 @@ const SENSITIVE_KEY_REGEX =
   /^(?:authorization|auth[_-]?token|access[_-]?token|bearer|api[_-]?key|password|passwd|pwd|secret|cookie|set[_-]?cookie|private[_-]?key)$/i;
 
 /**
- * Value patterns matching JWTs, Bearer tokens, or secret strings.
+ * Value patterns matching JWTs, Bearer tokens, inline API keys, or secret strings.
  */
 const BEARER_TOKEN_REGEX = /Bearer\s+[A-Za-z0-9\-._~+/]+=*/gi;
 const BASIC_AUTH_REGEX = /Basic\s+[A-Za-z0-9+/=]+/gi;
+const INLINE_HTTP_URL_REGEX = /https?:\/\/[^\s"'<>]+/gi;
+const SENSITIVE_INLINE_QUERY_REGEX =
+  /([?&](?:password|passwd|pwd|token|secret|api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|session[_-]?id|auth[_-]?token|private[_-]?key)=)[^&\s"'<>]+/gi;
+
+function redactStringSecretsAndUrls(input: string): string {
+  const trimmed = input.trim();
+  if (/^https?:\/\/\S+$/i.test(trimmed)) {
+    const redacted = redactUrl(trimmed);
+    return input === trimmed ? redacted : input.replace(trimmed, redacted);
+  }
+
+  let sanitized = input.replace(INLINE_HTTP_URL_REGEX, match => redactUrl(match));
+  sanitized = sanitized.replace(SENSITIVE_INLINE_QUERY_REGEX, '$1[REDACTED]');
+  sanitized = sanitized.replace(BEARER_TOKEN_REGEX, 'Bearer [REDACTED]');
+  sanitized = sanitized.replace(BASIC_AUTH_REGEX, 'Basic [REDACTED]');
+  return sanitized;
+}
 
 /**
- * Recursively redacts sensitive credentials and tokens from evidence objects.
+ * Recursively redacts sensitive credentials, tokens, and URL query secrets from finding payloads.
  */
 export function redactSecrets(value: unknown): unknown {
   if (value === null || value === undefined) {
@@ -33,9 +51,7 @@ export function redactSecrets(value: unknown): unknown {
   }
 
   if (typeof value === 'string') {
-    let sanitized = value.replace(BEARER_TOKEN_REGEX, 'Bearer [REDACTED]');
-    sanitized = sanitized.replace(BASIC_AUTH_REGEX, 'Basic [REDACTED]');
-    return sanitized;
+    return redactStringSecretsAndUrls(value);
   }
 
   if (Array.isArray(value)) {
@@ -115,12 +131,12 @@ export class FindingService implements IFindingService {
         scanRunId: request.scanRunId,
         ruleId: request.ruleId,
         category: request.category,
-        title: request.title,
-        description: request.description,
+        title: redactSecrets(request.title) as string,
+        description: redactSecrets(request.description) as string,
         severity: request.severity,
         confidence: request.confidence,
         status: request.status ?? 'active',
-        targetUrl: request.targetUrl,
+        targetUrl: redactUrl(request.targetUrl),
         evidence: sanitizedEvidence,
         remediation: request.remediation ?? null,
         references: request.references ?? null,

@@ -49,6 +49,7 @@ import {
   DEFAULT_VIEWPORT_PROFILES,
   type ViewportProfile,
   redactHtmlSnippet,
+  redactUrl,
 } from '../../browser/index.js';
 import { PerformanceAuditor } from '../performance/index.js';
 import type {
@@ -1059,7 +1060,32 @@ export class ScanOrchestrator implements IScanOrchestrator {
     let viewportsCompleted = 0;
     let accessibilityAuditsCompleted = 0;
     let screenshotsCaptured = 0;
-    let latestPerformanceMetrics: Record<string, unknown> | null = null;
+    const pagePerformanceSnapshots: Array<{
+      pageUrl: string;
+      isEntryUrl: boolean;
+      labMetrics: {
+        ttfbMs: number | null;
+        fcpMs: number | null;
+        lcpMs: number | null;
+        cls: number | null;
+        tbtMs: number | null;
+        isLcpCapped: boolean;
+        lcpElementUrl: string | null;
+        lcpElementSelector: string | null;
+      } | null;
+      resourceSummary: {
+        totalResources: number;
+        totalTransferSizeBytes: number | null;
+        totalEncodedSizeBytes: number | null;
+        totalDecodedSizeBytes: number | null;
+        renderBlockingCount: number;
+        scriptsCount: number;
+        stylesheetsCount: number;
+        imagesCount: number;
+        oversizedImagesCount: number;
+        uncompressedAssetsCount: number;
+      } | null;
+    }> = [];
 
     // Filter and intelligently prioritize eligible HTML pages from crawl result
     const maxPagesToAudit = Math.min(Math.max(1, context.config.maxBrowserPages ?? 5), 50);
@@ -1388,7 +1414,20 @@ export class ScanOrchestrator implements IScanOrchestrator {
                 );
                 findings.push(...perfResult.findings);
                 if (perfResult.labMetrics || perfResult.resourceSummary) {
-                  latestPerformanceMetrics = {
+                  let isEntryPage = false;
+                  try {
+                    const parsedPageUrl = new URL(pageUrl);
+                    isEntryPage =
+                      parsedPageUrl.href.toLowerCase() === entryUrlNormalized ||
+                      parsedPageUrl.pathname === '/' ||
+                      parsedPageUrl.pathname === '';
+                  } catch {
+                    isEntryPage = pageUrl.toLowerCase() === entryUrlNormalized;
+                  }
+
+                  pagePerformanceSnapshots.push({
+                    pageUrl: redactUrl(pageUrl),
+                    isEntryUrl: isEntryPage,
                     labMetrics: perfResult.labMetrics
                       ? {
                           ttfbMs: perfResult.labMetrics.ttfbMs,
@@ -1397,7 +1436,9 @@ export class ScanOrchestrator implements IScanOrchestrator {
                           cls: perfResult.labMetrics.cls,
                           tbtMs: perfResult.labMetrics.tbtMs,
                           isLcpCapped: perfResult.labMetrics.lcpDetails?.isCapped ?? false,
-                          lcpElementUrl: perfResult.labMetrics.lcpDetails?.elementUrl ?? null,
+                          lcpElementUrl: perfResult.labMetrics.lcpDetails?.elementUrl
+                            ? redactUrl(perfResult.labMetrics.lcpDetails.elementUrl)
+                            : null,
                           lcpElementSelector:
                             perfResult.labMetrics.lcpDetails?.elementSelector ?? null,
                         }
@@ -1419,7 +1460,7 @@ export class ScanOrchestrator implements IScanOrchestrator {
                             perfResult.resourceSummary.uncompressedAssetsCount,
                         }
                       : null,
-                  };
+                  });
                 }
               } catch (perfErr) {
                 if (
@@ -1569,7 +1610,10 @@ export class ScanOrchestrator implements IScanOrchestrator {
           }
 
           const pageErrMsg = pageErr instanceof Error ? pageErr.message : String(pageErr);
-          failedPages.push({ url: pageUrl, error: pageErrMsg });
+          failedPages.push({
+            url: redactUrl(pageUrl),
+            error: redactSecrets(pageErrMsg) as string,
+          });
         }
       }
     } finally {
@@ -1587,6 +1631,9 @@ export class ScanOrchestrator implements IScanOrchestrator {
       candidateUrls.size - (pagesAudited + failedPages.length),
     );
 
+    const performanceMetrics =
+      this.selectRepresentativePerformanceMetrics(pagePerformanceSnapshots);
+
     return {
       pagesAudited,
       viewportsCompleted,
@@ -1596,7 +1643,93 @@ export class ScanOrchestrator implements IScanOrchestrator {
       browserCandidatesSkipped,
       findings,
       failedPages,
-      performanceMetrics: latestPerformanceMetrics,
+      performanceMetrics,
+    };
+  }
+
+  /**
+   * Explicit deterministic summary-selection policy for multi-page performance metrics:
+   * 1. 'entry_url_preferred': Retains the entry URL's measured snapshot when available so
+   *    subsequent subpage audits never overwrite homepage/entry telemetry.
+   * 2. 'first_measured_fallback': Falls back to the first audited page containing at least
+   *    one measured lab metric or captured resource when the entry URL lacks telemetry.
+   * 3. 'unavailable_partial': Preserves explicit null/incomplete telemetry from the first
+   *    audited page rather than inventing averages from partial measurements.
+   * Per-page snapshots remain intact in `pages` paired with their exact redacted URLs.
+   */
+  private selectRepresentativePerformanceMetrics(
+    snapshots: ReadonlyArray<{
+      pageUrl: string;
+      isEntryUrl: boolean;
+      labMetrics: {
+        ttfbMs: number | null;
+        fcpMs: number | null;
+        lcpMs: number | null;
+        cls: number | null;
+        tbtMs: number | null;
+        isLcpCapped: boolean;
+        lcpElementUrl: string | null;
+        lcpElementSelector: string | null;
+      } | null;
+      resourceSummary: {
+        totalResources: number;
+        totalTransferSizeBytes: number | null;
+        totalEncodedSizeBytes: number | null;
+        totalDecodedSizeBytes: number | null;
+        renderBlockingCount: number;
+        scriptsCount: number;
+        stylesheetsCount: number;
+        imagesCount: number;
+        oversizedImagesCount: number;
+        uncompressedAssetsCount: number;
+      } | null;
+    }>,
+  ): Record<string, unknown> | null {
+    if (snapshots.length === 0) {
+      return null;
+    }
+
+    const hasMeasuredData = (snap: (typeof snapshots)[number]): boolean => {
+      const lm = snap.labMetrics;
+      const hasVital =
+        lm !== null &&
+        (lm.ttfbMs !== null ||
+          lm.fcpMs !== null ||
+          lm.lcpMs !== null ||
+          lm.cls !== null ||
+          lm.tbtMs !== null);
+      const hasRes = snap.resourceSummary !== null && snap.resourceSummary.totalResources > 0;
+      return hasVital || hasRes;
+    };
+
+    const entrySnapshot = snapshots.find(s => s.isEntryUrl && hasMeasuredData(s));
+    const measuredFallback = snapshots.find(hasMeasuredData);
+
+    let selectionPolicy: 'entry_url_preferred' | 'first_measured_fallback' | 'unavailable_partial';
+    let selected: (typeof snapshots)[number];
+
+    if (entrySnapshot) {
+      selectionPolicy = 'entry_url_preferred';
+      selected = entrySnapshot;
+    } else if (measuredFallback) {
+      selectionPolicy = 'first_measured_fallback';
+      selected = measuredFallback;
+    } else {
+      selectionPolicy = 'unavailable_partial';
+      selected = snapshots[0];
+    }
+
+    return {
+      selectionPolicy,
+      selectedPageUrl: selected.pageUrl,
+      labMetrics: selected.labMetrics,
+      resourceSummary: selected.resourceSummary,
+      pages: snapshots.map(s => ({
+        pageUrl: s.pageUrl,
+        isEntryUrl: s.isEntryUrl,
+        labMetrics: s.labMetrics,
+        resourceSummary: s.resourceSummary,
+      })),
     };
   }
 
@@ -1789,7 +1922,15 @@ export class ScanOrchestrator implements IScanOrchestrator {
       detail = ev.url;
     }
 
-    return `${f.ruleId}::${f.targetUrl}::${selector}::${detail}::${viewport}`;
+    // 4. Classification discriminator (prevents distinct bottleneck categories on the same page from colliding)
+    const classification =
+      typeof ev.classification === 'string' && ev.classification.trim().length > 0
+        ? ev.classification.trim()
+        : '';
+
+    return classification
+      ? `${f.ruleId}::${classification}::${f.targetUrl}::${selector}::${detail}::${viewport}`
+      : `${f.ruleId}::${f.targetUrl}::${selector}::${detail}::${viewport}`;
   }
 
   private deduplicateAndSanitizeFindings(
@@ -1808,14 +1949,14 @@ export class ScanOrchestrator implements IScanOrchestrator {
         scanRunId,
         ruleId: raw.ruleId,
         category: normalizeFindingCategoryId({ category: raw.category, ruleId: raw.ruleId }),
-        title: raw.title,
-        description: raw.description,
+        title: redactSecrets(raw.title) as string,
+        description: redactSecrets(raw.description) as string,
         severity: raw.severity,
         confidence: raw.confidence,
         status: normalizeFindingLifecycleStatus(raw.status, raw.confidence),
-        targetUrl: raw.targetUrl,
+        targetUrl: redactUrl(raw.targetUrl),
         evidence: raw.evidence ? (raw.evidence as Record<string, unknown>) : null,
-        remediation: raw.remediation ?? null,
+        remediation: raw.remediation ? (redactSecrets(raw.remediation) as string) : null,
         references: raw.references ? [...raw.references] : null,
       };
 

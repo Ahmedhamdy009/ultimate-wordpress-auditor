@@ -1,5 +1,6 @@
 import type { Page } from 'playwright-core';
 import type {
+  CapturedNetworkResource,
   RuntimeAuditMetrics,
   RuntimeAuditResult,
   RuntimeAuditorOptions,
@@ -36,6 +37,13 @@ export class RuntimeResourceAuditor {
   public detach(): void {
     this.collector.detach();
     this.targetPage = null;
+  }
+
+  /**
+   * Returns network resources captured by the attached collector.
+   */
+  public getCapturedNetworkResources(): readonly CapturedNetworkResource[] {
+    return this.collector.getCollectedNetworkResources();
   }
 
   /**

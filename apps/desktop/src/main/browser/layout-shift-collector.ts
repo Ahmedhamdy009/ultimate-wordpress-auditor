@@ -12,6 +12,40 @@ export const DEFAULT_LAYOUT_SHIFT_TIMEOUT_MS = 1000;
 
 export const LAYOUT_SHIFT_INIT_SCRIPT = `
 (function() {
+  window.__auditorLayoutShiftCollectorRegistered = true;
+
+  if (!window.__auditorDisconnectLayoutShiftObserver) {
+    window.__auditorShiftConsumers = window.__auditorShiftConsumers || { performance: false, visual: false };
+    window.__auditorDisconnectLayoutShiftObserver = function(consumer) {
+      try {
+        if (consumer === 'performance') window.__auditorShiftConsumers.performance = true;
+        if (consumer === 'visual') window.__auditorShiftConsumers.visual = true;
+
+        var hasPerf = Boolean(window.__auditorPerformance);
+        var hasVisual = Boolean(window.__auditorLayoutShiftCollectorRegistered);
+
+        var canDisconnect = false;
+        if (hasPerf && hasVisual) {
+          canDisconnect = Boolean(window.__auditorShiftConsumers.performance && window.__auditorShiftConsumers.visual);
+        } else if (hasPerf) {
+          canDisconnect = Boolean(window.__auditorShiftConsumers.performance);
+        } else if (hasVisual) {
+          canDisconnect = Boolean(window.__auditorShiftConsumers.visual);
+        } else {
+          canDisconnect = true;
+        }
+
+        if (canDisconnect && window.__auditorLayoutShiftObserver) {
+          window.__auditorLayoutShiftObserver.disconnect();
+        }
+      } catch (e) {}
+    };
+  }
+
+  // If unified performance collector or layout shift observer is already initialized, do not register a duplicate observer!
+  if (window.__auditorPerformance || window.__auditorLayoutShiftObserver) {
+    return;
+  }
   window.__auditorLayoutShifts = [];
   window.__auditorLayoutShiftSupported = false;
   window.__auditorLayoutShiftLimitReached = false;
@@ -140,7 +174,9 @@ export class LayoutShiftCollector {
         `
         (function() {
           try {
-            if (window.__auditorLayoutShiftObserver) {
+            if (typeof window.__auditorDisconnectLayoutShiftObserver === 'function') {
+              window.__auditorDisconnectLayoutShiftObserver('visual');
+            } else if (window.__auditorLayoutShiftObserver) {
               window.__auditorLayoutShiftObserver.disconnect();
             }
           } catch (e) {}

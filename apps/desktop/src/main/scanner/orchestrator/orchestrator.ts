@@ -50,6 +50,7 @@ import {
   type ViewportProfile,
   redactHtmlSnippet,
 } from '../../browser/index.js';
+import { PerformanceAuditor } from '../performance/index.js';
 import type {
   BrowserAuditExecutionResult,
   IScanOrchestrator,
@@ -79,6 +80,7 @@ export class ScanOrchestrator implements IScanOrchestrator {
       options?: AccessibilityAuditorOptions,
     ) => AccessibilityAuditor;
     readonly runtimeAuditorFactory: (options?: RuntimeAuditorOptions) => RuntimeResourceAuditor;
+    readonly performanceAuditorFactory: () => PerformanceAuditor;
     readonly testHooks?: ScanOrchestratorOptions['testHooks'];
     readonly clientOptions?: ScanOrchestratorOptions['clientOptions'];
   };
@@ -121,6 +123,8 @@ export class ScanOrchestrator implements IScanOrchestrator {
       runtimeAuditorFactory:
         options?.runtimeAuditorFactory ??
         (opts => new RuntimeResourceAuditor(opts ?? { authorizedOrigin: '' })),
+      performanceAuditorFactory:
+        options?.performanceAuditorFactory ?? (() => new PerformanceAuditor()),
       testHooks: options?.testHooks,
       clientOptions: options?.clientOptions ?? {},
     };
@@ -1285,6 +1289,7 @@ export class ScanOrchestrator implements IScanOrchestrator {
 
         let managedPage = null;
         let runtimeAuditor: RuntimeResourceAuditor | null = null;
+        let performanceAuditor: PerformanceAuditor | null = null;
         const pageAuditStartTime = Date.now();
 
         try {
@@ -1309,7 +1314,17 @@ export class ScanOrchestrator implements IScanOrchestrator {
               runtimeAuditor.attach(managedPage.page);
             }
 
-            // 2. Navigate page with bounded timeout so slow responses cannot starve finalization
+            // 2. Register PerformanceCollector script before navigation if enabled
+            if (modules.networkResources || modules.layoutStability) {
+              performanceAuditor = this.options.performanceAuditorFactory();
+              try {
+                await performanceAuditor.install(managedPage.page);
+              } catch {
+                // Non-fatal init script installation failure
+              }
+            }
+
+            // 3. Navigate page with bounded timeout so slow responses cannot starve finalization
             const availableForPageMs = Math.max(
               2_000,
               context.deadlineAt - Date.now() - FINALIZATION_RESERVE_MS,
@@ -1323,7 +1338,7 @@ export class ScanOrchestrator implements IScanOrchestrator {
               timeout: navTimeout,
             });
 
-            // 3. Accessibility Audit if enabled
+            // 4. Accessibility Audit if enabled
             if (modules.accessibility) {
               this.checkAborted(context);
               context.progress.currentEngine = 'accessibility';
@@ -1341,27 +1356,71 @@ export class ScanOrchestrator implements IScanOrchestrator {
               this.notifyProgress(context, onProgress);
             }
 
-            // 4. Collect runtime audit findings
+            // 5. Performance Audit & Bottleneck Classification
+            const isPageClosed =
+              typeof managedPage.page?.isClosed === 'function'
+                ? managedPage.page.isClosed()
+                : false;
+            if (performanceAuditor && !isPageClosed) {
+              this.checkAborted(context);
+              context.progress.currentEngine = 'performance';
+              this.notifyProgress(context, onProgress);
+
+              try {
+                const capturedRecords = runtimeAuditor
+                  ? runtimeAuditor.getCapturedNetworkResources()
+                  : [];
+                const perfResult = await performanceAuditor.audit(
+                  managedPage.page,
+                  pageUrl,
+                  capturedRecords,
+                  {
+                    scanRunId: context.scanId,
+                    signal: context.abortController.signal,
+                    settleTimeoutMs: Math.min(
+                      1000,
+                      Math.max(0, context.deadlineAt - Date.now() - FINALIZATION_RESERVE_MS),
+                    ),
+                    maxCeilingMs: 5000,
+                  },
+                );
+                findings.push(...perfResult.findings);
+              } catch (perfErr) {
+                if (
+                  context.abortController.signal.aborted ||
+                  (perfErr instanceof ScanOrchestratorError &&
+                    (perfErr.code === SCAN_ORCHESTRATOR_ERROR_CODES.ERR_SCAN_TIMEOUT ||
+                      perfErr.code === SCAN_ORCHESTRATOR_ERROR_CODES.ERR_SCAN_CANCELLED))
+                ) {
+                  throw perfErr;
+                }
+                // Partial performance failure is isolated and does not abort remaining audits
+              }
+            }
+
+            // 6. Collect runtime audit findings
             if (runtimeAuditor) {
-              const runtimeReport = runtimeAuditor.audit(pageUrl);
+              if (modules.runtimeErrors) {
+                const runtimeReport = runtimeAuditor.audit(pageUrl);
+                findings.push(
+                  ...runtimeReport.findings.map(f => ({
+                    scanRunId: context.scanId,
+                    ruleId: f.ruleId,
+                    category: f.category,
+                    title: f.title,
+                    description: f.description,
+                    severity: f.severity,
+                    confidence: f.confidence,
+                    status: f.status,
+                    targetUrl: f.targetUrl,
+                    evidence: (f.evidence as Record<string, unknown> | null | undefined) ?? null,
+                    remediation: f.remediation ?? null,
+                    references: f.references ? [...f.references] : [],
+                  })),
+                );
+              }
               runtimeAuditor.detach();
               runtimeAuditor = null;
-              findings.push(
-                ...runtimeReport.findings.map(f => ({
-                  scanRunId: context.scanId,
-                  ruleId: f.ruleId,
-                  category: f.category,
-                  title: f.title,
-                  description: f.description,
-                  severity: f.severity,
-                  confidence: f.confidence,
-                  status: f.status,
-                  targetUrl: f.targetUrl,
-                  evidence: (f.evidence as Record<string, unknown> | null | undefined) ?? null,
-                  remediation: f.remediation ?? null,
-                  references: f.references ? [...f.references] : [],
-                })),
-              );
             }
 
             // Release the page before visual audit so VisualAuditor can manage viewport dimensions
@@ -1539,6 +1598,20 @@ export class ScanOrchestrator implements IScanOrchestrator {
       cat.includes('network resource')
     ) {
       return Boolean(modules.networkResources);
+    }
+    if (
+      rule.startsWith('PERF_LAB_') ||
+      rule.startsWith('PERF_RES_') ||
+      rule.startsWith('PERF_BOTTLENECK_') ||
+      rule.startsWith('PERF_LCP_')
+    ) {
+      if (rule.includes('CLS') || rule.includes('LAYOUT_INSTABILITY')) {
+        return Boolean(modules.layoutStability);
+      }
+      return Boolean(modules.networkResources);
+    }
+    if (rule.startsWith('PERF_') || cat.includes('performance')) {
+      return Boolean(modules.http || modules.networkResources);
     }
     if (rule.startsWith('HTTP_') || rule.startsWith('HTTP-')) {
       return Boolean(modules.http);

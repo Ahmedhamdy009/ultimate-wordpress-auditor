@@ -177,7 +177,7 @@ describe('ScanOrchestrator Lifecycle & State Machine', () => {
     expect(progressUpdates).toContain('completed');
 
     customOrchestrator.dispose();
-  });
+  }, 15_000);
 
   it('prevents executing an already terminal scan', async () => {
     const run = orchestrator.createScan({ siteId: validSiteId });

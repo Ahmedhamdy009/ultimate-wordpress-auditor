@@ -20,3 +20,7 @@ export * from './axe-loader.js';
 export * from './accessibility-sanitizer.js';
 export * from './accessibility-analyzer.js';
 export * from './accessibility-auditor.js';
+export * from './performance-types.js';
+export * from './performance-collector.js';
+export * from './resource-performance-types.js';
+export * from './resource-performance-engine.js';

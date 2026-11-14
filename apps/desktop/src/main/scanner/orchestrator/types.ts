@@ -27,6 +27,7 @@ import type {
   RuntimeResourceAuditor,
   RuntimeAuditorOptions,
 } from '../../browser/index.js';
+import type { PerformanceAuditor } from '../performance/index.js';
 
 export type { ScanStage };
 
@@ -122,6 +123,11 @@ export interface ScanOrchestratorOptions {
    * Factory function to create a RuntimeResourceAuditor instance.
    */
   readonly runtimeAuditorFactory?: (options?: RuntimeAuditorOptions) => RuntimeResourceAuditor;
+
+  /**
+   * Factory function to create a PerformanceAuditor instance.
+   */
+  readonly performanceAuditorFactory?: () => PerformanceAuditor;
 
   /**
    * Isolated test-only hooks for dependency injection.

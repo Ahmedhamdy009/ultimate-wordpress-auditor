@@ -1,5 +1,6 @@
 export * from './OverviewView.js';
 export * from './ScansView.js';
+export * from './PerformanceVitalsView.js';
 export * from './ProjectsView.js';
 export * from './ReportsView.js';
 export * from './TargetValidatorView.js';

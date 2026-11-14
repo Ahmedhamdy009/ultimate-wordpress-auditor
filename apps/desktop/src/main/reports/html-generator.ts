@@ -1,7 +1,9 @@
 import {
   classifyFindingConfidenceBucket,
+  extractPerformanceSummary,
   FINDING_CATEGORY_FILTER_ORDER,
   getFindingCategoryLabel,
+  LABORATORY_CONTEXT_DISCLAIMER,
   normalizeFindingCategoryId,
   normalizeFindingLifecycleStatus,
 } from '@auditor/shared';
@@ -71,6 +73,9 @@ export function generateHtmlReport(model: ReportModel): string {
 
         // Redact evidence and format JSON/text
         let evidenceHtml = '';
+        let causalityBadge = '';
+        let classificationBadge = '';
+
         if (f.evidence !== null && f.evidence !== undefined) {
           const redacted = redactSensitiveData(f.evidence);
           const evidenceStr = typeof redacted === 'string'
@@ -78,8 +83,103 @@ export function generateHtmlReport(model: ReportModel): string {
             : JSON.stringify(redacted, null, 2);
 
           let visualExtra = '';
+          let perfExtra = '';
+
           if (typeof redacted === 'object' && redacted !== null) {
             const evObj = redacted as Record<string, unknown>;
+
+            // Performance Causality & Classification Badges
+            if (evObj.causality === 'causal') {
+              causalityBadge =
+                '<span class="badge badge-causal">CAUSAL (PROVEN CAUSE)</span>';
+            } else if (evObj.causality === 'correlational') {
+              causalityBadge =
+                '<span class="badge badge-correlational">CORRELATIONAL (ASSOCIATED FACTOR)</span>';
+            }
+
+            if (typeof evObj.classification === 'string') {
+              classificationBadge = `<span class="badge badge-bottleneck">BOTTLENECK: ${escapeHtml(evObj.classification)}</span>`;
+            }
+
+            // Metric comparison box
+            let observedValStr = '';
+            if (evObj.observedValue !== undefined && evObj.observedValue !== null) {
+              observedValStr = `${evObj.observedValue}${evObj.unit ? ` ${evObj.unit}` : ''}`;
+            } else if (typeof evObj.observedValueMs === 'number') {
+              observedValStr = `${evObj.observedValueMs} ms`;
+            }
+
+            let thresholdValStr = '';
+            if (evObj.thresholdValue !== undefined && evObj.thresholdValue !== null) {
+              thresholdValStr = `${evObj.thresholdValue}${evObj.unit ? ` ${evObj.unit}` : ''}`;
+            } else if (typeof evObj.thresholdMs === 'number') {
+              thresholdValStr = `${evObj.thresholdMs} ms`;
+            } else if (evObj.threshold !== undefined && evObj.threshold !== null) {
+              thresholdValStr = String(evObj.threshold);
+            }
+
+            if (observedValStr && thresholdValStr) {
+              perfExtra += `
+                <div class="metric-comparison-box">
+                  <span class="metric-comp-label">Observed Metric:</span> <strong>${escapeHtml(observedValStr)}</strong> &bull;
+                  <span class="metric-comp-label">Target Budget:</span> <strong>${escapeHtml(thresholdValStr)}</strong>
+                </div>
+              `;
+            }
+
+            if (typeof evObj.inferenceRationale === 'string') {
+              perfExtra += `
+                <div class="inference-rationale-box">
+                  <strong>Inference Rationale:</strong> ${escapeHtml(evObj.inferenceRationale)}
+                </div>
+              `;
+            }
+
+            const limNotice = evObj.limitationsNotice ?? evObj.limitationNotice;
+            if (typeof limNotice === 'string') {
+              perfExtra += `
+                <div class="limitations-box">
+                  <h5 class="detail-label">&#9888; Measurement Limitations</h5>
+                  <p>${escapeHtml(limNotice)}</p>
+                </div>
+              `;
+            }
+
+            // Affected resources list if present
+            const resourcesList = Array.isArray(evObj.resources)
+              ? evObj.resources
+              : Array.isArray(evObj.renderBlockingResources)
+                ? evObj.renderBlockingResources
+                : Array.isArray(evObj.uncompressedAssets)
+                  ? evObj.uncompressedAssets
+                  : Array.isArray(evObj.oversizedImages)
+                    ? evObj.oversizedImages
+                    : null;
+
+            if (resourcesList && resourcesList.length > 0) {
+              const items = resourcesList
+                .slice(0, 10)
+                .map((r: unknown) => {
+                  if (typeof r === 'object' && r !== null) {
+                    const resObj = r as Record<string, unknown>;
+                    const u = String(resObj.url ?? resObj.currentSrc ?? resObj.targetUrl ?? '');
+                    const size =
+                      typeof resObj.transferSizeBytes === 'number'
+                        ? `(${Math.round(resObj.transferSizeBytes / 1024)} KB)`
+                        : '';
+                    return `<li><code>${escapeHtml(u)}</code> ${size}</li>`;
+                  }
+                  return `<li><code>${escapeHtml(String(r))}</code></li>`;
+                })
+                .join('');
+              perfExtra += `
+                <div class="affected-resources-box">
+                  <h5 class="detail-label">&#128196; Affected Resources (${resourcesList.length}${resourcesList.length > 10 ? ', showing top 10' : ''})</h5>
+                  <ul class="affected-resources-list">${items}</ul>
+                </div>
+              `;
+            }
+
             if (evObj.screenshot && typeof evObj.screenshot === 'object') {
               const sc = evObj.screenshot as Record<string, unknown>;
               const scKey = getScreenshotEvidenceKey(sc);
@@ -117,6 +217,7 @@ export function generateHtmlReport(model: ReportModel): string {
           evidenceHtml = `
             <div class="finding-detail-section">
               <h5 class="detail-label">Observed Evidence</h5>
+              ${perfExtra}
               ${visualExtra}
               <pre class="evidence-block"><code>${escapeHtml(evidenceStr)}</code></pre>
             </div>
@@ -169,6 +270,8 @@ export function generateHtmlReport(model: ReportModel): string {
                 <span class="badge badge-status status-${escapeHtml(statusBucket)}">${escapeHtml(statusLabel)}</span>
                 <span class="badge badge-cat">${escapeHtml(categoryLabel)}</span>
                 <span class="badge badge-rule">Rule: ${escapeHtml(f.ruleId)}</span>
+                ${causalityBadge}
+                ${classificationBadge}
               </div>
             </header>
             <div class="finding-body">
@@ -257,6 +360,138 @@ export function generateHtmlReport(model: ReportModel): string {
           `;
         }).join('')}
       </div>
+    </section>
+    `;
+  }
+
+  // Laboratory Performance Diagnostics & Web Vitals Section
+  const perfSummary = extractPerformanceSummary(model.summary.performanceMetrics, model.findings);
+  let performanceSectionHtml = '';
+
+  if (perfSummary) {
+    const vitalsList = [
+      perfSummary.ttfb,
+      perfSummary.fcp,
+      perfSummary.lcp,
+      perfSummary.cls,
+      perfSummary.tbt,
+    ];
+
+    const vitalsCardsHtml = vitalsList
+      .map(v => {
+        const ratingClass = `rating-${v.rating.replace(/_/g, '-')}`;
+        const ratingLabel =
+          v.rating === 'needs_improvement' ? 'NEEDS IMPROVEMENT' : v.rating.toUpperCase();
+        const valStr =
+          v.value !== null
+            ? v.name === 'cls'
+              ? v.value.toFixed(3)
+              : `${Math.round(v.value)} ${v.unit}`
+            : 'Unavailable';
+
+        return `
+        <div class="perf-metric-tile ${ratingClass}">
+          <div class="perf-metric-top">
+            <span class="perf-metric-label">${escapeHtml(v.label)}</span>
+            <span class="badge badge-rating ${ratingClass}">${escapeHtml(ratingLabel)}</span>
+          </div>
+          <div class="perf-metric-value font-mono">${escapeHtml(valStr)}</div>
+          <div class="perf-metric-target font-mono">Target: ${escapeHtml(v.targetLabel)}</div>
+          ${v.name === 'lcp' && v.isCapped ? '<div class="perf-metric-capped">&#9888; Capped by 5,000ms deadline ceiling</div>' : ''}
+          ${v.limitationNotice ? `<div class="perf-metric-limitation">${escapeHtml(v.limitationNotice)}</div>` : ''}
+        </div>
+      `;
+      })
+      .join('\n');
+
+    let resourcesBarHtml = '';
+    if (perfSummary.resources) {
+      const res = perfSummary.resources;
+      const transferKb =
+        typeof res.totalTransferSizeBytes === 'number'
+          ? `${Math.round(res.totalTransferSizeBytes / 1024)} KB`
+          : 'N/A';
+      resourcesBarHtml = `
+        <div class="perf-resources-summary">
+          <h3 class="meta-label" style="margin-bottom: 8px;">Page Resource Metrics</h3>
+          <div class="perf-resources-grid">
+            <div class="perf-resource-stat">
+              <span class="perf-stat-label">Total Transferred</span>
+              <span class="perf-stat-val font-mono">${transferKb}</span>
+            </div>
+            <div class="perf-resource-stat">
+              <span class="perf-stat-label">Render-Blocking</span>
+              <span class="perf-stat-val font-mono">${res.renderBlockingCount ?? 0}</span>
+            </div>
+            <div class="perf-resource-stat">
+              <span class="perf-stat-label">Scripts / Stylesheets</span>
+              <span class="perf-stat-val font-mono">${res.scriptsCount ?? 0} / ${res.stylesheetsCount ?? 0}</span>
+            </div>
+            <div class="perf-resource-stat">
+              <span class="perf-stat-label">Images (Oversized)</span>
+              <span class="perf-stat-val font-mono">${res.imagesCount ?? 0} (${res.oversizedImagesCount ?? 0} oversized)</span>
+            </div>
+            <div class="perf-resource-stat">
+              <span class="perf-stat-label">Uncompressed Assets</span>
+              <span class="perf-stat-val font-mono">${res.uncompressedAssetsCount ?? 0}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    let bottlenecksSummaryHtml = '';
+    if (perfSummary.bottleneckDiagnoses.length > 0) {
+      bottlenecksSummaryHtml = `
+        <div class="perf-bottlenecks-summary">
+          <h3 class="meta-label" style="margin-bottom: 8px;">Diagnosed Bottlenecks (${perfSummary.bottleneckDiagnoses.length})</h3>
+          <div class="perf-bottlenecks-list">
+            ${perfSummary.bottleneckDiagnoses
+              .map(b => {
+                const causalityClass = b.causality === 'causal' ? 'causal' : 'correlational';
+                const causalityText =
+                  b.causality === 'causal'
+                    ? 'CAUSAL (PROVEN CAUSE)'
+                    : 'CORRELATIONAL (ASSOCIATED FACTOR)';
+                return `
+                <div class="perf-bottleneck-card">
+                  <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 4px;">
+                    <span class="badge badge-bottleneck">${escapeHtml(b.classification)}</span>
+                    <span class="badge badge-${causalityClass}">${escapeHtml(causalityText)}</span>
+                    <span class="badge badge-sev sev-${b.severity.toLowerCase()}">${escapeHtml(b.severity.toUpperCase())}</span>
+                    <span class="badge badge-conf conf-${b.confidence.toLowerCase()}">${escapeHtml(b.confidence.toUpperCase())}</span>
+                  </div>
+                  <h4 style="font-size: 14px; font-weight: 600; margin: 4px 0;">${escapeHtml(b.title)}</h4>
+                  ${b.observedValueText && b.thresholdText ? `<div style="font-size: 12px; color: var(--text-muted); font-family: var(--font-mono); margin-bottom: 4px;">Observed: <strong>${escapeHtml(b.observedValueText)}</strong> vs Budget: <strong>${escapeHtml(b.thresholdText)}</strong></div>` : ''}
+                  ${b.limitationsNotice ? `<div style="font-size: 11px; color: var(--warning); margin-top: 4px;">&#9888; ${escapeHtml(b.limitationsNotice)}</div>` : ''}
+                </div>
+              `;
+              })
+              .join('\n')}
+          </div>
+        </div>
+      `;
+    }
+
+    performanceSectionHtml = `
+    <!-- Laboratory Performance Diagnostics & Web Vitals -->
+    <section class="section-card perf-section">
+      <div class="perf-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+        <h2 class="section-title" style="margin: 0;">Laboratory Web Vitals &amp; Performance Diagnostics</h2>
+        <span class="badge badge-lab-context" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);">AUTOMATED CHROMIUM SESSION</span>
+      </div>
+
+      <div class="perf-disclaimer-callout">
+        <div class="perf-disclaimer-title">&#9432; Laboratory Context &amp; Methodology Notice</div>
+        <p>${escapeHtml(LABORATORY_CONTEXT_DISCLAIMER)}</p>
+      </div>
+
+      <div class="perf-metrics-grid">
+        ${vitalsCardsHtml}
+      </div>
+
+      ${resourcesBarHtml}
+      ${bottlenecksSummaryHtml}
     </section>
     `;
   }
@@ -636,6 +871,184 @@ export function generateHtmlReport(model: ReportModel): string {
     }
     .empty-icon { font-size: 36px; color: var(--success); margin-bottom: 12px; }
 
+    /* Performance Diagnostics Styles */
+    .perf-disclaimer-callout {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .perf-disclaimer-title {
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .perf-metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .perf-metric-tile {
+      background: var(--card-subtle);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .perf-metric-tile.rating-good { border-top: 3px solid var(--success); }
+    .perf-metric-tile.rating-needs-improvement { border-top: 3px solid var(--warning); }
+    .perf-metric-tile.rating-poor { border-top: 3px solid var(--critical); }
+    .perf-metric-tile.rating-unavailable { border-top: 3px solid var(--border); }
+    .perf-metric-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+    }
+    .perf-metric-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .badge-rating.rating-good { background: var(--success-bg); color: var(--success); }
+    .badge-rating.rating-needs-improvement { background: var(--warning-bg); color: var(--warning); }
+    .badge-rating.rating-poor { background: var(--critical-bg); color: var(--critical); }
+    .badge-rating.rating-unavailable { background: rgba(148, 163, 184, 0.1); color: var(--text-dim); }
+    .perf-metric-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .perf-metric-target {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+    .perf-metric-capped {
+      font-size: 11px;
+      color: var(--warning);
+      margin-top: 2px;
+    }
+    .perf-metric-limitation {
+      font-size: 10px;
+      color: var(--text-dim);
+      font-style: italic;
+      margin-top: 2px;
+      line-height: 1.3;
+    }
+    .perf-resources-summary {
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      margin-bottom: 16px;
+    }
+    .perf-resources-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+    }
+    .perf-resource-stat {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .perf-stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .perf-stat-val {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .perf-bottleneck-card {
+      background: var(--card-subtle);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      margin-bottom: 8px;
+    }
+    .badge-causal {
+      background: var(--success-bg);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .badge-correlational {
+      background: rgba(148, 163, 184, 0.15);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .badge-bottleneck {
+      background: rgba(139, 92, 246, 0.15);
+      color: #a78bfa;
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      font-family: var(--font-mono);
+    }
+    .metric-comparison-box {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      font-size: 12px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      margin-bottom: 8px;
+    }
+    .metric-comp-label {
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .inference-rationale-box {
+      font-size: 12px;
+      color: var(--text);
+      background: rgba(99, 102, 241, 0.08);
+      border-left: 3px solid #6366f1;
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 8px;
+    }
+    .limitations-box {
+      background: rgba(245, 158, 11, 0.08);
+      border-left: 3px solid var(--warning);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      margin-bottom: 8px;
+      font-size: 12px;
+      color: var(--text);
+    }
+    .limitations-box p { margin: 0; font-size: 12px; color: var(--text); }
+    .affected-resources-box {
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      margin-bottom: 8px;
+    }
+    .affected-resources-list {
+      list-style-type: none;
+      padding-left: 0;
+      margin: 6px 0 0 0;
+      font-size: 11px;
+      font-family: var(--font-mono);
+    }
+    .affected-resources-list li {
+      margin-bottom: 4px;
+      word-break: break-all;
+    }
+
     /* Footer */
     .report-footer {
       text-align: center;
@@ -837,6 +1250,8 @@ export function generateHtmlReport(model: ReportModel): string {
 
     ${consolidatedHtml}
 
+    ${performanceSectionHtml}
+
     <!-- Detailed Findings List -->
     <section class="section-card">
       <div class="section-title">
@@ -853,7 +1268,8 @@ export function generateHtmlReport(model: ReportModel): string {
       <div style="font-size: 12px; line-height: 1.6; color: var(--text-muted);">
         <p style="margin-bottom: 8px;"><strong>Automated Scan Limitations:</strong> This report reflects automated observations collected under bounded execution parameters at scan time. Automated audits cannot guarantee the discovery of all vulnerabilities, zero-day defects, or business-logic flaws.</p>
         <p style="margin-bottom: 8px;"><strong>Accessibility Disclaimers:</strong> Automated accessibility evaluations using axe-core verify specific programmatic WCAG 2.0, 2.1, and 2.2 AA success criteria (e.g. contrast, alt text, ARIA roles). Automated rules verify only a subset of WCAG requirements. This report does not constitute a legal certification of WCAG compliance. Items marked as Manual Review require evaluation with assistive technologies.</p>
-        <p><strong>Layout Stability &amp; Performance:</strong> Synthetic layout shift (CLS) measurements are observed under simulated headless viewport conditions and do not substitute for Real User Monitoring (RUM) field metrics from Chrome UX Report (CrUX).</p>
+        <p style="margin-bottom: 8px;"><strong>Layout Stability &amp; Performance:</strong> Synthetic layout shift (CLS) measurements are observed under simulated headless viewport conditions and do not substitute for Real User Monitoring (RUM) field metrics from Chrome UX Report (CrUX).</p>
+        <p><strong>Laboratory Performance Telemetry:</strong> All Core Web Vitals (TTFB, FCP, LCP, CLS, TBT) and asset timing telemetry represent single-pass automated Chromium laboratory diagnostics. Laboratory metrics isolate underlying browser rendering mechanics, but do not replace aggregate field user experiences. Interaction to Next Paint (INP) is fundamentally unavailable in read-only lab audits.</p>
       </div>
     </section>
 

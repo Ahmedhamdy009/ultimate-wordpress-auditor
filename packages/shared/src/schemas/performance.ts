@@ -426,3 +426,316 @@ export const BOTTLENECK_THRESHOLDS = Object.freeze({
   lcpResourceLoadRatio: 0.5,
   uncompressedAssetsCombinedBytes: 102400, // 100 KiB
 });
+
+/**
+ * Authoritative laboratory context disclaimer.
+ * Strictly communicates that automated Chromium measurements evaluate baseline rendering mechanics
+ * under controlled laboratory conditions and do not represent field RUM / CrUX data.
+ */
+export const LABORATORY_CONTEXT_DISCLAIMER =
+  'Laboratory observations captured in an automated Chromium browser session. Single-pass lab tests measure baseline rendering mechanics and resource bottlenecks in isolation, and do not represent Chrome User Experience Report (CrUX) field data. Interaction to Next Paint (INP) requires real user interaction and is fundamentally unsupported in synthetic lab audits.';
+
+export interface ExtractedPerformanceVital {
+  readonly name: 'ttfb' | 'fcp' | 'lcp' | 'cls' | 'tbt';
+  readonly label: string;
+  readonly value: number | null;
+  readonly unit: string;
+  readonly rating: 'good' | 'needs_improvement' | 'poor' | 'unavailable';
+  readonly targetLabel: string;
+  readonly isCapped?: boolean;
+  readonly elementUrl?: string | null;
+  readonly elementSelector?: string | null;
+  readonly limitationNotice?: string | null;
+}
+
+export interface ExtractedPerformanceResourceSummary {
+  readonly totalResources?: number;
+  readonly totalTransferSizeBytes?: number;
+  readonly totalEncodedSizeBytes?: number;
+  readonly totalDecodedSizeBytes?: number;
+  readonly renderBlockingCount?: number;
+  readonly scriptsCount?: number;
+  readonly stylesheetsCount?: number;
+  readonly imagesCount?: number;
+  readonly oversizedImagesCount?: number;
+  readonly uncompressedAssetsCount?: number;
+}
+
+export interface ExtractedBottleneckEntry {
+  readonly ruleId: string;
+  readonly title: string;
+  readonly classification: string;
+  readonly causality: 'causal' | 'correlational';
+  readonly severity: string;
+  readonly confidence: string;
+  readonly observedValueText?: string;
+  readonly thresholdText?: string;
+  readonly limitationsNotice?: string;
+}
+
+export interface ExtractedPerformanceSummary {
+  readonly ttfb: ExtractedPerformanceVital;
+  readonly fcp: ExtractedPerformanceVital;
+  readonly lcp: ExtractedPerformanceVital;
+  readonly cls: ExtractedPerformanceVital;
+  readonly tbt: ExtractedPerformanceVital;
+  readonly hasAnyData: boolean;
+  readonly hasMeasuredVitals: boolean;
+  readonly resources: ExtractedPerformanceResourceSummary | null;
+  readonly bottleneckDiagnoses: readonly ExtractedBottleneckEntry[];
+  readonly bottleneckDiagnosesCount: number;
+}
+
+/**
+ * Extracts and consolidates laboratory performance metrics, Web Vitals ratings,
+ * and bottleneck diagnoses from scan run summary metadata and/or finding evidence.
+ *
+ * Designed for unified consumption across HTML reports, JSON exports, and the React UI.
+ * Gracefully returns null for legacy/historical scans with zero performance data.
+ */
+export function extractPerformanceSummary(
+  summaryMetrics?: Record<string, unknown> | null,
+  findings?:
+    | readonly {
+        ruleId: string;
+        category?: string;
+        title?: string;
+        severity?: string;
+        confidence?: string;
+        evidence?: Record<string, unknown> | string | null;
+      }[]
+    | null,
+): ExtractedPerformanceSummary | null {
+  const lab = (summaryMetrics?.labMetrics as Record<string, unknown> | undefined | null) ?? null;
+  const res =
+    (summaryMetrics?.resourceSummary as Record<string, unknown> | undefined | null) ?? null;
+
+  // Initialize Web Vitals defaults (unavailable / null)
+  let ttfbVal: number | null = typeof lab?.ttfbMs === 'number' ? lab.ttfbMs : null;
+  let fcpVal: number | null = typeof lab?.fcpMs === 'number' ? lab.fcpMs : null;
+  let lcpVal: number | null = typeof lab?.lcpMs === 'number' ? lab.lcpMs : null;
+  let clsVal: number | null = typeof lab?.cls === 'number' ? lab.cls : null;
+  let tbtVal: number | null = typeof lab?.tbtMs === 'number' ? lab.tbtMs : null;
+  let isLcpCapped = Boolean(lab?.isLcpCapped);
+  let lcpElementUrl = typeof lab?.lcpElementUrl === 'string' ? lab.lcpElementUrl : null;
+  let lcpElementSelector =
+    typeof lab?.lcpElementSelector === 'string' ? lab.lcpElementSelector : null;
+
+  const bottleneckDiagnoses: ExtractedBottleneckEntry[] = [];
+  let hasPerfFinding = false;
+
+  if (findings && Array.isArray(findings)) {
+    for (const f of findings) {
+      if (
+        f.ruleId.startsWith('PERF_') ||
+        f.category === 'static-performance' ||
+        f.category === 'layout-stability'
+      ) {
+        hasPerfFinding = true;
+      }
+
+      const ev =
+        typeof f.evidence === 'object' && f.evidence !== null
+          ? (f.evidence as Record<string, unknown>)
+          : null;
+
+      if (f.ruleId === 'PERF_BOTTLENECK_DIAGNOSIS' && ev) {
+        const causality: 'causal' | 'correlational' =
+          ev.causality === 'causal' ? 'causal' : 'correlational';
+        const classification =
+          typeof ev.classification === 'string' ? ev.classification : 'UNKNOWN';
+        const observedValText =
+          ev.observedValue !== undefined && ev.observedValue !== null
+            ? `${ev.observedValue}${ev.unit ? ` ${ev.unit}` : ''}`
+            : undefined;
+        const thresholdText =
+          ev.thresholdValue !== undefined && ev.thresholdValue !== null
+            ? `${ev.thresholdValue}${ev.unit ? ` ${ev.unit}` : ''}`
+            : undefined;
+        const limitationsNotice =
+          typeof ev.limitationsNotice === 'string' ? ev.limitationsNotice : undefined;
+
+        bottleneckDiagnoses.push({
+          ruleId: f.ruleId,
+          title: f.title ?? classification,
+          classification,
+          causality,
+          severity: f.severity ?? 'medium',
+          confidence: f.confidence ?? 'confirmed',
+          observedValueText: observedValText,
+          thresholdText,
+          limitationsNotice,
+        });
+
+        // Fallback vitals extraction from bottleneck evidence if missing from lab summary
+        if (
+          ev.primaryMetricName === 'TTFB' &&
+          ttfbVal === null &&
+          typeof ev.observedValue === 'number'
+        ) {
+          ttfbVal = ev.observedValue;
+        } else if (
+          ev.primaryMetricName === 'FCP' &&
+          fcpVal === null &&
+          typeof ev.observedValue === 'number'
+        ) {
+          fcpVal = ev.observedValue;
+        } else if (
+          ev.primaryMetricName === 'LCP' &&
+          lcpVal === null &&
+          typeof ev.observedValue === 'number'
+        ) {
+          lcpVal = ev.observedValue;
+        } else if (
+          ev.primaryMetricName === 'CLS' &&
+          clsVal === null &&
+          typeof ev.observedValue === 'number'
+        ) {
+          clsVal = ev.observedValue;
+        } else if (
+          ev.primaryMetricName === 'TBT' &&
+          tbtVal === null &&
+          typeof ev.observedValue === 'number'
+        ) {
+          tbtVal = ev.observedValue;
+        }
+      }
+
+      // Fallback extraction from individual lab metric findings
+      if (
+        f.ruleId === 'PERF_LAB_SLOW_TTFB' &&
+        ttfbVal === null &&
+        typeof ev?.observedValueMs === 'number'
+      ) {
+        ttfbVal = ev.observedValueMs;
+      }
+      if (
+        f.ruleId === 'PERF_LAB_SLOW_FCP' &&
+        fcpVal === null &&
+        typeof ev?.observedValueMs === 'number'
+      ) {
+        fcpVal = ev.observedValueMs;
+      }
+      if (
+        f.ruleId === 'PERF_LAB_SLOW_LCP' &&
+        lcpVal === null &&
+        typeof ev?.observedValueMs === 'number'
+      ) {
+        lcpVal = ev.observedValueMs;
+        if (ev.isCapped) isLcpCapped = true;
+        if (typeof ev.elementUrl === 'string') lcpElementUrl = ev.elementUrl;
+        if (typeof ev.elementSelector === 'string') lcpElementSelector = ev.elementSelector;
+      }
+      if (
+        f.ruleId === 'PERF_LAB_HIGH_CLS' &&
+        clsVal === null &&
+        typeof ev?.observedValue === 'number'
+      ) {
+        clsVal = ev.observedValue;
+      }
+      if (
+        f.ruleId === 'PERF_LAB_HIGH_TBT' &&
+        tbtVal === null &&
+        typeof ev?.observedValueMs === 'number'
+      ) {
+        tbtVal = ev.observedValueMs;
+      }
+    }
+  }
+
+  const hasMeasuredVitals =
+    ttfbVal !== null || fcpVal !== null || lcpVal !== null || clsVal !== null || tbtVal !== null;
+  const hasResources = res !== null && Object.keys(res).length > 0;
+  const hasBottlenecks = bottleneckDiagnoses.length > 0;
+  const hasAnyData = hasMeasuredVitals || hasResources || hasBottlenecks || hasPerfFinding;
+
+  // Historical scan or static-only crawl without performance telemetry
+  if (!hasAnyData) {
+    return null;
+  }
+
+  const ttfbRating = rateWebVitalMetric('ttfb', ttfbVal) ?? 'unavailable';
+  const fcpRating = rateWebVitalMetric('fcp', fcpVal) ?? 'unavailable';
+  const lcpRating = rateWebVitalMetric('lcp', lcpVal) ?? 'unavailable';
+  const clsRating = rateWebVitalMetric('cls', clsVal) ?? 'unavailable';
+  const tbtRating = rateWebVitalMetric('tbt', tbtVal) ?? 'unavailable';
+
+  return {
+    ttfb: {
+      name: 'ttfb',
+      label: 'Time to First Byte (TTFB)',
+      value: ttfbVal,
+      unit: 'ms',
+      rating: ttfbRating,
+      targetLabel: '≤ 800 ms',
+      limitationNotice:
+        'TTFB measures network transit and initial document response. Server execution time is not isolated without Server-Timing headers.',
+    },
+    fcp: {
+      name: 'fcp',
+      label: 'First Contentful Paint (FCP)',
+      value: fcpVal,
+      unit: 'ms',
+      rating: fcpRating,
+      targetLabel: '≤ 1,800 ms',
+    },
+    lcp: {
+      name: 'lcp',
+      label: 'Largest Contentful Paint (LCP)',
+      value: lcpVal,
+      unit: 'ms',
+      rating: lcpRating,
+      targetLabel: '≤ 2,500 ms',
+      isCapped: isLcpCapped,
+      elementUrl: lcpElementUrl,
+      elementSelector: lcpElementSelector,
+    },
+    cls: {
+      name: 'cls',
+      label: 'Cumulative Layout Shift (CLS)',
+      value: clsVal,
+      unit: '',
+      rating: clsRating,
+      targetLabel: '≤ 0.10',
+    },
+    tbt: {
+      name: 'tbt',
+      label: 'Total Blocking Time (TBT)',
+      value: tbtVal,
+      unit: 'ms',
+      rating: tbtRating,
+      targetLabel: '≤ 200 ms',
+      limitationNotice:
+        'TBT measures main-thread blocking time between FCP and settle. Lab proxy for interactivity; real user INP is field-only.',
+    },
+    hasAnyData: true,
+    hasMeasuredVitals,
+    resources: hasResources
+      ? {
+          totalResources: typeof res?.totalResources === 'number' ? res.totalResources : undefined,
+          totalTransferSizeBytes:
+            typeof res?.totalTransferSizeBytes === 'number'
+              ? res.totalTransferSizeBytes
+              : undefined,
+          totalEncodedSizeBytes:
+            typeof res?.totalEncodedSizeBytes === 'number' ? res.totalEncodedSizeBytes : undefined,
+          totalDecodedSizeBytes:
+            typeof res?.totalDecodedSizeBytes === 'number' ? res.totalDecodedSizeBytes : undefined,
+          renderBlockingCount:
+            typeof res?.renderBlockingCount === 'number' ? res.renderBlockingCount : undefined,
+          scriptsCount: typeof res?.scriptsCount === 'number' ? res.scriptsCount : undefined,
+          stylesheetsCount:
+            typeof res?.stylesheetsCount === 'number' ? res.stylesheetsCount : undefined,
+          imagesCount: typeof res?.imagesCount === 'number' ? res.imagesCount : undefined,
+          oversizedImagesCount:
+            typeof res?.oversizedImagesCount === 'number' ? res.oversizedImagesCount : undefined,
+          uncompressedAssetsCount:
+            typeof res?.uncompressedAssetsCount === 'number'
+              ? res.uncompressedAssetsCount
+              : undefined,
+        }
+      : null,
+    bottleneckDiagnoses,
+    bottleneckDiagnosesCount: bottleneckDiagnoses.length,
+  };
+}

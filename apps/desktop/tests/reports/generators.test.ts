@@ -252,5 +252,273 @@ describe('Report Generators (HTML, JSON, CSV)', () => {
       expect(csv).toContain('الموقع يعمل عبر بروتوكول غير مشفر');
       expect(csv).toContain('قم بتثبيت شهادة SSL صالحة');
     });
+
+    it('exports 17 columns with causality, classification, observed value, and threshold for performance findings', () => {
+      const perfFindingModel: ReportModel = {
+        ...sampleModel,
+        findings: [
+          {
+            id: 'f-perf-1',
+            scanRunId: 'scan-1',
+            ruleId: 'PERF_BOTTLENECK_DIAGNOSIS',
+            category: 'static-performance',
+            title: 'Server Latency Bottleneck',
+            description: 'TTFB was 950ms exceeding 800ms.',
+            severity: 'high',
+            confidence: 'confirmed',
+            status: 'confirmed',
+            targetUrl: 'https://acme.test/',
+            evidence: {
+              classification: 'SERVER_LATENCY',
+              causality: 'causal',
+              primaryMetricName: 'TTFB',
+              observedValue: 950,
+              thresholdValue: 800,
+              unit: 'ms',
+            },
+            remediation: 'Enable page caching.',
+            references: [],
+            createdAt: '2026-11-07T10:01:00.000Z',
+          },
+          {
+            id: 'f-sec-2',
+            scanRunId: 'scan-1',
+            ruleId: 'SEC-NON-PERF',
+            category: 'security',
+            title: 'Missing Security Header',
+            description: 'Standard security finding.',
+            severity: 'low',
+            confidence: 'confirmed',
+            status: 'active',
+            targetUrl: 'https://acme.test/',
+            evidence: { header: 'missing' },
+            remediation: 'Set header.',
+            references: [],
+            createdAt: '2026-11-07T10:01:00.000Z',
+          },
+        ],
+      };
+
+      const csv = generateCsvReport(perfFindingModel);
+      const lines = csv.replace('\uFEFF', '').trim().split('\r\n');
+      expect(lines).toHaveLength(3); // header + 2 findings
+
+      // Check header row: exactly 17 columns
+      const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, ''));
+      expect(headers).toHaveLength(17);
+      expect(headers.slice(0, 13)).toEqual([
+        'Report ID',
+        'Scan Run ID',
+        'Site Name',
+        'Rule ID',
+        'Severity',
+        'Confidence',
+        'Category',
+        'Title',
+        'Target URL',
+        'Description',
+        'Remediation',
+        'Status',
+        'Created At',
+      ]);
+      expect(headers.slice(13)).toEqual([
+        'Causality',
+        'Classification',
+        'Observed Value',
+        'Threshold',
+      ]);
+
+      // Check performance finding row (line 1)
+      const perfRow = lines[1].split(',').map(c => c.replace(/^"|"$/g, ''));
+      expect(perfRow).toHaveLength(17);
+      expect(perfRow[3]).toBe('PERF_BOTTLENECK_DIAGNOSIS');
+      expect(perfRow[13]).toBe('causal');
+      expect(perfRow[14]).toBe('SERVER_LATENCY');
+      expect(perfRow[15]).toBe('950 ms');
+      expect(perfRow[16]).toBe('800 ms');
+
+      // Check non-performance finding row (line 2)
+      const nonPerfRow = lines[2].split(',').map(c => c.replace(/^"|"$/g, ''));
+      expect(nonPerfRow).toHaveLength(17);
+      expect(nonPerfRow[3]).toBe('SEC-NON-PERF');
+      expect(nonPerfRow[13]).toBe(''); // Causality empty
+      expect(nonPerfRow[14]).toBe(''); // Classification empty
+      expect(nonPerfRow[15]).toBe(''); // Observed Value empty
+      expect(nonPerfRow[16]).toBe(''); // Threshold empty
+    });
+  });
+
+  describe('Performance Integration in Reports', () => {
+    const performanceModel: ReportModel = {
+      ...sampleModel,
+      summary: {
+        ...sampleModel.summary,
+        performanceMetrics: {
+          labMetrics: {
+            ttfbMs: 320,
+            fcpMs: 1200,
+            lcpMs: 2800,
+            cls: 0.15,
+            tbtMs: 350,
+            isLcpCapped: true,
+            lcpElementUrl: 'https://acme.test/hero.jpg',
+            lcpElementSelector: 'header > img.hero',
+          },
+          resourceSummary: {
+            totalResources: 45,
+            totalTransferSizeBytes: 1500000,
+            renderBlockingCount: 3,
+            scriptsCount: 15,
+            stylesheetsCount: 8,
+            imagesCount: 18,
+            oversizedImagesCount: 2,
+            uncompressedAssetsCount: 4,
+          },
+        },
+      },
+      findings: [
+        {
+          id: 'f-perf-1',
+          scanRunId: 'scan-1',
+          ruleId: 'PERF_BOTTLENECK_DIAGNOSIS',
+          category: 'static-performance',
+          title: 'Server Response Latency Bottleneck',
+          description: 'Time to First Byte was 950ms.',
+          severity: 'high',
+          confidence: 'confirmed',
+          status: 'confirmed',
+          targetUrl: 'https://acme.test/',
+          evidence: {
+            classification: 'SERVER_LATENCY',
+            causality: 'causal',
+            primaryMetricName: 'TTFB',
+            observedValue: 950,
+            thresholdValue: 800,
+            unit: 'ms',
+            limitationsNotice: 'TTFB includes DNS transit.',
+            inferenceRationale: 'Server latency delay verified.',
+          },
+          remediation: 'Enable page caching and CDN.',
+          references: ['https://web.dev/articles/ttfb'],
+          createdAt: '2026-11-07T10:01:00.000Z',
+        },
+        {
+          id: 'f-perf-2',
+          scanRunId: 'scan-1',
+          ruleId: 'PERF_BOTTLENECK_DIAGNOSIS',
+          category: 'static-performance',
+          title: 'Heavy JavaScript Payload',
+          description: 'Script payload is large.',
+          severity: 'medium',
+          confidence: 'potential',
+          status: 'potential',
+          targetUrl: 'https://acme.test/',
+          evidence: {
+            classification: 'HEAVY_ASSET_PAYLOAD',
+            causality: 'correlational',
+            primaryMetricName: 'Total Transfer',
+            observedValue: 3500000,
+            thresholdValue: 3145728,
+            unit: 'bytes',
+            limitationsNotice: 'Buffer saturation observed.',
+          },
+          remediation: 'Minify and bundle assets.',
+          references: ['https://web.dev'],
+          createdAt: '2026-11-07T10:01:00.000Z',
+        },
+      ],
+    };
+
+    it('renders Web Vitals laboratory metrics grid, lab disclaimer, and bottleneck cards in HTML report', () => {
+      const html = generateHtmlReport(performanceModel);
+
+      // Section Header & Lab Disclaimer
+      expect(html).toContain('Laboratory Web Vitals &amp; Performance Diagnostics');
+      expect(html).toContain('AUTOMATED CHROMIUM SESSION');
+      expect(html).toContain('Laboratory Context &amp; Methodology Notice');
+      expect(html).toContain('Interaction to Next Paint (INP)');
+
+      // Web Vitals Metric Tiles
+      expect(html).toContain('Time to First Byte (TTFB)');
+      expect(html).toContain('320 ms');
+      expect(html).toContain('GOOD');
+      expect(html).toContain('First Contentful Paint (FCP)');
+      expect(html).toContain('1200 ms');
+      expect(html).toContain('Largest Contentful Paint (LCP)');
+      expect(html).toContain('2800 ms');
+      expect(html).toContain('NEEDS IMPROVEMENT');
+      expect(html).toContain('Capped by 5,000ms deadline ceiling');
+      expect(html).toContain('Cumulative Layout Shift (CLS)');
+      expect(html).toContain('0.150');
+      expect(html).toContain('Total Blocking Time (TBT)');
+      expect(html).toContain('350 ms');
+
+      // Page Resource Metrics
+      expect(html).toContain('Page Resource Metrics');
+      expect(html).toContain('1465 KB'); // 1500000 / 1024
+      expect(html).toContain('15 / 8'); // scripts / stylesheets
+
+      // Diagnosed Bottlenecks List
+      expect(html).toContain('Diagnosed Bottlenecks (2)');
+      expect(html).toContain('CAUSAL (PROVEN CAUSE)');
+      expect(html).toContain('CORRELATIONAL (ASSOCIATED FACTOR)');
+      expect(html).toContain('BOTTLENECK: SERVER_LATENCY');
+      expect(html).toContain('BOTTLENECK: HEAVY_ASSET_PAYLOAD');
+
+      // Finding Card Enrichment
+      expect(html).toContain('Measurement Limitations');
+      expect(html).toContain('TTFB includes DNS transit.');
+      expect(html).toContain('Inference Rationale:');
+      expect(html).toContain('Server latency delay verified.');
+    });
+
+    it('gracefully omits performance section for historical scans without performance telemetry', () => {
+      const historicalModel: ReportModel = {
+        ...sampleModel,
+        summary: {
+          ...sampleModel.summary,
+          performanceMetrics: null,
+        },
+        findings: [
+          {
+            id: 'f-hist-1',
+            scanRunId: 'scan-1',
+            ruleId: 'SEC-HISTORICAL-1',
+            category: 'security',
+            title: 'Legacy Security Issue',
+            description: 'Legacy finding from Phase 1.',
+            severity: 'low',
+            confidence: 'confirmed',
+            status: 'active',
+            targetUrl: 'https://acme.test/',
+            evidence: null,
+            remediation: 'Fix it.',
+            references: [],
+            createdAt: '2026-11-01T10:00:00.000Z',
+          },
+        ],
+      };
+
+      const html = generateHtmlReport(historicalModel);
+      expect(html).not.toContain('Laboratory Web Vitals &amp; Performance Diagnostics');
+      expect(html).not.toContain('class="perf-section"');
+      expect(html).not.toContain('class="perf-metrics-grid"');
+      expect(html).toContain('Legacy Security Issue');
+    });
+
+    it('preserves performance metrics in JSON report export', () => {
+      const jsonStr = generateJsonReport(performanceModel);
+      const parsed = JSON.parse(jsonStr);
+
+      expect(parsed.summary.performanceMetrics).toBeDefined();
+      expect(parsed.summary.performanceMetrics.labMetrics.ttfbMs).toBe(320);
+      expect(parsed.summary.performanceMetrics.labMetrics.lcpMs).toBe(2800);
+      expect(parsed.summary.performanceMetrics.labMetrics.isLcpCapped).toBe(true);
+      expect(parsed.findings[0].evidence.classification).toBe('SERVER_LATENCY');
+      expect(parsed.findings[0].evidence.causality).toBe('causal');
+      expect(parsed.findings[0].evidence.observedValue).toBe(950);
+      expect(parsed.findings[1].evidence.classification).toBe('HEAVY_ASSET_PAYLOAD');
+      expect(parsed.findings[1].evidence.causality).toBe('correlational');
+    });
   });
 });

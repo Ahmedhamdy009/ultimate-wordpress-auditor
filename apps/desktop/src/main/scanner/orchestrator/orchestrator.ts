@@ -561,6 +561,7 @@ export class ScanOrchestrator implements IScanOrchestrator {
         staticCoverageStatus,
         coverageWarning,
         categories: countsByCategory,
+        performanceMetrics: browserResult?.performanceMetrics ?? undefined,
       };
 
       const completedRun = this.scanRunRepo.updateStatus(scanId, {
@@ -1058,6 +1059,7 @@ export class ScanOrchestrator implements IScanOrchestrator {
     let viewportsCompleted = 0;
     let accessibilityAuditsCompleted = 0;
     let screenshotsCaptured = 0;
+    let latestPerformanceMetrics: Record<string, unknown> | null = null;
 
     // Filter and intelligently prioritize eligible HTML pages from crawl result
     const maxPagesToAudit = Math.min(Math.max(1, context.config.maxBrowserPages ?? 5), 50);
@@ -1385,6 +1387,40 @@ export class ScanOrchestrator implements IScanOrchestrator {
                   },
                 );
                 findings.push(...perfResult.findings);
+                if (perfResult.labMetrics || perfResult.resourceSummary) {
+                  latestPerformanceMetrics = {
+                    labMetrics: perfResult.labMetrics
+                      ? {
+                          ttfbMs: perfResult.labMetrics.ttfbMs,
+                          fcpMs: perfResult.labMetrics.fcpMs,
+                          lcpMs: perfResult.labMetrics.lcpMs,
+                          cls: perfResult.labMetrics.cls,
+                          tbtMs: perfResult.labMetrics.tbtMs,
+                          isLcpCapped: perfResult.labMetrics.lcpDetails?.isCapped ?? false,
+                          lcpElementUrl: perfResult.labMetrics.lcpDetails?.elementUrl ?? null,
+                          lcpElementSelector:
+                            perfResult.labMetrics.lcpDetails?.elementSelector ?? null,
+                        }
+                      : null,
+                    resourceSummary: perfResult.resourceSummary
+                      ? {
+                          totalResources: perfResult.resourceSummary.totalResources,
+                          totalTransferSizeBytes: perfResult.resourceSummary.totalTransferSizeBytes,
+                          totalEncodedSizeBytes: perfResult.resourceSummary.totalEncodedSizeBytes,
+                          totalDecodedSizeBytes: perfResult.resourceSummary.totalDecodedSizeBytes,
+                          renderBlockingCount:
+                            (perfResult.resourceSummary.renderBlockingCssCount ?? 0) +
+                            (perfResult.resourceSummary.renderBlockingJsCount ?? 0),
+                          scriptsCount: perfResult.resourceSummary.scriptsCount,
+                          stylesheetsCount: perfResult.resourceSummary.stylesheetsCount,
+                          imagesCount: perfResult.resourceSummary.imagesCount,
+                          oversizedImagesCount: perfResult.resourceSummary.oversizedImagesCount,
+                          uncompressedAssetsCount:
+                            perfResult.resourceSummary.uncompressedAssetsCount,
+                        }
+                      : null,
+                  };
+                }
               } catch (perfErr) {
                 if (
                   context.abortController.signal.aborted ||
@@ -1560,6 +1596,7 @@ export class ScanOrchestrator implements IScanOrchestrator {
       browserCandidatesSkipped,
       findings,
       failedPages,
+      performanceMetrics: latestPerformanceMetrics,
     };
   }
 

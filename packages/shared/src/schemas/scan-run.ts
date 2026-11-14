@@ -72,6 +72,7 @@ export interface ScanRunSummaryDTO {
   staticCoverageStatus?: 'full' | 'partial' | 'none';
   coverageWarning?: string;
   categories?: Record<string, number>;
+  performanceMetrics?: Record<string, unknown> | null;
 }
 
 export const ScanRunSummaryDTOSchema = z.object({
@@ -96,6 +97,7 @@ export const ScanRunSummaryDTOSchema = z.object({
   staticCoverageStatus: z.enum(['full', 'partial', 'none']).optional(),
   coverageWarning: z.string().optional(),
   categories: z.record(z.string(), z.number().int().min(0)).optional(),
+  performanceMetrics: z.record(z.string(), z.unknown()).optional().nullable(),
 });
 
 export interface ScanRunErrorDTO {

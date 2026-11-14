@@ -40,6 +40,7 @@ export interface BrowserAuditExecutionResult {
   browserCandidatesSkipped: number;
   findings: CreateFindingRequest[];
   failedPages: Array<{ url: string; error: string }>;
+  performanceMetrics?: Record<string, unknown> | null;
 }
 
 export interface ScanExecutionContext {

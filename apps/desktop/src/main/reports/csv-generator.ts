@@ -26,6 +26,10 @@ export function generateCsvReport(model: ReportModel): string {
     'Remediation',
     'Status',
     'Created At',
+    'Causality',
+    'Classification',
+    'Observed Value',
+    'Threshold',
   ];
 
   const lines: string[] = [];
@@ -37,6 +41,30 @@ export function generateCsvReport(model: ReportModel): string {
   for (const f of model.findings) {
     const categoryId = normalizeFindingCategoryId({ category: f.category, ruleId: f.ruleId });
     const status = normalizeFindingLifecycleStatus(f.status, f.confidence);
+    const ev =
+      typeof f.evidence === 'object' && f.evidence !== null
+        ? (f.evidence as Record<string, unknown>)
+        : null;
+
+    const causality = typeof ev?.causality === 'string' ? ev.causality : '';
+    const classification = typeof ev?.classification === 'string' ? ev.classification : '';
+
+    let observedVal = '';
+    if (ev?.observedValue !== undefined && ev.observedValue !== null) {
+      observedVal = ev.unit ? `${ev.observedValue} ${ev.unit}` : String(ev.observedValue);
+    } else if (typeof ev?.observedValueMs === 'number') {
+      observedVal = `${ev.observedValueMs} ms`;
+    }
+
+    let thresholdVal = '';
+    if (ev?.thresholdValue !== undefined && ev.thresholdValue !== null) {
+      thresholdVal = ev.unit ? `${ev.thresholdValue} ${ev.unit}` : String(ev.thresholdValue);
+    } else if (typeof ev?.thresholdMs === 'number') {
+      thresholdVal = `${ev.thresholdMs} ms`;
+    } else if (ev?.threshold !== undefined && ev.threshold !== null) {
+      thresholdVal = String(ev.threshold);
+    }
+
     const row = [
       escapeCsvField(model.reportId),
       escapeCsvField(model.scanRun.id),
@@ -51,6 +79,10 @@ export function generateCsvReport(model: ReportModel): string {
       escapeCsvField(f.remediation ?? ''),
       escapeCsvField(status),
       escapeCsvField(f.createdAt),
+      escapeCsvField(causality),
+      escapeCsvField(classification),
+      escapeCsvField(observedVal),
+      escapeCsvField(thresholdVal),
     ];
     lines.push(row.join(','));
   }

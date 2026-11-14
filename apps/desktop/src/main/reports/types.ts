@@ -36,6 +36,7 @@ export interface ReportScanRunModel {
   readonly browserCoverageStatus?: 'full' | 'partial' | 'none';
   readonly staticCoverageStatus?: 'full' | 'partial' | 'none';
   readonly coverageWarning?: string;
+  readonly performanceMetrics?: Record<string, unknown> | null;
 }
 
 export interface ReportSummaryModel {
@@ -68,6 +69,7 @@ export interface ReportSummaryModel {
   readonly browserCoverageStatus?: 'full' | 'partial' | 'none';
   readonly staticCoverageStatus?: 'full' | 'partial' | 'none';
   readonly coverageWarning?: string;
+  readonly performanceMetrics?: Record<string, unknown> | null;
   readonly generatedAt: string;
 }
 

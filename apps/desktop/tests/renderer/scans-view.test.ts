@@ -3,10 +3,11 @@ import React from 'react';
 import { renderComponentToHtml, renderTestHook } from '../helpers/react-test-harness.js';
 import {
   ScansView,
+  PerformanceVitalsView,
   getFindingConfidenceBadgeProps,
   getFindingStatusBadgeProps,
   isWordPressCategoryFinding,
-} from '../../src/renderer/src/components/views/ScansView.js';
+} from '../../src/renderer/src/components/views/index.js';
 import { useScans } from '../../src/renderer/src/hooks/useScans.js';
 import type { ScanRunDTO, ScanProgressDTO, FindingDTO, ProjectDTO, SiteDTO } from '@auditor/shared';
 
@@ -494,6 +495,46 @@ describe('Phase 3 — Batch 3.7: ScansView & useScans Suite', () => {
         variant: 'warning',
         label: 'Status: Needs Manual Review',
       });
+    });
+
+    it('renders performance finding card with causality, classification, budget comparison, and limitations', () => {
+      const perfFinding: FindingDTO = {
+        id: 'f-perf-test-1',
+        scanRunId: mockScanRun.id,
+        ruleId: 'PERF_BOTTLENECK_DIAGNOSIS',
+        category: 'static-performance',
+        title: 'Server Latency Diagnostic',
+        description: 'Server latency is high.',
+        severity: 'high',
+        confidence: 'confirmed',
+        status: 'confirmed',
+        targetUrl: 'https://example.com/api',
+        evidence: {
+          classification: 'SERVER_LATENCY',
+          causality: 'causal',
+          primaryMetricName: 'TTFB',
+          observedValue: 920,
+          thresholdValue: 800,
+          unit: 'ms',
+          limitationsNotice: 'Network transit is included in TTFB measurement.',
+          inferenceRationale: 'TTFB was observed exceeding threshold in 3 consecutive passes.',
+          resources: [{ url: 'https://example.com/api', transferSizeBytes: 10240 }],
+        },
+        remediation: 'Implement server response caching.',
+        references: [],
+        createdAt: '2026-11-07T12:00:05.000Z',
+      };
+
+      const html = renderComponentToHtml(
+        React.createElement(PerformanceVitalsView, {
+          scanRun: mockScanRun,
+          findings: [perfFinding],
+        }),
+      );
+
+      expect(html).toContain('Server Latency Diagnostic');
+      expect(html).toContain('Causal (Proven Cause)');
+      expect(html).toContain('SERVER_LATENCY');
     });
   });
 });

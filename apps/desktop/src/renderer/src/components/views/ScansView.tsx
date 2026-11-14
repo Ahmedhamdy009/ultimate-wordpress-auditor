@@ -2,6 +2,7 @@ import React, { useState, useId, useMemo, useEffect } from 'react';
 import { Card } from '../common/Card.js';
 import { Badge } from '../common/Badge.js';
 import { Alert } from '../common/Alert.js';
+import { PerformanceVitalsView } from './PerformanceVitalsView.js';
 import { useScans } from '../../hooks/useScans.js';
 import { useProjects } from '../../hooks/useProjects.js';
 import { useSites } from '../../hooks/useSites.js';
@@ -1379,6 +1380,9 @@ export const ScansView: React.FC<ScansViewProps> = ({
                 </div>
               )}
 
+              {/* Laboratory Performance Diagnostics & Web Vitals */}
+              <PerformanceVitalsView scanRun={inspectedScan} findings={findings} />
+
               {/* Severity Filter Tabs */}
               <div className="auditor-filter-bar">
                 <div className="auditor-filter-tabs">
@@ -1532,6 +1536,21 @@ export const ScansView: React.FC<ScansViewProps> = ({
                           <Badge variant={statusBadge.variant} size="sm">
                             {statusBadge.label}
                           </Badge>
+                          {ev?.causality === 'causal' && (
+                            <Badge variant="success" size="sm">
+                              Causal (Proven Cause)
+                            </Badge>
+                          )}
+                          {ev?.causality === 'correlational' && (
+                            <Badge variant="neutral" size="sm">
+                              Correlational (Associated Indicator)
+                            </Badge>
+                          )}
+                          {typeof ev?.classification === 'string' && (
+                            <Badge variant="neutral" size="sm">
+                              {String(ev.classification)}
+                            </Badge>
+                          )}
                           {occurrenceCount && (
                             <Badge variant="info" size="sm">
                               {occurrenceCount}x Occurrences
@@ -1589,6 +1608,100 @@ export const ScansView: React.FC<ScansViewProps> = ({
                           </div>
                         </div>
                       )}
+
+                      {/* Performance Metric Comparison */}
+                      {((ev?.observedValue !== undefined && ev?.thresholdValue !== undefined) ||
+                        (typeof ev?.observedValueMs === 'number' &&
+                          typeof ev?.thresholdMs === 'number')) && (
+                        <div className="auditor-finding-card__section">
+                          <div className="auditor-perf-comparison-box">
+                            <strong>Observed Metric:</strong>{' '}
+                            {ev?.observedValue !== undefined
+                              ? `${String(ev.observedValue)}${ev?.unit ? ` ${String(ev.unit)}` : ''}`
+                              : `${String(ev?.observedValueMs)} ms`}{' '}
+                            &bull; <strong>Budget/Threshold:</strong>{' '}
+                            {ev?.thresholdValue !== undefined
+                              ? `${String(ev.thresholdValue)}${ev?.unit ? ` ${String(ev.unit)}` : ''}`
+                              : `${String(ev?.thresholdMs)} ms`}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Inference Rationale */}
+                      {typeof ev?.inferenceRationale === 'string' && (
+                        <div className="auditor-finding-card__section">
+                          <div
+                            style={{
+                              fontSize: '12px',
+                              color: 'var(--auditor-text-secondary)',
+                              padding: '6px 10px',
+                              backgroundColor: 'var(--auditor-bg-surface-subtle)',
+                              borderLeft: '3px solid var(--auditor-accent-primary)',
+                              borderRadius: '4px',
+                            }}
+                          >
+                            <strong>Inference Rationale:</strong> {ev.inferenceRationale}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Measurement Limitations Notice */}
+                      {typeof (ev?.limitationsNotice ?? ev?.limitationNotice) === 'string' && (
+                        <div className="auditor-finding-card__section">
+                          <div className="auditor-perf-limitations-box">
+                            &#9888; <strong>Measurement Limitations:</strong>{' '}
+                            {String(ev?.limitationsNotice ?? ev?.limitationNotice)}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Affected Resources List */}
+                      {(() => {
+                        const resList = Array.isArray(ev?.resources)
+                          ? ev?.resources
+                          : Array.isArray(ev?.renderBlockingResources)
+                            ? ev?.renderBlockingResources
+                            : Array.isArray(ev?.uncompressedAssets)
+                              ? ev?.uncompressedAssets
+                              : Array.isArray(ev?.oversizedImages)
+                                ? ev?.oversizedImages
+                                : null;
+                        if (!resList || resList.length === 0) return null;
+                        return (
+                          <div className="auditor-finding-card__section">
+                            <div className="auditor-perf-affected-resources">
+                              <div className="auditor-finding-card__section-title">
+                                Affected Resources ({resList.length}
+                                {resList.length > 8 ? ', showing top 8' : ''})
+                              </div>
+                              <ul className="auditor-perf-affected-list">
+                                {resList.slice(0, 8).map((r: unknown, rIdx: number) => {
+                                  if (typeof r === 'object' && r !== null) {
+                                    const resObj = r as Record<string, unknown>;
+                                    const u = String(
+                                      resObj.url || resObj.currentSrc || resObj.targetUrl || '',
+                                    );
+                                    const size =
+                                      typeof resObj.transferSizeBytes === 'number'
+                                        ? `(${Math.round(resObj.transferSizeBytes / 1024)} KB)`
+                                        : '';
+                                    return (
+                                      <li key={rIdx}>
+                                        <code>{u}</code> {size}
+                                      </li>
+                                    );
+                                  }
+                                  return (
+                                    <li key={rIdx}>
+                                      <code>{String(r)}</code>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {finding.evidence && (
                         <div className="auditor-finding-card__section">

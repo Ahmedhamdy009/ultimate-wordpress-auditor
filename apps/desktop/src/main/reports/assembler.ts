@@ -231,6 +231,7 @@ export function assembleReportData(
     browserCoverageStatus,
     staticCoverageStatus,
     coverageWarning,
+    performanceMetrics: (metricsSource.performanceMetrics as Record<string, unknown> | null | undefined) ?? null,
     generatedAt: now,
   };
 
@@ -269,6 +270,7 @@ export function assembleReportData(
     browserCoverageStatus,
     staticCoverageStatus,
     coverageWarning,
+    performanceMetrics: (metricsSource.performanceMetrics as Record<string, unknown> | null | undefined) ?? null,
   };
 
   const reportId = options?.reportId ?? crypto.randomUUID();

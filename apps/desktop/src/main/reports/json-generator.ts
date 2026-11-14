@@ -1,5 +1,6 @@
 import {
   classifyFindingConfidenceBucket,
+  extractPerformanceSummary,
   getFindingCategoryLabel,
   normalizeFindingCategoryId,
   normalizeFindingLifecycleStatus,
@@ -54,6 +55,10 @@ export function generateJsonReport(model: ReportModel): string {
 
   // Preserve summary counts when model contains summary-only synthetic counts (e.g., empty findings array in test mocks)
   const useFindingDerivedCounts = model.findings.length > 0;
+  const performanceSummary = extractPerformanceSummary(
+    model.summary.performanceMetrics,
+    model.findings,
+  );
   const summary = {
     ...model.summary,
     byCategory: useFindingDerivedCounts ? byCategory : model.summary.byCategory,
@@ -61,6 +66,23 @@ export function generateJsonReport(model: ReportModel): string {
     confirmedCount: useFindingDerivedCounts ? confirmedCount : model.summary.confirmedCount,
     firmCount: useFindingDerivedCounts ? firmCount : (model.summary.firmCount ?? 0),
     potentialCount: useFindingDerivedCounts ? potentialCount : model.summary.potentialCount,
+    performanceMetrics:
+      model.summary.performanceMetrics ??
+      (performanceSummary
+        ? {
+            labMetrics: performanceSummary.hasMeasuredVitals
+              ? {
+                  ttfbMs: performanceSummary.ttfb.value,
+                  fcpMs: performanceSummary.fcp.value,
+                  lcpMs: performanceSummary.lcp.value,
+                  cls: performanceSummary.cls.value,
+                  tbtMs: performanceSummary.tbt.value,
+                  isLcpCapped: performanceSummary.lcp.isCapped ?? false,
+                }
+              : null,
+            resourceSummary: performanceSummary.resources ?? null,
+          }
+        : null),
   };
 
   // Deeply redact sensitive secrets from findings and scan configuration

@@ -71,6 +71,10 @@ import {
   HealthBandIdSchema,
   buildAuditChartSuite,
   extractDetectedStack,
+  getLocaleDirection,
+  lookupRecommendationByRuleId,
+  validateRecommendationKnowledgeBase,
+  UI_LABELS,
 } from '@auditor/shared';
 import * as sharedNamespace from '@auditor/shared';
 import assert from 'node:assert';
@@ -164,6 +168,17 @@ assert.strictEqual(isValidCount(0), true);
 assert.strictEqual(isValidCount(-1), false);
 assert.strictEqual(isValidCount(Number.MAX_SAFE_INTEGER), true);
 assert.strictEqual(isValidCount(Number.MAX_SAFE_INTEGER + 1), false);
+
+// 7c. Verify Batch 7.4.2-A reporting KB & localization exports
+assert.strictEqual(getLocaleDirection('ar'), 'rtl');
+assert.strictEqual(getLocaleDirection('en'), 'ltr');
+const kbValidation = validateRecommendationKnowledgeBase();
+assert.strictEqual(kbValidation.valid, true);
+assert(kbValidation.exactRuleCount >= 130, 'Expected full scanner rule coverage in KB');
+assert.strictEqual(lookupRecommendationByRuleId('SEC_HEADER_CSP_MISSING').matchType, 'exact');
+assert.strictEqual(lookupRecommendationByRuleId('a11y-review-color-contrast').matchType, 'prefix');
+assert.strictEqual(lookupRecommendationByRuleId('UNREGISTERED_RULE_XYZ').matchType, 'fallback');
+assert.strictEqual(typeof UI_LABELS.executiveSummary.ar, 'string');
 
 // 8. Verify resolved module path is dist/index.js (NOT src/index.ts)
 const resolvedUrl = import.meta.resolve('@auditor/shared');

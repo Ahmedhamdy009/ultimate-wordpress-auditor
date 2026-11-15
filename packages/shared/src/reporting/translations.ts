@@ -245,8 +245,15 @@ export const UI_LABELS = {
 } as const satisfies Record<string, BilingualText>;
 
 export const HEALTH_BAND_LABELS_I18N: Record<string, BilingualText> = {
-  healthy: { en: 'Healthy', ar: 'سليم' },
-  needs_attention: { en: 'Needs Attention', ar: 'يحتاج إلى متابعة' },
+  healthy: { en: 'Healthy', ar: 'سليم (مستقر)' },
+  needs_attention: { en: 'Needs Attention', ar: 'يتطلب انتباهًا' },
+  issues_detected: { en: 'Issues Detected', ar: 'مشكلات مكتشفة' },
+  action_required: { en: 'Action Required', ar: 'يتطلب إجراءً عاجلًا' },
+  provisional_incomplete_scan: {
+    en: 'Provisional / Incomplete Scan',
+    ar: 'تقييم مبدئي / فحص غير مكتمل',
+  },
+  insufficient_evidence: { en: 'Insufficient Evidence', ar: 'أدلة غير كافية' },
   at_risk: { en: 'At Risk', ar: 'معرّض للخطر' },
   critical: { en: 'Critical', ar: 'حرج' },
   unavailable: { en: 'Unavailable', ar: 'غير متاح' },
@@ -256,18 +263,38 @@ export const CONFIDENCE_BAND_LABELS_I18N: Record<string, BilingualText> = {
   high: { en: 'High Confidence', ar: 'موثوقية عالية' },
   moderate: { en: 'Moderate Confidence', ar: 'موثوقية متوسطة' },
   low: { en: 'Low Confidence', ar: 'موثوقية منخفضة' },
+  insufficient: { en: 'Insufficient Confidence', ar: 'موثوقية غير كافية' },
   very_low: { en: 'Very Low Confidence', ar: 'موثوقية منخفضة جداً' },
 };
 
 export const DIMENSION_STATUS_LABELS_I18N: Record<string, BilingualText> = {
+  exact: { en: 'Exact', ar: 'دقيق' },
   available: { en: 'Available (Exact)', ar: 'متاح (دقيق)' },
+  full: { en: 'Full Coverage', ar: 'تغطية كاملة' },
   partial: { en: 'Partial Coverage', ar: 'تغطية جزئية' },
   approximated: { en: 'Approximated', ar: 'تقديري' },
   excluded: { en: 'Excluded', ar: 'مستبعد' },
   unavailable: { en: 'Unavailable', ar: 'غير متاح' },
+  not_applicable: { en: 'Not Applicable', ar: 'غير مطبّق' },
 };
 
 export const DIMENSION_LABELS_I18N: Record<string, BilingualText> = {
+  d1: {
+    en: 'D1 — Crawl & Page Reachability Coverage',
+    ar: 'D1 — تغطية الزحف والوصول إلى الصفحات',
+  },
+  d2: {
+    en: 'D2 — Static HTTP, Header, SEO & TLS Checks',
+    ar: 'D2 — الفحوص الثابتة للاستجابة والترويسات وSEO وTLS',
+  },
+  d3: {
+    en: 'D3 — Browser Runtime & Accessibility Checks',
+    ar: 'D3 — فحوص بيئة المتصفح وإمكانية الوصول',
+  },
+  d4: {
+    en: 'D4 — Responsive Viewport & Layout Stability (CLS)',
+    ar: 'D4 — الاستجابة عبر الشاشات واستقرار التخطيط (CLS)',
+  },
   D1: {
     en: 'D1 — Crawl & Page Reachability Coverage',
     ar: 'D1 — تغطية الزحف والوصول إلى الصفحات',
@@ -326,6 +353,21 @@ export const CAUSE_CONFIDENCE_LABELS_I18N: Record<string, BilingualText> = {
     en: 'Needs Manual Verification',
     ar: 'يتطلب فحصاً ومراجعة يدوية',
   },
+};
+
+export const SCAN_STATUS_LABELS_I18N: Record<string, BilingualText> = {
+  pending: { en: 'Pending', ar: 'قيد الانتظار' },
+  running: { en: 'Running', ar: 'قيد التنفيذ' },
+  completed: { en: 'Completed', ar: 'مكتمل' },
+  completed_partial: { en: 'Completed (Partial)', ar: 'مكتمل جزئياً' },
+  failed: { en: 'Failed', ar: 'فشل الفحص' },
+  cancelled: { en: 'Cancelled', ar: 'ملغى' },
+  timed_out: { en: 'Timed Out', ar: 'انتهت المهلة' },
+};
+
+export const HEALTH_INDEX_DISCLAIMER_BILINGUAL: BilingualText = {
+  en: 'Internal audit health metric (0-100) derived from observed findings and executed coverage; not a legal accessibility certification, search ranking guarantee, or penetration test.',
+  ar: 'مؤشر صحة فحصي داخلي (0-100) مشتق من الملاحظات المرصودة ونطاق التغطية المنفذ فقط؛ ولا يمثل شهادة مطابقة قانونية لإمكانية الوصول أو ضماناً لترتيب البحث أو اختبار اختراق شاملاً.',
 };
 
 export const CATEGORY_LABELS_I18N: Record<string, BilingualText> = {

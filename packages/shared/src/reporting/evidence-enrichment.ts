@@ -626,13 +626,10 @@ function buildDedupeKey(
   category: FindingCategoryId,
   recommendationId: string,
 ): string {
-  if (typeof f.signature === 'string' && f.signature.trim().length > 0) {
-    return `sig::${f.signature.trim()}::${recommendationId}`;
-  }
   const rule = (f.ruleId ?? 'UNKNOWN').trim();
   const sev = (f.severity ?? 'info').toString().trim().toLowerCase();
   const conf = (f.confidence ?? 'potential').toString().trim().toLowerCase();
-  const stat = (f.status ?? '').toString().trim().toLowerCase();
+  const stat = normalizeFindingLifecycleStatus(f.status, f.confidence);
   const sel = (f.selector ?? '').toString().trim();
   return `rule::${rule}::${category}::${sev}::${conf}::${stat}::${sel}::${recommendationId}`;
 }

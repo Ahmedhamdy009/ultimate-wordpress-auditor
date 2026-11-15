@@ -78,6 +78,7 @@ import {
   matchAndEnrichFindings,
   extractExactAffectedLocation,
   redactSensitiveText,
+  buildReportViewModel,
 } from '@auditor/shared';
 import * as sharedNamespace from '@auditor/shared';
 import assert from 'node:assert';
@@ -190,6 +191,20 @@ assert.strictEqual(
   redactSensitiveText('Authorization: Bearer secret_token_12345'),
   'Authorization: Bearer <redacted>',
 );
+
+// 7e. Verify Batch 7.4.2-C bilingual view-model export
+assert.strictEqual(typeof buildReportViewModel, 'function');
+const vmCheck = buildReportViewModel({
+  locale: 'ar',
+  viewMode: 'dual',
+  generatedAt: '2026-01-01T00:00:00.000Z',
+  site: { name: 'Demo', baseUrl: 'https://example.com' },
+  scanRun: { status: 'completed', urlsCrawled: 1, pagesScanned: 1, crawlFailedPages: 0 },
+  findings: [],
+});
+assert.strictEqual(vmCheck.locale, 'ar');
+assert.strictEqual(vmCheck.direction, 'rtl');
+assert.strictEqual(vmCheck.technicalTextDirection, 'ltr');
 
 // 8. Verify resolved module path is dist/index.js (NOT src/index.ts)
 const resolvedUrl = import.meta.resolve('@auditor/shared');

@@ -75,6 +75,9 @@ import {
   lookupRecommendationByRuleId,
   validateRecommendationKnowledgeBase,
   UI_LABELS,
+  matchAndEnrichFindings,
+  extractExactAffectedLocation,
+  redactSensitiveText,
 } from '@auditor/shared';
 import * as sharedNamespace from '@auditor/shared';
 import assert from 'node:assert';
@@ -179,6 +182,14 @@ assert.strictEqual(lookupRecommendationByRuleId('SEC_HEADER_CSP_MISSING').matchT
 assert.strictEqual(lookupRecommendationByRuleId('a11y-review-color-contrast').matchType, 'prefix');
 assert.strictEqual(lookupRecommendationByRuleId('UNREGISTERED_RULE_XYZ').matchType, 'fallback');
 assert.strictEqual(typeof UI_LABELS.executiveSummary.ar, 'string');
+
+// 7d. Verify Batch 7.4.2-B evidence-gated enrichment exports
+assert.strictEqual(typeof matchAndEnrichFindings, 'function');
+assert.strictEqual(typeof extractExactAffectedLocation, 'function');
+assert.strictEqual(
+  redactSensitiveText('Authorization: Bearer secret_token_12345'),
+  'Authorization: Bearer <redacted>',
+);
 
 // 8. Verify resolved module path is dist/index.js (NOT src/index.ts)
 const resolvedUrl = import.meta.resolve('@auditor/shared');

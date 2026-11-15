@@ -50,6 +50,67 @@ export function isTerminalScanRunStatus(status: ScanRunStatus): boolean {
   return (SCAN_RUN_TRANSITIONS[status]?.length ?? 0) === 0;
 }
 
+export const PAGE_SCREENSHOT_STATUSES = [
+  'captured',
+  'omitted',
+  'missing',
+  'unavailable',
+  'rejected',
+  'failed',
+] as const;
+export type PageScreenshotStatus = (typeof PAGE_SCREENSHOT_STATUSES)[number];
+export const PageScreenshotStatusSchema = z.enum(PAGE_SCREENSHOT_STATUSES);
+
+export const PAGE_SCREENSHOT_CAPTURE_TYPES = [
+  'viewport',
+  'fullpage',
+  'full_page',
+  'element',
+] as const;
+export type PageScreenshotCaptureType = (typeof PAGE_SCREENSHOT_CAPTURE_TYPES)[number];
+export const PageScreenshotCaptureTypeSchema = z.enum(PAGE_SCREENSHOT_CAPTURE_TYPES);
+
+export const VIEWPORT_CATEGORY_BUCKETS = ['mobile', 'tablet', 'desktop'] as const;
+export type ViewportCategoryBucket = (typeof VIEWPORT_CATEGORY_BUCKETS)[number];
+export const ViewportCategoryBucketSchema = z.enum(VIEWPORT_CATEGORY_BUCKETS);
+
+export interface PageScreenshotRecord {
+  id: string;
+  pageUrl: string;
+  viewportId: string;
+  viewportName: string;
+  viewportCategory?: ViewportCategoryBucket;
+  width: number;
+  height: number;
+  captureType: PageScreenshotCaptureType;
+  relativePath?: string;
+  fileName?: string;
+  fileSizeBytes?: number;
+  format?: 'png' | 'jpeg' | 'webp';
+  status?: PageScreenshotStatus;
+  findingIds?: string[];
+}
+
+export const PageScreenshotRecordSchema = z.object({
+  id: z.string().min(1).max(200),
+  pageUrl: z.string().min(1).max(2048),
+  viewportId: z.string().min(1).max(100),
+  viewportName: z.string().min(1).max(120),
+  viewportCategory: ViewportCategoryBucketSchema.optional(),
+  width: z.number().int().min(1).max(10000),
+  height: z.number().int().min(1).max(30000),
+  captureType: PageScreenshotCaptureTypeSchema,
+  relativePath: z.string().max(1024).optional(),
+  fileName: z.string().max(255).optional(),
+  fileSizeBytes: z.number().int().min(0).optional(),
+  format: z.enum(['png', 'jpeg', 'webp']).optional(),
+  status: PageScreenshotStatusSchema.optional(),
+  findingIds: z.array(z.string().min(1).max(200)).max(200).optional(),
+});
+
+export type ResourceBytesByType = Record<string, number>;
+export const ResourceBytesByTypeSchema = z.record(z.string(), z.number().min(0));
+
 export interface ScanRunSummaryDTO {
   totalFindings: number;
   criticalCount: number;
@@ -60,9 +121,17 @@ export interface ScanRunSummaryDTO {
   urlsCrawled?: number;
   pagesScanned?: number;
   pagesFailed?: number;
+  crawlFailedPages?: number;
+  browserFailedPages?: number;
+  staticModulesExecuted?: number;
+  staticModulesTotal?: number;
+  staticPagesAnalyzed?: number;
   browserPagesAudited?: number;
+  runtimeAuditsCompleted?: number;
   viewportsCompleted?: number;
+  accessibilityCandidatesTotal?: number;
   accessibilityAuditsCompleted?: number;
+  layoutStabilityPagesCompleted?: number;
   screenshotsCaptured?: number;
   browserCandidatesTotal?: number;
   browserCandidatesSkipped?: number;
@@ -73,6 +142,8 @@ export interface ScanRunSummaryDTO {
   coverageWarning?: string;
   categories?: Record<string, number>;
   performanceMetrics?: Record<string, unknown> | null;
+  pageScreenshots?: PageScreenshotRecord[];
+  resourceBytesByType?: ResourceBytesByType;
 }
 
 export const ScanRunSummaryDTOSchema = z.object({
@@ -85,9 +156,17 @@ export const ScanRunSummaryDTOSchema = z.object({
   urlsCrawled: z.number().int().min(0).optional(),
   pagesScanned: z.number().int().min(0).optional(),
   pagesFailed: z.number().int().min(0).optional(),
+  crawlFailedPages: z.number().int().min(0).optional(),
+  browserFailedPages: z.number().int().min(0).optional(),
+  staticModulesExecuted: z.number().int().min(0).optional(),
+  staticModulesTotal: z.number().int().min(0).optional(),
+  staticPagesAnalyzed: z.number().int().min(0).optional(),
   browserPagesAudited: z.number().int().min(0).optional(),
+  runtimeAuditsCompleted: z.number().int().min(0).optional(),
   viewportsCompleted: z.number().int().min(0).optional(),
+  accessibilityCandidatesTotal: z.number().int().min(0).optional(),
   accessibilityAuditsCompleted: z.number().int().min(0).optional(),
+  layoutStabilityPagesCompleted: z.number().int().min(0).optional(),
   screenshotsCaptured: z.number().int().min(0).optional(),
   browserCandidatesTotal: z.number().int().min(0).optional(),
   browserCandidatesSkipped: z.number().int().min(0).optional(),
@@ -98,6 +177,8 @@ export const ScanRunSummaryDTOSchema = z.object({
   coverageWarning: z.string().optional(),
   categories: z.record(z.string(), z.number().int().min(0)).optional(),
   performanceMetrics: z.record(z.string(), z.unknown()).optional().nullable(),
+  pageScreenshots: z.array(PageScreenshotRecordSchema).max(500).optional(),
+  resourceBytesByType: ResourceBytesByTypeSchema.optional(),
 });
 
 export interface ScanRunErrorDTO {

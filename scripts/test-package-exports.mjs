@@ -64,6 +64,13 @@ import {
   IPC_CHANNELS,
   PAYLOAD_BOUNDS_POLICY,
   validateIPCRequest,
+  evaluateAuditHealthTriad,
+  evaluateD1CrawlCoverage,
+  isValidCount,
+  HEALTH_BANDS,
+  HealthBandIdSchema,
+  buildAuditChartSuite,
+  extractDetectedStack,
 } from '@auditor/shared';
 import * as sharedNamespace from '@auditor/shared';
 import assert from 'node:assert';
@@ -144,6 +151,19 @@ assert.strictEqual(
 assert.strictEqual(PAYLOAD_BOUNDS_POLICY.maxTotalBytes, 1024 * 1024, 'maxTotalBytes must be 1MB');
 const parsedPing = validateIPCRequest(IPC_CHANNELS.APP_PING, { timestamp: 12345 });
 assert.strictEqual(parsedPing.timestamp, 12345, 'validateIPCRequest must validate and return payload');
+
+// 7b. Verify Batch 7.4.1 reporting exports
+assert.strictEqual(typeof evaluateAuditHealthTriad, 'function', 'evaluateAuditHealthTriad must be exported');
+assert.strictEqual(typeof evaluateD1CrawlCoverage, 'function', 'evaluateD1CrawlCoverage must be exported');
+assert.strictEqual(typeof isValidCount, 'function', 'isValidCount must be exported');
+assert.strictEqual(typeof buildAuditChartSuite, 'function', 'buildAuditChartSuite must be exported');
+assert.strictEqual(typeof extractDetectedStack, 'function', 'extractDetectedStack must be exported');
+assert.strictEqual(Array.isArray(HEALTH_BANDS), true, 'HEALTH_BANDS must be exported');
+assert.strictEqual(HealthBandIdSchema.safeParse('healthy').success, true, 'HealthBandIdSchema must accept healthy');
+assert.strictEqual(isValidCount(0), true);
+assert.strictEqual(isValidCount(-1), false);
+assert.strictEqual(isValidCount(Number.MAX_SAFE_INTEGER), true);
+assert.strictEqual(isValidCount(Number.MAX_SAFE_INTEGER + 1), false);
 
 // 8. Verify resolved module path is dist/index.js (NOT src/index.ts)
 const resolvedUrl = import.meta.resolve('@auditor/shared');

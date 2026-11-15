@@ -18,6 +18,7 @@ import {
   ReportDTOSchema,
   CreateReportRequestSchema,
   ListReportsRequestSchema,
+  ScanRunSummaryDTOSchema,
 } from '../../src/index.js';
 
 describe('ScanRun, Finding, and Report Schemas & State Machine', () => {
@@ -268,6 +269,96 @@ describe('ScanRun, Finding, and Report Schemas & State Machine', () => {
         updatedAt: new Date().toISOString(),
       };
       expect(() => ReportDTOSchema.parse(report)).not.toThrow();
+    });
+
+    it('accepts optional locale and viewMode on CreateReportRequestSchema while preserving backward compatibility', () => {
+      const legacy = CreateReportRequestSchema.parse({
+        scanRunId: '123e4567-e89b-12d3-a456-426614174000',
+        title: 'Legacy Request',
+        format: 'html',
+      });
+      expect(legacy.locale).toBeUndefined();
+      expect(legacy.viewMode).toBeUndefined();
+
+      const bilingual = CreateReportRequestSchema.parse({
+        scanRunId: '123e4567-e89b-12d3-a456-426614174000',
+        title: 'تقرير التدقيق',
+        format: 'html',
+        locale: 'ar',
+        viewMode: 'dual',
+      });
+      expect(bilingual.locale).toBe('ar');
+      expect(bilingual.viewMode).toBe('dual');
+
+      expect(() =>
+        CreateReportRequestSchema.parse({
+          scanRunId: '123e4567-e89b-12d3-a456-426614174000',
+          title: 'Bad Locale',
+          format: 'html',
+          locale: 'fr',
+        }),
+      ).toThrow();
+    });
+
+    it('accepts Batch 7.4.1 additive ScanRunSummaryDTOSchema fields and historical pre-7.4 records', () => {
+      const historical = ScanRunSummaryDTOSchema.parse({
+        totalFindings: 2,
+        criticalCount: 0,
+        highCount: 1,
+        mediumCount: 1,
+        lowCount: 0,
+        infoCount: 0,
+        urlsCrawled: 12,
+        pagesScanned: 10,
+        pagesFailed: 2,
+      });
+      expect(historical.crawlFailedPages).toBeUndefined();
+      expect(historical.browserFailedPages).toBeUndefined();
+
+      const modern = ScanRunSummaryDTOSchema.parse({
+        totalFindings: 5,
+        criticalCount: 0,
+        highCount: 2,
+        mediumCount: 2,
+        lowCount: 1,
+        infoCount: 0,
+        urlsCrawled: 10,
+        pagesScanned: 8,
+        pagesFailed: 4,
+        crawlFailedPages: 2,
+        browserFailedPages: 2,
+        staticModulesExecuted: 5,
+        staticModulesTotal: 5,
+        staticPagesAnalyzed: 8,
+        runtimeAuditsCompleted: 6,
+        accessibilityCandidatesTotal: 8,
+        layoutStabilityPagesCompleted: 6,
+        pageScreenshots: [
+          {
+            id: 'shot-1',
+            pageUrl: 'https://example.com/',
+            viewportId: 'desktop',
+            viewportName: 'Desktop 1440',
+            viewportCategory: 'desktop',
+            captureType: 'viewport',
+            status: 'captured',
+            width: 1440,
+            height: 900,
+          },
+        ],
+        resourceBytesByType: {
+          document: 12000,
+          script: 80000,
+          stylesheet: 20000,
+          image: 150000,
+          font: 10000,
+          other: 0,
+          totalBytes: 272000,
+        },
+      });
+      expect(modern.crawlFailedPages).toBe(2);
+      expect(modern.pageScreenshots).toHaveLength(1);
+      expect(modern.resourceBytesByType?.totalBytes).toBe(272000);
     });
   });
 });

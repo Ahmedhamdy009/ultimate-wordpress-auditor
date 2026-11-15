@@ -6,3 +6,4 @@
 export * from './schemas/index.js';
 export * from './scope/index.js';
 export * from './ipc/index.js';
+export * from './reporting/index.js';

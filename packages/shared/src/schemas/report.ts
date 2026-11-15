@@ -6,8 +6,16 @@ export type ReportFormat = (typeof REPORT_FORMATS)[number];
 export const REPORT_STATUSES = ['pending', 'generated', 'failed'] as const;
 export type ReportStatus = (typeof REPORT_STATUSES)[number];
 
+export const REPORT_LOCALES = ['en', 'ar'] as const;
+export type ReportLocale = (typeof REPORT_LOCALES)[number];
+
+export const REPORT_VIEW_MODES = ['simple', 'technical', 'dual'] as const;
+export type ReportViewMode = (typeof REPORT_VIEW_MODES)[number];
+
 export const ReportFormatSchema = z.enum(REPORT_FORMATS);
 export const ReportStatusSchema = z.enum(REPORT_STATUSES);
+export const ReportLocaleSchema = z.enum(REPORT_LOCALES);
+export const ReportViewModeSchema = z.enum(REPORT_VIEW_MODES);
 
 export interface ReportDTO {
   id: string;
@@ -37,6 +45,8 @@ export const CreateReportRequestSchema = z.object({
   scanRunId: z.string().uuid('Invalid scan run ID format'),
   title: z.string().trim().min(1).max(255),
   format: ReportFormatSchema,
+  locale: ReportLocaleSchema.optional(),
+  viewMode: ReportViewModeSchema.optional(),
   summary: z.record(z.string(), z.unknown()).optional().nullable(),
   storagePath: z.string().trim().max(2048).optional().nullable(),
 });

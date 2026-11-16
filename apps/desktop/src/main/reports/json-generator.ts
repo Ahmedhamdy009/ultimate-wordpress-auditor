@@ -5,13 +5,21 @@ import {
   normalizeFindingCategoryId,
   normalizeFindingLifecycleStatus,
 } from '@auditor/shared';
+import { ensureReportViewModel, type ReportPresentationOptions } from './assembler.js';
 import type { ReportModel } from './types.js';
 import { redactSensitiveData } from './security.js';
 
 /**
  * Generates a structured, versioned, secret-redacted JSON export of an audit report.
+ * Preserves all historical fields while integrating the Batch 7.4 shared health triad,
+ * D1-D4 coverage, 7-chart specifications, detected stack, and bilingual recommendations.
  */
-export function generateJsonReport(model: ReportModel): string {
+export function generateJsonReport(
+  model: ReportModel,
+  options?: ReportPresentationOptions,
+): string {
+  const viewModel = ensureReportViewModel(model, options);
+
   const byCategory: Record<string, number> = {};
   const byStatus: Record<string, number> = {};
   let confirmedCount = 0;
@@ -85,11 +93,30 @@ export function generateJsonReport(model: ReportModel): string {
         : null),
   };
 
-  // Deeply redact sensitive secrets from findings and scan configuration
+  // Expose visual evidence metadata without duplicating massive base64 payloads inside JSON
+  const visualEvidenceSummary = model.visualEvidence
+    ? Object.fromEntries(
+        Object.entries(model.visualEvidence).map(([key, entry]) => [
+          key,
+          {
+            fileName: entry.fileName,
+            byteLength: entry.byteLength,
+            embedded: entry.embedded,
+            ...(entry.mimeType ? { mimeType: entry.mimeType } : {}),
+            ...(entry.omittedReason ? { omittedReason: entry.omittedReason } : {}),
+          },
+        ]),
+      )
+    : undefined;
+
+  // Deeply redact sensitive secrets from findings, recommendations, and scan configuration
   const sanitizedModel = redactSensitiveData({
     schemaVersion: '1.0.0',
     reportId: model.reportId,
     title: model.title,
+    locale: viewModel.locale,
+    direction: viewModel.direction,
+    viewMode: viewModel.viewMode,
     generatedAt: model.generatedAt,
     site: model.site,
     scanRun: {
@@ -97,6 +124,12 @@ export function generateJsonReport(model: ReportModel): string {
       config: redactSensitiveData(model.scanRun.config),
     },
     summary,
+    healthOverview: viewModel.healthOverview,
+    detectedStack: viewModel.detectedStack,
+    charts: viewModel.charts,
+    recommendations: viewModel.recommendations,
+    disclosures: viewModel.disclosures,
+    ...(visualEvidenceSummary ? { visualEvidence: visualEvidenceSummary } : {}),
     consolidatedFindings: model.consolidatedFindings ?? [],
     findings: normalizedFindings,
   });

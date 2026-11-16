@@ -2,10 +2,16 @@ import crypto from 'node:crypto';
 import {
   IPCError,
   IPC_ERROR_CODES,
+  buildReportViewModel,
   classifyFindingConfidenceBucket,
   normalizeFindingCategoryId,
   normalizeFindingLifecycleStatus,
+  normalizeReportLocale,
+  normalizeReportViewMode,
   consolidateFindings,
+  type ReportLocale,
+  type ReportViewMode,
+  type ReportViewModel,
 } from '@auditor/shared';
 import type { SiteRepository } from '../db/repositories/site.repository.js';
 import type { ScanRunRepository } from '../db/repositories/scan-run.repository.js';
@@ -23,6 +29,8 @@ export interface AssemblerDependencies {
 export interface AssembleReportOptions {
   readonly reportId?: string;
   readonly title?: string;
+  readonly locale?: ReportLocale;
+  readonly viewMode?: ReportViewMode;
   readonly generatedAt?: string;
   readonly screenshotsDir?: string | ReportPathOptions;
 }
@@ -256,10 +264,45 @@ export function assembleReportData(
     cancelledAt: scanRun.cancelledAt,
     durationMs: scanRun.durationMs,
     config: scanRun.config,
-    pagesScanned,
-    pagesFailed,
+    ...(typeof metricsSource.urlsCrawled === 'number'
+      ? { urlsCrawled: metricsSource.urlsCrawled }
+      : {}),
+    ...(typeof metricsSource.crawlFailedPages === 'number'
+      ? { crawlFailedPages: metricsSource.crawlFailedPages }
+      : {}),
+    ...(typeof metricsSource.pagesScanned === 'number'
+      ? { pagesScanned: metricsSource.pagesScanned }
+      : { pagesScanned }),
+    ...(typeof metricsSource.pagesFailed === 'number'
+      ? { pagesFailed: metricsSource.pagesFailed }
+      : { pagesFailed }),
+    ...(typeof metricsSource.browserFailedPages === 'number'
+      ? { browserFailedPages: metricsSource.browserFailedPages }
+      : {}),
     browserPagesAudited,
     screenshotsCaptured,
+    ...(typeof metricsSource.staticPagesExpected === 'number'
+      ? { staticPagesExpected: metricsSource.staticPagesExpected }
+      : {}),
+    ...(typeof metricsSource.staticPagesCompleted === 'number'
+      ? { staticPagesCompleted: metricsSource.staticPagesCompleted }
+      : {}),
+    ...(typeof metricsSource.a11yPagesExpected === 'number'
+      ? { a11yPagesExpected: metricsSource.a11yPagesExpected }
+      : {}),
+    ...(typeof metricsSource.a11yPagesCompleted === 'number'
+      ? { a11yPagesCompleted: metricsSource.a11yPagesCompleted }
+      : {}),
+    ...(typeof metricsSource.clsPagesExpected === 'number'
+      ? { clsPagesExpected: metricsSource.clsPagesExpected }
+      : {}),
+    ...(typeof metricsSource.clsPagesCompleted === 'number'
+      ? { clsPagesCompleted: metricsSource.clsPagesCompleted }
+      : {}),
+    ...(Array.isArray(metricsSource.pageScreenshots)
+      ? { pageScreenshots: metricsSource.pageScreenshots as readonly Record<string, unknown>[] }
+      : {}),
+    ...(errorDetails ? { errorDetails } : {}),
     isPartialAudit,
     completedEngines,
     interruptedEngine,
@@ -270,7 +313,8 @@ export function assembleReportData(
     browserCoverageStatus,
     staticCoverageStatus,
     coverageWarning,
-    performanceMetrics: (metricsSource.performanceMetrics as Record<string, unknown> | null | undefined) ?? null,
+    performanceMetrics:
+      (metricsSource.performanceMetrics as Record<string, unknown> | null | undefined) ?? null,
   };
 
   const reportId = options?.reportId ?? crypto.randomUUID();
@@ -289,17 +333,103 @@ export function assembleReportData(
   });
 
   const consolidatedFindings = consolidateFindings(findings);
+  const locale = normalizeReportLocale(options?.locale);
+  const viewMode = normalizeReportViewMode(options?.viewMode);
+
+  // Use raw persisted scanRun.summary counters directly (without synthetic fallback defaults)
+  // so D1–D4 path classification and historical fallbacks match @auditor/shared semantics identically.
+  const viewModel = buildReportViewModel({
+    locale,
+    viewMode,
+    title,
+    generatedAt: now,
+    site: siteModel,
+    scanRun: {
+      ...metricsSource,
+      id: scanRun.id,
+      scanType: scanRun.scanType,
+      status: scanRun.status,
+      targetUrl: scanRun.targetUrl,
+      startedAt: scanRun.startedAt,
+      completedAt: scanRun.completedAt,
+      durationMs: scanRun.durationMs,
+      config: scanRun.config,
+      completedEngines,
+      errorDetails: errorDetails ?? null,
+      isPartialAudit,
+      isPartialCoverage,
+      performanceMetrics:
+        (metricsSource.performanceMetrics as Record<string, unknown> | null | undefined) ?? null,
+    },
+    findings,
+  });
 
   return {
     reportId,
     title,
+    locale,
+    viewMode,
     site: siteModel,
     scanRun: scanRunModel,
     findings,
     consolidatedFindings,
     summary,
+    viewModel,
     visualEvidence,
     generatedAt: now,
     version: '1.0.0',
   };
+}
+
+export interface ReportPresentationOptions {
+  readonly locale?: ReportLocale | string;
+  readonly viewMode?: ReportViewMode | string;
+}
+
+/**
+ * Resolves the authoritative shared `ReportViewModel` for any `ReportModel`,
+ * reusing a matching pre-assembled `model.viewModel` or computing it via `@auditor/shared`.
+ * Never duplicates health, coverage, chart, or recommendation logic.
+ */
+export function ensureReportViewModel(
+  model: ReportModel,
+  options?: ReportPresentationOptions,
+): ReportViewModel {
+  const targetLocale = normalizeReportLocale(options?.locale ?? model.locale);
+  const targetViewMode = normalizeReportViewMode(options?.viewMode ?? model.viewMode);
+
+  if (
+    model.viewModel &&
+    model.viewModel.locale === targetLocale &&
+    model.viewModel.viewMode === targetViewMode
+  ) {
+    return model.viewModel;
+  }
+
+  return buildReportViewModel({
+    locale: targetLocale,
+    viewMode: targetViewMode,
+    title: model.title,
+    generatedAt: model.generatedAt,
+    site: model.site,
+    scanRun: {
+      ...model.summary,
+      ...model.scanRun,
+      id: model.scanRun.id,
+      scanType: model.scanRun.scanType,
+      status: model.summary.scanStatus ?? model.scanRun.status,
+      targetUrl: model.scanRun.targetUrl,
+      startedAt: model.scanRun.startedAt,
+      completedAt: model.scanRun.completedAt,
+      durationMs: model.scanRun.durationMs,
+      config: model.scanRun.config,
+      completedEngines: model.summary.completedEngines ?? model.scanRun.completedEngines ?? null,
+      errorDetails: model.scanRun.errorDetails ?? null,
+      isPartialAudit: model.summary.isPartialAudit ?? model.scanRun.isPartialAudit ?? null,
+      isPartialCoverage: model.summary.isPartialCoverage ?? model.scanRun.isPartialCoverage ?? null,
+      performanceMetrics:
+        model.summary.performanceMetrics ?? model.scanRun.performanceMetrics ?? null,
+    },
+    findings: model.findings,
+  });
 }

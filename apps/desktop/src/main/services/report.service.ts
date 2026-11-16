@@ -100,19 +100,42 @@ export class ReportService implements IReportService {
         },
         {
           title: request.title,
+          locale: request.locale,
+          viewMode: request.viewMode,
           screenshotsDir: this.screenshotsDir,
         },
       );
 
-      summary = (summary ?? model.summary) as Record<string, unknown>;
+      summary = (summary ?? {
+        ...model.summary,
+        ...(model.viewModel
+          ? {
+              locale: model.viewModel.locale,
+              viewMode: model.viewModel.viewMode,
+              healthIndexScore: model.viewModel.healthOverview.healthIndexScore,
+              healthBand: model.viewModel.healthOverview.healthBand,
+              auditCoverage: model.viewModel.healthOverview.coveragePercent,
+              auditConfidence: model.viewModel.healthOverview.confidenceScore,
+            }
+          : {}),
+      }) as Record<string, unknown>;
 
       let content: string;
       if (request.format === 'html') {
-        content = generateHtmlReport(model);
+        content = generateHtmlReport(model, {
+          locale: request.locale,
+          viewMode: request.viewMode,
+        });
       } else if (request.format === 'json') {
-        content = generateJsonReport(model);
+        content = generateJsonReport(model, {
+          locale: request.locale,
+          viewMode: request.viewMode,
+        });
       } else if (request.format === 'csv') {
-        content = generateCsvReport(model);
+        content = generateCsvReport(model, {
+          locale: request.locale,
+          viewMode: request.viewMode,
+        });
       } else if (request.format === 'pdf') {
         throw new IPCError(
           'PDF export format is not supported in this version. Use HTML, JSON, or CSV.',

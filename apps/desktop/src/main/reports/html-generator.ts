@@ -7,6 +7,7 @@ import {
   normalizeFindingCategoryId,
   normalizeFindingLifecycleStatus,
 } from '@auditor/shared';
+import type { ReportPresentationOptions } from './assembler.js';
 import type { ReportModel } from './types.js';
 import { escapeHtml, sanitizeUrl, redactSensitiveData } from './security.js';
 import { getScreenshotEvidenceKey } from './visual-evidence.js';
@@ -36,7 +37,10 @@ function formatDate(iso: string | null): string {
  * - Deep secret redaction of sensitive credentials and headers in evidence.
  * - Prominent warning callouts for partial/failed/cancelled scan runs.
  */
-export function generateHtmlReport(model: ReportModel): string {
+export function generateHtmlReport(
+  model: ReportModel,
+  _options?: ReportPresentationOptions,
+): string {
   const isFailedOrCancelled = model.summary.scanStatus === 'failed' || model.summary.scanStatus === 'cancelled';
   const isPartialCoverage = !isFailedOrCancelled && Boolean(model.summary.isPartialCoverage || model.summary.coverageStatus === 'partial');
   const hasBrowserUnavailable = model.findings.some(f => f.ruleId === 'SYS_BROWSER_UNAVAILABLE');

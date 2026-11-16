@@ -1,4 +1,14 @@
-import type { ConsolidatedFindingDTO, FindingDTO, FindingSeverity, PlatformType, EnvironmentType, ScanRunType, ScanRunStatus } from '@auditor/shared';
+import type {
+  ConsolidatedFindingDTO,
+  FindingDTO,
+  PlatformType,
+  EnvironmentType,
+  ScanRunType,
+  ScanRunStatus,
+  ReportLocale,
+  ReportViewMode,
+  ReportViewModel,
+} from '@auditor/shared';
 import type { ReportVisualEvidenceEntry } from './visual-evidence.js';
 
 export interface ReportSiteModel {
@@ -22,10 +32,21 @@ export interface ReportScanRunModel {
   readonly cancelledAt: string | null;
   readonly durationMs: number | null;
   readonly config: Record<string, unknown>;
+  readonly urlsCrawled?: number;
+  readonly crawlFailedPages?: number;
   readonly pagesScanned?: number;
   readonly pagesFailed?: number;
   readonly browserPagesAudited?: number;
+  readonly browserFailedPages?: number;
   readonly screenshotsCaptured?: number;
+  readonly staticPagesExpected?: number;
+  readonly staticPagesCompleted?: number;
+  readonly a11yPagesExpected?: number;
+  readonly a11yPagesCompleted?: number;
+  readonly clsPagesExpected?: number;
+  readonly clsPagesCompleted?: number;
+  readonly pageScreenshots?: readonly Record<string, unknown>[];
+  readonly errorDetails?: Record<string, unknown> | null;
   readonly isPartialAudit?: boolean;
   readonly completedEngines?: readonly string[];
   readonly interruptedEngine?: string | null;
@@ -76,11 +97,14 @@ export interface ReportSummaryModel {
 export interface ReportModel {
   readonly reportId: string;
   readonly title: string;
+  readonly locale?: ReportLocale;
+  readonly viewMode?: ReportViewMode;
   readonly site: ReportSiteModel;
   readonly scanRun: ReportScanRunModel;
   readonly findings: readonly FindingDTO[];
   readonly consolidatedFindings?: readonly ConsolidatedFindingDTO[];
   readonly summary: ReportSummaryModel;
+  readonly viewModel?: ReportViewModel;
   readonly visualEvidence?: Readonly<Record<string, ReportVisualEvidenceEntry>>;
   readonly generatedAt: string;
   readonly version: string;

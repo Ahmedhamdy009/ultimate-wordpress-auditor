@@ -253,7 +253,7 @@ describe('Report Generators (HTML, JSON, CSV)', () => {
       expect(csv).toContain('قم بتثبيت شهادة SSL صالحة');
     });
 
-    it('exports 17 columns with causality, classification, observed value, and threshold for performance findings', () => {
+    it('preserves all 17 historical CSV columns and appends 5 additive Batch 7.4 recommendation columns', () => {
       const perfFindingModel: ReportModel = {
         ...sampleModel,
         findings: [
@@ -303,9 +303,9 @@ describe('Report Generators (HTML, JSON, CSV)', () => {
       const lines = csv.replace('\uFEFF', '').trim().split('\r\n');
       expect(lines).toHaveLength(3); // header + 2 findings
 
-      // Check header row: exactly 17 columns
+      // Check header row: 17 preserved legacy columns + 5 additive recommendation columns
       const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, ''));
-      expect(headers).toHaveLength(17);
+      expect(headers).toHaveLength(22);
       expect(headers.slice(0, 13)).toEqual([
         'Report ID',
         'Scan Run ID',
@@ -321,30 +321,41 @@ describe('Report Generators (HTML, JSON, CSV)', () => {
         'Status',
         'Created At',
       ]);
-      expect(headers.slice(13)).toEqual([
+      expect(headers.slice(13, 17)).toEqual([
         'Causality',
         'Classification',
         'Observed Value',
         'Threshold',
       ]);
+      expect(headers.slice(17)).toEqual([
+        'Exact Location',
+        'Recommendation Summary',
+        'Remediation Steps',
+        'Verification Steps',
+        'Report Locale',
+      ]);
 
       // Check performance finding row (line 1)
       const perfRow = lines[1].split(',').map(c => c.replace(/^"|"$/g, ''));
-      expect(perfRow).toHaveLength(17);
+      expect(perfRow).toHaveLength(22);
       expect(perfRow[3]).toBe('PERF_BOTTLENECK_DIAGNOSIS');
       expect(perfRow[13]).toBe('causal');
       expect(perfRow[14]).toBe('SERVER_LATENCY');
       expect(perfRow[15]).toBe('950 ms');
       expect(perfRow[16]).toBe('800 ms');
+      expect(perfRow[18].length).toBeGreaterThan(0); // Recommendation Summary
+      expect(perfRow[19]).toContain('1.'); // Ordered remediation steps
+      expect(perfRow[21]).toBe('en');
 
       // Check non-performance finding row (line 2)
       const nonPerfRow = lines[2].split(',').map(c => c.replace(/^"|"$/g, ''));
-      expect(nonPerfRow).toHaveLength(17);
+      expect(nonPerfRow).toHaveLength(22);
       expect(nonPerfRow[3]).toBe('SEC-NON-PERF');
       expect(nonPerfRow[13]).toBe(''); // Causality empty
       expect(nonPerfRow[14]).toBe(''); // Classification empty
       expect(nonPerfRow[15]).toBe(''); // Observed Value empty
       expect(nonPerfRow[16]).toBe(''); // Threshold empty
+      expect(nonPerfRow[21]).toBe('en');
     });
   });
 
@@ -519,6 +530,31 @@ describe('Report Generators (HTML, JSON, CSV)', () => {
       expect(parsed.findings[0].evidence.observedValue).toBe(950);
       expect(parsed.findings[1].evidence.classification).toBe('HEAVY_ASSET_PAYLOAD');
       expect(parsed.findings[1].evidence.causality).toBe('correlational');
+    });
+
+    it('integrates shared healthOverview, 7 charts, detectedStack, and bilingual recommendations in JSON and Arabic CSV', () => {
+      const jsonStr = generateJsonReport(performanceModel, { locale: 'ar', viewMode: 'dual' });
+      const parsed = JSON.parse(jsonStr);
+
+      expect(parsed.locale).toBe('ar');
+      expect(parsed.direction).toBe('rtl');
+      expect(parsed.viewMode).toBe('dual');
+      expect(parsed.healthOverview).toBeDefined();
+      expect(parsed.healthOverview.dimensions).toHaveLength(4);
+      expect(parsed.charts.severityDistribution).toBeDefined();
+      expect(parsed.charts.categoryBreakdown).toBeDefined();
+      expect(parsed.charts.coverageDimensions).toBeDefined();
+      expect(parsed.charts.labVitals).toBeDefined();
+      expect(parsed.charts.assetBreakdown).toBeDefined();
+      expect(parsed.charts.bottleneckSummary).toBeDefined();
+      expect(parsed.charts.topAffectedPages).toBeDefined();
+      expect(parsed.detectedStack.isWordPress).toBe(true);
+      expect(parsed.recommendations.length).toBeGreaterThan(0);
+
+      const arCsv = generateCsvReport(performanceModel, { locale: 'ar' });
+      expect(arCsv.startsWith('\uFEFF')).toBe(true);
+      expect(arCsv).toContain('"ar"');
+      expect(arCsv).toContain('الأداء وحجم الأصول');
     });
   });
 });

@@ -327,7 +327,9 @@ export function assembleReportData(
       : {}),
     ...(Array.isArray(metricsSource.pageScreenshots)
       ? { pageScreenshots: metricsSource.pageScreenshots as readonly Record<string, unknown>[] }
-      : {}),
+      : Array.isArray(errorDetails?.pageScreenshots)
+        ? { pageScreenshots: errorDetails.pageScreenshots as readonly Record<string, unknown>[] }
+        : {}),
     ...(errorDetails ? { errorDetails } : {}),
     isPartialAudit,
     completedEngines,
@@ -358,7 +360,9 @@ export function assembleReportData(
     screenshotsDir: options?.screenshotsDir,
     ...(Array.isArray(metricsSource.pageScreenshots)
       ? { pageScreenshots: metricsSource.pageScreenshots as readonly Record<string, unknown>[] }
-      : {}),
+      : Array.isArray(errorDetails?.pageScreenshots)
+        ? { pageScreenshots: errorDetails.pageScreenshots as readonly Record<string, unknown>[] }
+        : {}),
   });
 
   const consolidatedFindings = consolidateFindings(findings);

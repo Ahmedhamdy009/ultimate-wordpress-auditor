@@ -6,6 +6,7 @@ import { PerformanceVitalsView } from './PerformanceVitalsView.js';
 import { ExecutiveSummaryCard } from '../dashboard/ExecutiveSummaryCard.js';
 import { CoverageDimensionsPanel } from '../dashboard/CoverageDimensionsPanel.js';
 import { AuditChartsGrid } from '../dashboard/AuditChartsGrid.js';
+import { VisualEvidenceGallery } from '../dashboard/VisualEvidenceGallery.js';
 import { FindingsExplorer } from '../dashboard/FindingsExplorer.js';
 import { useAuditUi } from '../../context/AuditUiContext.js';
 import { useScans } from '../../hooks/useScans.js';
@@ -1472,6 +1473,12 @@ export const ScansView: React.FC<ScansViewProps> = ({
 
               {/* Laboratory Performance Diagnostics & Web Vitals */}
               <PerformanceVitalsView scanRun={inspectedScan} findings={findings} />
+
+              {/* Visual Evidence Gallery & Page Screenshots (DEF-004) */}
+              <VisualEvidenceGallery
+                visualEvidence={visualEvidence}
+                visualEvidenceLoading={visualEvidenceLoading}
+              />
 
               {/* Interactive Findings & Actionable Recommendations Explorer */}
               {inspectedViewModel && (

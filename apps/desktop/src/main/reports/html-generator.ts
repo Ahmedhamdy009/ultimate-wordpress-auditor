@@ -822,8 +822,8 @@ export function generateHtmlReport(
   const visualEntries = model.visualEvidence ? Object.values(model.visualEvidence) : [];
   const visualGalleryHtml =
     visualEntries.length > 0
-      ? `<section class="section-card" aria-label="${isArabic ? 'الأدلة البصرية ولقطات الشاشة' : 'Visual Evidence & Screenshots'}">
-           <h2 class="section-title">${isArabic ? 'الأدلة البصرية ولقطات الشاشة' : 'Visual Evidence & Captured Screenshots'} (${visualEntries.length})</h2>
+      ? `<section class="section-card" aria-label="${isArabic ? 'الأدلة البصرية ولقطات الشاشة' : 'Visual Evidence &amp; Screenshots'}">
+           <h2 class="section-title">${isArabic ? 'الأدلة البصرية ولقطات الشاشة' : 'Visual Evidence &amp; Captured Screenshots'} (${visualEntries.length})</h2>
            <div class="charts-grid">
              ${visualEntries
                .map(
@@ -831,10 +831,14 @@ export function generateHtmlReport(
                  <div class="chart-card">
                    <div class="chart-card-head">
                      <strong class="font-mono" dir="ltr">${escapeHtml(entry.fileName)}</strong>
-                     ${entry.status ? `<span class="badge">${escapeHtml(entry.status)}</span>` : ''}
+                     <div>
+                       ${entry.status ? `<span class="badge">${escapeHtml(entry.status)}</span>` : ''}
+                       ${entry.viewportCategory ? `<span class="badge" style="margin-inline-start:4px;">${escapeHtml(entry.viewportCategory)}</span>` : ''}
+                     </div>
                    </div>
                    <div style="font-size:12px; color:var(--text-muted);">
                      ${entry.viewport ? `<span>${isArabic ? 'الشاشة:' : 'Viewport:'} <strong>${escapeHtml(entry.viewport)}</strong></span> &bull; ` : ''}
+                     ${entry.width && entry.height ? `<span>${entry.width}&times;${entry.height}</span> &bull; ` : ''}
                      ${entry.captureType ? `<span>${isArabic ? 'النوع:' : 'Type:'} <strong>${escapeHtml(entry.captureType)}</strong></span> &bull; ` : ''}
                      <span dir="ltr">${Math.round(entry.byteLength / 1024)} KB</span>
                      ${entry.pageUrl ? `<div class="font-mono" dir="ltr" style="font-size:11px; margin-top:4px; word-break:break-all;">${escapeHtml(String(redactSensitiveData(entry.pageUrl)))}</div>` : ''}

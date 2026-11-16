@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { FindingDTO } from '@auditor/shared';
 import { getScreenshotsDirectory, type ReportPathOptions } from './paths.js';
+import { redactUrl } from '../browser/redactor.js';
 
 export const MAX_EMBEDDED_SCREENSHOT_BYTES = 2 * 1024 * 1024; // 2 MB raw image limit
 export const MAX_TOTAL_EMBEDDED_EVIDENCE_BYTES = 14 * 1024 * 1024; // ~14 MB data-URI budget inside HTML (< 20 MB MAX_READ_BYTES)
@@ -15,6 +16,9 @@ export interface ReportVisualEvidenceEntry {
   readonly omittedReason?: string;
   readonly pageUrl?: string;
   readonly viewport?: string;
+  readonly viewportCategory?: string;
+  readonly width?: number;
+  readonly height?: number;
   readonly captureType?: string;
   readonly status?: string;
 }
@@ -44,11 +48,22 @@ export function getScreenshotEvidenceKey(screenshot: Record<string, unknown>): s
   if (fileName) {
     return fileName;
   }
+  const relativePath =
+    typeof screenshot.relativePath === 'string' && screenshot.relativePath.trim().length > 0
+      ? screenshot.relativePath.trim()
+      : null;
+  if (relativePath) {
+    return relativePath;
+  }
   const id =
     typeof screenshot.id === 'string' && screenshot.id.trim().length > 0
       ? screenshot.id.trim()
       : null;
-  return id ? `${id}.png` : null;
+  const format =
+    typeof screenshot.format === 'string' && screenshot.format.trim().length > 0
+      ? screenshot.format.trim()
+      : 'png';
+  return id ? `${id}.${format}` : null;
 }
 
 /**
@@ -98,18 +113,56 @@ export function resolveReportVisualEvidence(
       continue;
     }
 
-    const meta = {
-      ...(typeof sc.pageUrl === 'string' && sc.pageUrl.trim() ? { pageUrl: sc.pageUrl.trim() } : {}),
-      ...(typeof sc.viewportProfile === 'string' && sc.viewportProfile.trim()
-        ? { viewport: sc.viewportProfile.trim() }
+    const rawPageUrl =
+      typeof sc.pageUrl === 'string' && sc.pageUrl.trim() ? sc.pageUrl.trim() : undefined;
+    const pageUrl = rawPageUrl ? redactUrl(rawPageUrl) : undefined;
+    const viewport =
+      typeof sc.viewportProfile === 'string' && sc.viewportProfile.trim()
+        ? sc.viewportProfile.trim()
         : typeof sc.viewport === 'string' && sc.viewport.trim()
-          ? { viewport: sc.viewport.trim() }
-          : {}),
-      ...(typeof sc.captureType === 'string' && sc.captureType.trim()
-        ? { captureType: sc.captureType.trim() }
-        : {}),
-      ...(typeof sc.status === 'string' && sc.status.trim() ? { status: sc.status.trim() } : {}),
+          ? sc.viewport.trim()
+          : typeof sc.viewportName === 'string' && sc.viewportName.trim()
+            ? sc.viewportName.trim()
+            : undefined;
+    const viewportCategory =
+      typeof sc.viewportCategory === 'string' && sc.viewportCategory.trim()
+        ? sc.viewportCategory.trim()
+        : undefined;
+    const width =
+      typeof sc.width === 'number' && Number.isFinite(sc.width) && sc.width > 0
+        ? Math.round(sc.width)
+        : undefined;
+    const height =
+      typeof sc.height === 'number' && Number.isFinite(sc.height) && sc.height > 0
+        ? Math.round(sc.height)
+        : undefined;
+    const captureType =
+      typeof sc.captureType === 'string' && sc.captureType.trim()
+        ? sc.captureType.trim()
+        : undefined;
+    const status =
+      typeof sc.status === 'string' && sc.status.trim() ? sc.status.trim() : undefined;
+
+    const meta = {
+      ...(pageUrl ? { pageUrl } : {}),
+      ...(viewport ? { viewport } : {}),
+      ...(viewportCategory ? { viewportCategory } : {}),
+      ...(width !== undefined ? { width } : {}),
+      ...(height !== undefined ? { height } : {}),
+      ...(captureType ? { captureType } : {}),
+      ...(status ? { status } : {}),
     };
+
+    if (status && status !== 'captured') {
+      entries[key] = {
+        fileName: key,
+        byteLength: 0,
+        embedded: false,
+        ...meta,
+        omittedReason: `Visual preview unavailable: screenshot status is ${status}.`,
+      };
+      continue;
+    }
 
     if (path.isAbsolute(key) || key.includes('..')) {
       entries[key] = {

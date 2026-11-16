@@ -299,9 +299,14 @@ export class ReportService implements IReportService {
     }
 
     const findings = this.findingRepo ? this.findingRepo.getAllByScanRunId(request.scanRunId) : [];
+    const errorObj = run.error as
+      { code?: string; message?: string; details?: Record<string, unknown> } | null | undefined;
+    const errorDetails = errorObj?.details;
     const pageScreenshots = Array.isArray(run.summary?.pageScreenshots)
       ? (run.summary.pageScreenshots as unknown as readonly Record<string, unknown>[])
-      : undefined;
+      : Array.isArray(errorDetails?.pageScreenshots)
+        ? (errorDetails.pageScreenshots as readonly Record<string, unknown>[])
+        : undefined;
 
     const entries = resolveReportVisualEvidence(findings, {
       screenshotsDir: this.screenshotsDir,

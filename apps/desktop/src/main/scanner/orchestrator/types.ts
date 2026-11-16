@@ -69,6 +69,7 @@ export interface ScanExecutionContext {
   readonly persistedFindingKeys: Set<string>;
   readonly completedEngines: Array<'crawler' | 'analyzers' | 'browser'>;
   interruptedEngine: 'crawler' | 'analyzers' | 'browser' | null;
+  pageScreenshots?: PageScreenshotRecord[];
 }
 
 export type ScanProgressCallback = (progress: ScanProgressDTO) => void;

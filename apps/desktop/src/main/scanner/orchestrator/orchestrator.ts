@@ -70,7 +70,7 @@ function resolveViewportCategory(profile: {
   width: number;
   isMobile?: boolean;
 }): ViewportCategoryBucket {
-  if (profile.id?.includes('mobile') || (profile.isMobile && profile.width < 768)) {
+  if (profile.id?.includes('mobile') || profile.isMobile || profile.width < 768) {
     return 'mobile';
   }
   if (profile.id?.includes('tablet') || profile.width <= 1024) {
@@ -952,6 +952,9 @@ export class ScanOrchestrator implements IScanOrchestrator {
     context.progress.currentEngine = null;
     this.notifyProgress(context, onProgress, true);
 
+    const hasPartialScreenshots = Boolean(
+      context.pageScreenshots && context.pageScreenshots.length > 0,
+    );
     const errorDetails: Record<string, unknown> | undefined = isTimeout
       ? {
           ...(err instanceof ScanOrchestratorError && err.details
@@ -967,6 +970,7 @@ export class ScanOrchestrator implements IScanOrchestrator {
           viewportsCompleted: context.progress.viewportsCompleted,
           accessibilityAuditsCompleted: context.progress.accessibilityAuditsCompleted,
           screenshotsCaptured: context.progress.screenshotsCaptured,
+          pageScreenshots: hasPartialScreenshots ? [...context.pageScreenshots!] : undefined,
           isPartialCoverage: true,
           coverageStatus: 'partial',
           ...(context.persistedFindingsCount > 0
@@ -975,9 +979,12 @@ export class ScanOrchestrator implements IScanOrchestrator {
           completedEngines: [...context.completedEngines],
           interruptedEngine: context.interruptedEngine,
         }
-      : context.persistedFindingsCount > 0
+      : context.persistedFindingsCount > 0 || hasPartialScreenshots
         ? {
-            partialFindingsPersisted: context.persistedFindingsCount,
+            ...(context.persistedFindingsCount > 0
+              ? { partialFindingsPersisted: context.persistedFindingsCount }
+              : {}),
+            ...(hasPartialScreenshots ? { pageScreenshots: [...context.pageScreenshots!] } : {}),
             ...(context.interruptedEngine
               ? {
                   completedEngines: [...context.completedEngines],
@@ -998,6 +1005,15 @@ export class ScanOrchestrator implements IScanOrchestrator {
           status: 'cancelled' as const,
           cancelledAt: now,
           durationMs,
+          ...(errorDetails
+            ? {
+                error: {
+                  code: errorCode,
+                  message: errorMessage,
+                  details: errorDetails,
+                },
+              }
+            : {}),
         }
       : {
           status: 'failed' as const,
@@ -1595,9 +1611,13 @@ export class ScanOrchestrator implements IScanOrchestrator {
             const allPageScreenshots = visualReport.viewportResults.flatMap(vr => vr.screenshots);
             for (const s of allPageScreenshots) {
               const viewportCategory = resolveViewportCategory(s.viewport);
-              pageScreenshots.push({
+              const relativePath = s.relativePath;
+              const fileName = relativePath ? path.basename(relativePath) : `${s.id}.${s.format}`;
+              const redactedTargetUrl = redactUrl(s.targetUrl);
+
+              const record: PageScreenshotRecord = {
                 id: s.id,
-                pageUrl: redactUrl(s.targetUrl),
+                pageUrl: redactedTargetUrl,
                 viewportId: s.viewport.id,
                 viewportName: s.viewport.name,
                 viewportCategory,
@@ -1605,12 +1625,26 @@ export class ScanOrchestrator implements IScanOrchestrator {
                 height: s.height,
                 captureType: s.captureType,
                 relativePath: s.relativePath,
-                fileName: s.relativePath ? path.basename(s.relativePath) : `${s.id}.${s.format}`,
+                fileName,
                 fileSizeBytes: s.fileSizeBytes,
                 format: s.format,
                 status: 'captured',
                 findingIds: s.findingId ? [s.findingId] : [],
-              });
+              };
+
+              const existingIdx = pageScreenshots.findIndex(
+                existing =>
+                  existing.id === s.id ||
+                  (existing.pageUrl === redactedTargetUrl &&
+                    existing.viewportId === s.viewport.id &&
+                    existing.captureType === s.captureType),
+              );
+
+              if (existingIdx >= 0) {
+                pageScreenshots[existingIdx] = record;
+              } else {
+                pageScreenshots.push(record);
+              }
             }
 
             const primaryPageScreenshot =
@@ -1646,6 +1680,36 @@ export class ScanOrchestrator implements IScanOrchestrator {
                 }
               }
             }
+
+            // Sync findingIds for all screenshots of this page
+            const redactedCurrentPageUrl = redactUrl(pageUrl);
+            for (const ps of pageScreenshots) {
+              if (ps.pageUrl === redactedCurrentPageUrl) {
+                const matchedIds: string[] = [];
+                for (const f of findings) {
+                  if (f.targetUrl === pageUrl && f.evidence && typeof f.evidence === 'object') {
+                    const ev = f.evidence as Record<string, unknown>;
+                    if (ev.screenshot && typeof ev.screenshot === 'object') {
+                      const scEv = ev.screenshot as Record<string, unknown>;
+                      if (scEv.id === ps.id || scEv.fileName === ps.fileName) {
+                        const findingId = (f as { id?: string }).id;
+                        if (findingId) {
+                          matchedIds.push(findingId);
+                        }
+                      }
+                    }
+                  }
+                }
+                if (matchedIds.length > 0) {
+                  const existingIds = ps.findingIds ?? [];
+                  const combined = Array.from(new Set([...existingIds, ...matchedIds]));
+                  (ps as { findingIds?: string[] }).findingIds = combined;
+                }
+              }
+            }
+
+            // Keep context.pageScreenshots updated for live and interrupted telemetry
+            context.pageScreenshots = [...pageScreenshots];
 
             this.notifyProgress(context, onProgress);
           }

@@ -124,6 +124,9 @@ export const VisualEvidenceEntryDTOSchema = z.object({
   omittedReason: z.string().optional(),
   pageUrl: z.string().optional(),
   viewport: z.string().optional(),
+  viewportCategory: z.string().optional(),
+  width: z.number().int().min(0).optional(),
+  height: z.number().int().min(0).optional(),
   captureType: z.string().optional(),
   status: z.string().optional(),
 });

@@ -499,10 +499,16 @@ export function generateHtmlReport(
               `;
             }
 
-            const remediationHtml = f.remediation
+            const safeTitle = String(redactSensitiveData(f.title));
+            const safeDescription = String(redactSensitiveData(f.description));
+            const safeRemediation = f.remediation
+              ? String(redactSensitiveData(f.remediation))
+              : null;
+
+            const remediationHtml = safeRemediation
               ? `<div class="finding-detail-section remediation-box">
                    <h5 class="detail-label">&#9881; ${isArabic ? 'إرشاد المعالجة المرفق' : 'Remediation Guidance'}</h5>
-                   <p>${escapeHtml(f.remediation)}</p>
+                   <p>${escapeHtml(safeRemediation)}</p>
                  </div>`
               : '';
 
@@ -510,10 +516,11 @@ export function generateHtmlReport(
             if (f.references && Array.isArray(f.references) && f.references.length > 0) {
               const links = f.references
                 .map(ref => {
-                  const safe = sanitizeUrl(ref);
+                  const redactedRef = String(redactSensitiveData(ref));
+                  const safe = sanitizeUrl(redactedRef);
                   return safe === '#'
-                    ? `<li><code dir="ltr">${escapeHtml(ref)}</code></li>`
-                    : `<li><a href="${safe}" class="text-accent" dir="ltr" target="_blank" rel="noopener noreferrer">${escapeHtml(ref)}</a></li>`;
+                    ? `<li><code dir="ltr">${escapeHtml(redactedRef)}</code></li>`
+                    : `<li><a href="${safe}" class="text-accent" dir="ltr" target="_blank" rel="noopener noreferrer">${escapeHtml(redactedRef)}</a></li>`;
                 })
                 .join('\n');
               referencesHtml = `
@@ -524,14 +531,15 @@ export function generateHtmlReport(
               `;
             }
 
-            const safeTargetUrl = sanitizeUrl(f.targetUrl);
+            const safeTargetUrlRaw = String(redactSensitiveData(f.targetUrl));
+            const safeTargetUrl = sanitizeUrl(safeTargetUrlRaw);
 
             return `
               <article class="finding-card ${sevClass}" id="finding-${index + 1}">
                 <header class="finding-header">
                   <div class="finding-title-row">
                     <span class="finding-index" dir="ltr">#${index + 1}</span>
-                    <h4 class="finding-title">${escapeHtml(f.title)}</h4>
+                    <h4 class="finding-title">${escapeHtml(safeTitle)}</h4>
                   </div>
                   <div class="finding-badges">
                     <span class="badge badge-sev ${sevClass}">${escapeHtml(f.severity.toUpperCase())}</span>
@@ -553,14 +561,14 @@ export function generateHtmlReport(
                     <div class="target-url-container" dir="ltr">
                       ${
                         safeTargetUrl !== '#'
-                          ? `<a href="${safeTargetUrl}" class="target-url text-accent font-mono" target="_blank" rel="noopener noreferrer">${escapeHtml(f.targetUrl)}</a>`
-                          : `<span class="target-url font-mono">${escapeHtml(f.targetUrl)}</span>`
+                          ? `<a href="${safeTargetUrl}" class="target-url text-accent font-mono" target="_blank" rel="noopener noreferrer">${escapeHtml(safeTargetUrlRaw)}</a>`
+                          : `<span class="target-url font-mono">${escapeHtml(safeTargetUrlRaw)}</span>`
                       }
                     </div>
                   </div>
                   <div class="finding-detail-section">
                     <h5 class="detail-label">${isArabic ? 'الوصف' : 'Description'}</h5>
-                    <p class="finding-description">${escapeHtml(f.description)}</p>
+                    <p class="finding-description">${escapeHtml(safeDescription)}</p>
                   </div>
                   ${evidenceHtml}
                   ${remediationHtml}
@@ -627,13 +635,13 @@ export function generateHtmlReport(
                       ${cf.totalOccurrences} occurrences across ${cf.affectedUrls.length} page(s)
                     </span>
                   </div>
-                  <h4 class="finding-title" style="margin: 4px 0 6px 0; font-size: 14px;">${escapeHtml(cf.title)}</h4>
-                  <p class="finding-desc" style="font-size: 13px; margin-bottom: 6px;">${escapeHtml(cf.description)}</p>
-                  ${cf.selector ? `<p class="font-mono" dir="ltr" style="font-size: 11px; padding: 4px 8px; border-radius: 4px; margin: 4px 0;"><strong>Locator:</strong> ${escapeHtml(cf.selector)}</p>` : ''}
+                  <h4 class="finding-title" style="margin: 4px 0 6px 0; font-size: 14px;">${escapeHtml(String(redactSensitiveData(cf.title)))}</h4>
+                  <p class="finding-desc" style="font-size: 13px; margin-bottom: 6px;">${escapeHtml(String(redactSensitiveData(cf.description)))}</p>
+                  ${cf.selector ? `<p class="font-mono" dir="ltr" style="font-size: 11px; padding: 4px 8px; border-radius: 4px; margin: 4px 0;"><strong>Locator:</strong> ${escapeHtml(String(redactSensitiveData(cf.selector)))}</p>` : ''}
                   <details style="margin-top: 6px; font-size: 12px;">
                     <summary style="cursor: pointer; color: var(--accent); font-weight: 500;">${escapeHtml(activeVm.labels.affectedUrls)} (${cf.affectedUrls.length})</summary>
                     <ul class="step-list" dir="ltr">
-                      ${cf.affectedUrls.map(u => `<li><span class="font-mono">${escapeHtml(u)}</span></li>`).join('')}
+                      ${cf.affectedUrls.map(u => `<li><span class="font-mono">${escapeHtml(String(redactSensitiveData(u)))}</span></li>`).join('')}
                     </ul>
                   </details>
                 </div>
@@ -801,7 +809,7 @@ export function generateHtmlReport(
   const telemetryReasonsHtml =
     ho.telemetryReasons.length > 0
       ? `<div class="finding-detail-section">
-           <h5 class="detail-label">${isArabic ? 'أسباب دقة القياس والتقريب' : 'Coverage & Telemetry Disclosures'}</h5>
+           <h5 class="detail-label">${isArabic ? 'أسباب دقة القياس والتقريب' : 'Coverage &amp; Telemetry Disclosures'}</h5>
            <ul class="step-list" style="font-size:12px;">
              ${ho.telemetryReasons.map(r => `<li><code dir="ltr">${escapeHtml(r.code)}</code> &mdash; ${escapeHtml(r.label)}</li>`).join('')}
            </ul>
@@ -810,6 +818,41 @@ export function generateHtmlReport(
 
   const chartsSectionHtml = renderAuditChartsSection(activeVm.charts, locale);
   const recommendationsHtml = renderRecommendationsSection(dualVm, activeVm);
+
+  const visualEntries = model.visualEvidence ? Object.values(model.visualEvidence) : [];
+  const visualGalleryHtml =
+    visualEntries.length > 0
+      ? `<section class="section-card" aria-label="${isArabic ? 'الأدلة البصرية ولقطات الشاشة' : 'Visual Evidence & Screenshots'}">
+           <h2 class="section-title">${isArabic ? 'الأدلة البصرية ولقطات الشاشة' : 'Visual Evidence & Captured Screenshots'} (${visualEntries.length})</h2>
+           <div class="charts-grid">
+             ${visualEntries
+               .map(
+                 entry => `
+                 <div class="chart-card">
+                   <div class="chart-card-head">
+                     <strong class="font-mono" dir="ltr">${escapeHtml(entry.fileName)}</strong>
+                     ${entry.status ? `<span class="badge">${escapeHtml(entry.status)}</span>` : ''}
+                   </div>
+                   <div style="font-size:12px; color:var(--text-muted);">
+                     ${entry.viewport ? `<span>${isArabic ? 'الشاشة:' : 'Viewport:'} <strong>${escapeHtml(entry.viewport)}</strong></span> &bull; ` : ''}
+                     ${entry.captureType ? `<span>${isArabic ? 'النوع:' : 'Type:'} <strong>${escapeHtml(entry.captureType)}</strong></span> &bull; ` : ''}
+                     <span dir="ltr">${Math.round(entry.byteLength / 1024)} KB</span>
+                     ${entry.pageUrl ? `<div class="font-mono" dir="ltr" style="font-size:11px; margin-top:4px; word-break:break-all;">${escapeHtml(String(redactSensitiveData(entry.pageUrl)))}</div>` : ''}
+                   </div>
+                   ${
+                     entry.embedded && entry.dataUri
+                       ? `<figure class="visual-evidence-figure">
+                            <img class="visual-evidence-img" src="${escapeHtml(entry.dataUri)}" alt="Captured screenshot ${escapeHtml(entry.fileName)}" />
+                          </figure>`
+                       : `<div class="visual-evidence-fallback">${escapeHtml(entry.omittedReason ?? (isArabic ? 'المعاينة غير متاحة.' : 'Preview unavailable.'))}</div>`
+                   }
+                 </div>
+               `,
+               )
+               .join('')}
+           </div>
+         </section>`
+      : '';
 
   return `<!DOCTYPE html>
 ${htmlOpenTag}
@@ -857,7 +900,7 @@ ${htmlOpenTag}
         <h1 class="report-main-title">${escapeHtml(model.title)}</h1>
         <div class="site-target-row">
           <span>${isArabic ? 'الموقع:' : 'Site:'} <strong class="site-name">${escapeHtml(model.site.name)}</strong></span>
-          <span>${isArabic ? 'الهدف:' : 'Target:'} <a href="${sanitizeUrl(model.scanRun.targetUrl)}" class="font-mono text-accent" dir="ltr" target="_blank" rel="noopener noreferrer">${escapeHtml(model.scanRun.targetUrl)}</a></span>
+          <span>${isArabic ? 'الهدف:' : 'Target:'} <a href="${sanitizeUrl(String(redactSensitiveData(model.scanRun.targetUrl)))}" class="font-mono text-accent" dir="ltr" target="_blank" rel="noopener noreferrer">${escapeHtml(String(redactSensitiveData(model.scanRun.targetUrl)))}</a></span>
           <span>${isArabic ? 'المنصة:' : 'Platform:'} <strong>${escapeHtml(model.site.platformType)}</strong></span>
           <span>${isArabic ? 'البيئة:' : 'Env:'} <strong>${escapeHtml(model.site.environmentType)}</strong></span>
         </div>
@@ -1009,6 +1052,8 @@ ${htmlOpenTag}
 
       <!-- Actionable Findings & Bilingual Recommendations -->
       ${recommendationsHtml}
+
+      ${visualGalleryHtml}
 
       ${consolidatedHtml}
 

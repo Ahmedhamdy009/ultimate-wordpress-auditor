@@ -330,6 +330,9 @@ export function assembleReportData(
 
   const visualEvidence = resolveReportVisualEvidence(findings, {
     screenshotsDir: options?.screenshotsDir,
+    ...(Array.isArray(metricsSource.pageScreenshots)
+      ? { pageScreenshots: metricsSource.pageScreenshots as readonly Record<string, unknown>[] }
+      : {}),
   });
 
   const consolidatedFindings = consolidateFindings(findings);

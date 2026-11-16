@@ -10,7 +10,7 @@ import {
   type BilingualText,
   type ReportLocale,
 } from '@auditor/shared';
-import { escapeHtml } from './security.js';
+import { escapeHtml, redactSensitiveData } from './security.js';
 
 const CHART_SECTION_TEXT: Readonly<Record<string, BilingualText>> = {
   heading: {
@@ -533,10 +533,11 @@ function renderTopPagesChartCard(
       : `<div class="chart-rows">
           ${chart.items
             .map(item => {
+              const safeUrl = String(redactSensitiveData(item.targetUrl));
               const trackSvg = renderHorizontalBarSvg({
                 viewBoxWidth: 320,
                 viewBoxHeight: 14,
-                ariaLabel: `${item.targetUrl}: ${item.activeCount}`,
+                ariaLabel: `${safeUrl}: ${item.activeCount}`,
                 rows: [
                   {
                     barX: 0,
@@ -556,7 +557,7 @@ function renderTopPagesChartCard(
               return `
                 <div class="chart-row-item">
                   <div class="chart-row-meta">
-                    <span class="chart-row-label font-mono chart-url-truncate" dir="ltr">${escapeHtml(item.targetUrl)}</span>
+                    <span class="chart-row-label font-mono chart-url-truncate" dir="ltr">${escapeHtml(safeUrl)}</span>
                     <span class="chart-row-value font-mono" dir="ltr">${item.activeCount} (${Math.round(item.weightedScore)} pts)</span>
                   </div>
                   ${trackSvg}

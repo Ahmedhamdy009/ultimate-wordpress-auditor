@@ -5,6 +5,7 @@ import { Alert } from '../common/Alert.js';
 import { PerformanceVitalsView } from './PerformanceVitalsView.js';
 import { ExecutiveSummaryCard } from '../dashboard/ExecutiveSummaryCard.js';
 import { CoverageDimensionsPanel } from '../dashboard/CoverageDimensionsPanel.js';
+import { AuditChartsGrid } from '../dashboard/AuditChartsGrid.js';
 import { useAuditUi } from '../../context/AuditUiContext.js';
 import { useScans } from '../../hooks/useScans.js';
 import { useProjects } from '../../hooks/useProjects.js';
@@ -1458,6 +1459,7 @@ export const ScansView: React.FC<ScansViewProps> = ({
                     isTruncated={totalFindings > findings.length}
                   />
                   <CoverageDimensionsPanel viewModel={inspectedViewModel} scanRun={inspectedScan} />
+                  <AuditChartsGrid viewModel={inspectedViewModel} />
                 </div>
               )}
 

@@ -358,3 +358,192 @@
   gap: var(--auditor-space-5);
   margin-bottom: var(--auditor-space-5);
 }
+
+/* ==========================================================================
+   Visual Analytics Charts Suite (CSP-Safe SVG + Logical CSS)
+   ========================================================================== */
+.auditor-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--auditor-space-4);
+}
+
+.auditor-chart-card {
+  margin: 0;
+  background-color: var(--auditor-bg-surface-elevated);
+  border: 1px solid var(--auditor-border-subtle);
+  border-radius: var(--auditor-radius-md);
+  padding: var(--auditor-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--auditor-space-3);
+}
+
+.auditor-chart-card--wide {
+  grid-column: 1 / -1;
+}
+
+.auditor-chart-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--auditor-space-2);
+  flex-wrap: wrap;
+}
+
+.auditor-chart-card__title {
+  font-size: var(--auditor-font-size-sm);
+  font-weight: var(--auditor-font-weight-semibold);
+  color: var(--auditor-text-primary);
+}
+
+.auditor-chart-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--auditor-space-2);
+}
+
+.auditor-chart-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.auditor-chart-row__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--auditor-space-2);
+  font-size: var(--auditor-font-size-xs);
+  color: var(--auditor-text-primary);
+}
+
+.auditor-chart-row__val {
+  font-family: var(--auditor-font-mono);
+  font-size: 11px;
+  color: var(--auditor-text-secondary);
+  white-space: nowrap;
+}
+
+.auditor-chart-row__sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--auditor-space-2);
+  font-size: 11px;
+  color: var(--auditor-text-muted);
+  flex-wrap: wrap;
+}
+
+.auditor-chart-svg {
+  display: block;
+  width: 100%;
+  height: 12px;
+}
+
+.auditor-chart-fill--critical {
+  fill: var(--auditor-danger-border);
+}
+
+.auditor-chart-fill--high {
+  fill: #f97316;
+}
+
+.auditor-chart-fill--medium {
+  fill: var(--auditor-warning-border);
+}
+
+.auditor-chart-fill--low {
+  fill: var(--auditor-accent-primary);
+}
+
+.auditor-chart-fill--info {
+  fill: var(--auditor-text-muted);
+}
+
+.auditor-chart-fill--good {
+  fill: var(--auditor-success-border);
+}
+
+.auditor-chart-fill--accent {
+  fill: var(--auditor-info-border);
+}
+
+.auditor-chart-fill--muted {
+  fill: var(--auditor-neutral-border);
+}
+
+.auditor-chart-marker-good {
+  stroke: var(--auditor-success-text);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 2;
+}
+
+.auditor-chart-marker-poor {
+  stroke: var(--auditor-danger-text);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 2;
+}
+
+.auditor-chart-empty {
+  margin: 0;
+  font-size: var(--auditor-font-size-xs);
+  color: var(--auditor-text-muted);
+  line-height: 1.5;
+}
+
+.auditor-chart-disclaimer {
+  margin: 0;
+  font-size: 11px;
+  color: var(--auditor-text-muted);
+  line-height: 1.45;
+  border-top: 1px solid var(--auditor-border-subtle);
+  padding-top: var(--auditor-space-2);
+}
+
+.auditor-chart-reasons {
+  margin: 0;
+  padding-inline-start: var(--auditor-space-4);
+  font-size: 11px;
+  color: var(--auditor-text-secondary);
+  line-height: 1.5;
+}
+
+.auditor-chart-url {
+  font-family: var(--auditor-font-mono);
+  font-size: 11px;
+  max-width: 68%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auditor-perf-alert-wrap {
+  margin-bottom: var(--auditor-space-4);
+}
+
+.auditor-perf-badges-row {
+  display: flex;
+  gap: var(--auditor-space-2);
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: var(--auditor-space-1);
+}
+
+.auditor-perf-bottleneck-title {
+  font-weight: var(--auditor-font-weight-semibold);
+  font-size: 13px;
+  margin: 4px 0;
+}
+
+.auditor-perf-bottleneck-metrics {
+  font-size: 12px;
+  color: var(--auditor-text-muted);
+  font-family: var(--auditor-font-mono);
+}
+
+.auditor-perf-bottleneck-limit {
+  font-size: 11px;
+  color: var(--auditor-warning-text);
+  margin-top: 4px;
+}

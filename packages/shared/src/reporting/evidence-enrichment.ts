@@ -132,7 +132,7 @@ const SENSITIVE_KEY_PATTERN =
   /password|passwd|secret|token|bearer|api[_-]?key|auth|cookie|session|jwt|private[_-]?key|credential/i;
 
 const SENSITIVE_QUERY_PARAM_PATTERN =
-  /([?&](?:token|access_token|refresh_token|api_key|apikey|key|secret|password|passwd|session|sid|jwt|auth|signature|sig)=)([^&#\s]+)/gi;
+  /((?:\b|[?&#;])(?:token|access[-_]?token|accessToken|refresh[-_]?token|refreshToken|api[-_]?key|apiKey|apikey|key|secret|client[-_]?secret|clientSecret|password|passwd|pwd|session(?:[-_]?id)?|sessionId|sid|jwt|auth|signature|sig)\s*=\s*)([^&#;\s"'>]+)/gi;
 
 /**
  * Redacts potential secrets, bearer tokens, Set-Cookie values, URL userinfo,

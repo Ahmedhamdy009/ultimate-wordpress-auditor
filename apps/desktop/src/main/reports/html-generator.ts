@@ -277,7 +277,7 @@ function renderRecommendationsSection(
                 ${escapeHtml(activeVm.labels.rawEvidenceLabel)} (Finding IDs: ${escapeHtml(rec.preservedOriginalFinding.findingIds.join(', ') || rec.ruleId)})
               </summary>
               <div style="margin-top:8px; font-size:12px;">
-                <p><strong>${escapeHtml(rec.preservedOriginalFinding.title)}</strong> &mdash; ${escapeHtml(rec.preservedOriginalFinding.description)}</p>
+                <p><strong>${escapeHtml(String(redactSensitiveData(rec.preservedOriginalFinding.title)))}</strong> &mdash; ${escapeHtml(String(redactSensitiveData(rec.preservedOriginalFinding.description)))}</p>
                 ${rawEvidenceStr ? `<pre class="evidence-block" dir="ltr"><code>${escapeHtml(rawEvidenceStr)}</code></pre>` : ''}
               </div>
             </details>
@@ -460,14 +460,14 @@ export function generateHtmlReport(
                     .map((r: unknown) => {
                       if (typeof r === 'object' && r !== null) {
                         const resObj = r as Record<string, unknown>;
-                        const u = String(resObj.url ?? resObj.currentSrc ?? resObj.targetUrl ?? '');
+                        const u = String(redactSensitiveData(resObj.url ?? resObj.currentSrc ?? resObj.targetUrl ?? ''));
                         const size =
                           typeof resObj.transferSizeBytes === 'number'
                             ? `(${Math.round(resObj.transferSizeBytes / 1024)} KB)`
                             : '';
                         return `<li><code dir="ltr">${escapeHtml(u)}</code> ${size}</li>`;
                       }
-                      return `<li><code dir="ltr">${escapeHtml(String(r))}</code></li>`;
+                      return `<li><code dir="ltr">${escapeHtml(String(redactSensitiveData(r)))}</code></li>`;
                     })
                     .join('');
                   perfExtra += `
@@ -1009,7 +1009,7 @@ ${htmlOpenTag}
             <h3 class="meta-label" style="margin-bottom:8px;">Execution Coverage</h3>
             <table class="data-table">
               <tbody>
-                <tr><td>Target URL</td><td class="font-mono" dir="ltr">${escapeHtml(model.scanRun.targetUrl)}</td></tr>
+                <tr><td>Target URL</td><td class="font-mono" dir="ltr">${escapeHtml(String(redactSensitiveData(model.scanRun.targetUrl)))}</td></tr>
                 <tr><td>Scan Type</td><td>${escapeHtml(model.scanRun.scanType)}</td></tr>
                 <tr><td>Scan Status</td><td><span class="status-badge ${escapeHtml(model.summary.scanStatus.toLowerCase())}">${escapeHtml(statusUpper)}</span></td></tr>
                 <tr><td>Audit Coverage</td><td><strong>${

@@ -1,16 +1,22 @@
+import { redactUrl } from '../browser/redactor.js';
+
 /**
  * Security and sanitization utilities for report generation.
  * Protects against XSS, HTML injection, URL hijacking, formula injection, and secret leakage.
  */
 
 const SENSITIVE_KEY_REGEX =
-  /(authorization|auth|cookie|set-cookie|token|secret|password|passwd|api[-_]?key|private[-_]?key|bearer|access[-_]?token|refresh[-_]?token|session|credential)/i;
+  /(authorization|auth|cookie|set[-_]?cookie|token|secret|client[-_]?secret|password|passwd|pwd|api[-_]?key|private[-_]?key|bearer|access[-_]?token|refresh[-_]?token|session(?:[-_]?id)?|sid|credential)/i;
 
 const SENSITIVE_STRING_PATTERNS = [
   { regex: /Bearer\s+[a-zA-Z0-9_\-.]+/gi, replacement: 'Bearer [REDACTED_TOKEN]' },
   { regex: /eyJ[a-zA-Z0-9_\-]{10,}\.eyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]+/gi, replacement: '[REDACTED_JWT]' },
   { regex: /-----BEGIN[ A-Z0-9_-]*PRIVATE KEY-----[\s\S]*?-----END[ A-Z0-9_-]*PRIVATE KEY-----/gi, replacement: '[REDACTED_PRIVATE_KEY]' },
-  { regex: /([?&](?:password|passwd|token|secret|api[-_]?key|apikey)=)[^&]+/gi, replacement: '$1[REDACTED]' },
+  {
+    regex:
+      /([?&#;](?:password|passwd|pwd|token|access[-_]?token|accessToken|refresh[-_]?token|refreshToken|secret|client[-_]?secret|clientSecret|api[-_]?key|apiKey|apikey|private[-_]?key|session(?:[-_]?id)?|sessionId|sid|jwt|auth|bearer|signature|sig)=)[^&#;\s"'>]+/gi,
+    replacement: '$1[REDACTED]',
+  },
   { regex: /[C-Z]:\\Users\\[^\\]+/gi, replacement: 'C:\\Users\\[REDACTED_USER]' },
 ];
 
@@ -67,6 +73,9 @@ export function redactSensitiveData(data: unknown): unknown {
 
   if (typeof data === 'string') {
     let result = data;
+    if (result.includes('://') || result.startsWith('/') || result.includes('?') || result.includes('#')) {
+      result = redactUrl(result);
+    }
     for (const pattern of SENSITIVE_STRING_PATTERNS) {
       result = result.replace(pattern.regex, pattern.replacement);
     }

@@ -7,6 +7,7 @@ import {
   type FindingConfidence,
   type FindingStatus,
 } from '@auditor/shared';
+import { redactUrl } from '../../browser/redactor.js';
 
 interface FindingRow {
   id: string;
@@ -76,7 +77,7 @@ export class FindingRepository {
       severity: row.severity as FindingSeverity,
       confidence: row.confidence as FindingConfidence,
       status: row.status as FindingStatus,
-      targetUrl: row.target_url,
+      targetUrl: redactUrl(row.target_url),
       evidence,
       remediation: row.remediation,
       references,
@@ -91,6 +92,7 @@ export class FindingRepository {
     const rawDb = this.connection.getRawDb();
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
+    const safeTargetUrl = redactUrl(data.targetUrl);
     const evidenceJson =
       data.evidence !== undefined && data.evidence !== null
         ? typeof data.evidence === 'string'
@@ -122,7 +124,7 @@ export class FindingRepository {
         data.severity,
         data.confidence,
         status,
-        data.targetUrl,
+        safeTargetUrl,
         evidenceJson,
         data.remediation ?? null,
         referencesJson,
@@ -139,7 +141,7 @@ export class FindingRepository {
       severity: data.severity,
       confidence: data.confidence,
       status,
-      targetUrl: data.targetUrl,
+      targetUrl: safeTargetUrl,
       evidence: data.evidence ?? null,
       remediation: data.remediation ?? null,
       references: data.references ?? null,
@@ -180,6 +182,7 @@ export class FindingRepository {
             : null;
         const referencesJson = item.references ? JSON.stringify(item.references) : null;
         const status = item.status ?? 'potential';
+        const safeTargetUrl = redactUrl(item.targetUrl);
 
         stmt.run(
           id,
@@ -191,7 +194,7 @@ export class FindingRepository {
           item.severity,
           item.confidence,
           status,
-          item.targetUrl,
+          safeTargetUrl,
           evidenceJson,
           item.remediation ?? null,
           referencesJson,
@@ -208,7 +211,7 @@ export class FindingRepository {
           severity: item.severity,
           confidence: item.confidence,
           status,
-          targetUrl: item.targetUrl,
+          targetUrl: safeTargetUrl,
           evidence: item.evidence ?? null,
           remediation: item.remediation ?? null,
           references: item.references ?? null,

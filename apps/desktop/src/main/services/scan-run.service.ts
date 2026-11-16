@@ -13,6 +13,7 @@ import {
 } from '@auditor/shared';
 import type { ScanRunRepository } from '../db/repositories/scan-run.repository.js';
 import type { SiteRepository } from '../db/repositories/site.repository.js';
+import { redactUrl } from '../browser/redactor.js';
 
 export interface IScanRunService {
   createScanRun(request: CreateScanRunRequest): ScanRunDTO;
@@ -59,7 +60,7 @@ export class ScanRunService implements IScanRunService {
       return this.scanRunRepo.create({
         siteId: site.id,
         scanType: request.scanType ?? 'full',
-        targetUrl,
+        targetUrl: redactUrl(targetUrl),
         config: request.config ?? {},
       });
     } catch {

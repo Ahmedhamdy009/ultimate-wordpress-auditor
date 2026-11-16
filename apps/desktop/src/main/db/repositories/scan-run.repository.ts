@@ -9,6 +9,7 @@ import {
   type ScanRunErrorDTO,
   isValidScanRunTransition,
 } from '@auditor/shared';
+import { redactUrl } from '../../browser/redactor.js';
 
 interface ScanRunRow {
   id: string;
@@ -67,7 +68,7 @@ export class ScanRunRepository {
       siteId: row.site_id,
       scanType: row.scan_type as ScanRunType,
       status: row.status as ScanRunStatus,
-      targetUrl: row.target_url,
+      targetUrl: redactUrl(row.target_url),
       startedAt: row.started_at,
       completedAt: row.completed_at,
       cancelledAt: row.cancelled_at,
@@ -93,6 +94,7 @@ export class ScanRunRepository {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     const configJson = JSON.stringify(data.config ?? {});
+    const safeTargetUrl = redactUrl(data.targetUrl);
 
     rawDb
       .prepare(
@@ -108,14 +110,14 @@ export class ScanRunRepository {
           ?, ?
         )`,
       )
-      .run(id, data.siteId, data.scanType, data.targetUrl, configJson, now, now);
+      .run(id, data.siteId, data.scanType, safeTargetUrl, configJson, now, now);
 
     return {
       id,
       siteId: data.siteId,
       scanType: data.scanType,
       status: 'pending',
-      targetUrl: data.targetUrl,
+      targetUrl: safeTargetUrl,
       startedAt: null,
       completedAt: null,
       cancelledAt: null,

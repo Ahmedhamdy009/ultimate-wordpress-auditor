@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type { DatabaseConnection } from '../connection.js';
 import type { EnvironmentType, PlatformType, SiteDTO, SiteListResponseDTO } from '@auditor/shared';
+import { redactUrl } from '../../browser/redactor.js';
 
 interface SiteRow {
   id: string;
@@ -27,7 +28,7 @@ export class SiteRepository {
       id: row.id,
       projectId: row.project_id,
       name: row.name,
-      baseUrl: row.base_url,
+      baseUrl: redactUrl(row.base_url),
       platformType: row.platform_type as PlatformType,
       environmentType: row.environment_type as EnvironmentType,
       description: row.description,

@@ -53,7 +53,7 @@ export function generateJsonReport(
       confidence: f.confidence,
       confidenceBucket: bucket,
       status,
-      targetUrl: f.targetUrl,
+      targetUrl: redactSensitiveData(f.targetUrl) as string,
       evidence: redactSensitiveData(f.evidence),
       remediation: f.remediation,
       references: f.references,
@@ -118,9 +118,13 @@ export function generateJsonReport(
     direction: viewModel.direction,
     viewMode: viewModel.viewMode,
     generatedAt: model.generatedAt,
-    site: model.site,
+    site: {
+      ...model.site,
+      baseUrl: redactSensitiveData(model.site.baseUrl) as string,
+    },
     scanRun: {
       ...model.scanRun,
+      targetUrl: redactSensitiveData(model.scanRun.targetUrl) as string,
       config: redactSensitiveData(model.scanRun.config),
     },
     summary,

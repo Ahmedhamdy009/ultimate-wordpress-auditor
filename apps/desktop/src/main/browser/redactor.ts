@@ -4,7 +4,7 @@
  * and sensitive query parameters before data enters findings or persistence.
  */
 
-const SENSITIVE_QUERY_KEY_PATTERNS: readonly RegExp[] = [
+export const SENSITIVE_QUERY_KEY_PATTERNS: readonly RegExp[] = [
   /^pass(word|phrase)?$/i,
   /^pwd$/i,
   /token/i,
@@ -22,6 +22,9 @@ const SENSITIVE_QUERY_KEY_PATTERNS: readonly RegExp[] = [
   /^key$/i,
   /access[_-]?key/i,
   /secret[_-]?key/i,
+  /private[_-]?key/i,
+  /credential/i,
+  /^sig(nature)?$/i,
 ];
 
 const SENSITIVE_HEADERS: ReadonlySet<string> = new Set([
@@ -83,19 +86,269 @@ const INLINE_REDACTION_PATTERNS: ReadonlyArray<{ pattern: RegExp; replacement: s
   // Key-value password & secret patterns in JSON
   {
     pattern:
-      /("(?:password|pwd|secret|apiKey|api_key|access_token|refreshToken|refresh_token|token|privateKey|private_key)":\s*")[^"]+(")/gi,
+      /("(?:password|pwd|secret|apiKey|api_key|clientSecret|client_secret|access_token|accessToken|refreshToken|refresh_token|token|privateKey|private_key|sessionId|session_id|sess_id)":\s*")[^"]+(")/gi,
     replacement: '$1[REDACTED]$2',
   },
   // Key-value password & secret patterns in forms / query strings
   {
     pattern:
-      /((?:password|pwd|secret|apiKey|api_key|access_token|refreshToken|refresh_token|token|privateKey|private_key)\s*=\s*)[^\s&"'>]+/gi,
+      /((?:password|pwd|secret|apiKey|api_key|clientSecret|client_secret|access_token|accessToken|refreshToken|refresh_token|token|privateKey|private_key|sessionId|session_id|sess_id)\s*=\s*)[^\s&"'>]+/gi,
     replacement: '$1[REDACTED]',
   },
 ];
 
 /**
- * Redacts sensitive credentials, query parameters, and embedded path tokens from a URL string.
+ * Checks if a parameter name represents a sensitive credential, token, key, secret, or session identifier.
+ * Automatically decodes URL-encoding, strips punctuation, and normalizes casing.
+ */
+export function isSensitiveQueryKey(rawKey: string): boolean {
+  if (!rawKey || typeof rawKey !== 'string') return false;
+
+  let decoded = rawKey;
+  try {
+    decoded = decodeURIComponent(rawKey);
+  } catch {
+    // If percent-decoding fails, use rawKey
+  }
+
+  const norm = decoded.toLowerCase().replace(/[-_]/g, '');
+
+  // 1. Security tokens
+  if (norm.includes('token')) return true;
+
+  // 2. Secrets
+  if (norm.includes('secret')) return true;
+
+  // 3. Passwords and passphrases
+  if (
+    norm.includes('password') ||
+    norm.includes('passwd') ||
+    norm === 'pwd' ||
+    norm.endsWith('pwd')
+  ) {
+    return true;
+  }
+
+  // 4. API keys, private keys, access keys
+  if (
+    norm.includes('apikey') ||
+    norm.includes('secretkey') ||
+    norm.includes('privatekey') ||
+    norm.includes('accesskey') ||
+    norm.includes('authkey') ||
+    norm.includes('sessionkey') ||
+    norm === 'key'
+  ) {
+    return true;
+  }
+
+  // 5. Auth and OAuth
+  if (
+    norm === 'auth' ||
+    norm === 'oauth' ||
+    norm.includes('authorization') ||
+    norm.includes('authenticate') ||
+    norm.startsWith('oauth')
+  ) {
+    return true;
+  }
+
+  // 6. Session identifiers
+  if (
+    norm.startsWith('session') ||
+    norm.endsWith('session') ||
+    norm.includes('sessid') ||
+    norm === 'phpsessid' ||
+    norm === 'jsessionid' ||
+    norm === 'aspsessionid' ||
+    norm === 'sid'
+  ) {
+    return true;
+  }
+
+  // 7. JWT & Bearer
+  if (norm.includes('jwt') || norm.includes('bearer')) return true;
+
+  // 8. Payment & credit cards
+  if (
+    norm.includes('cardnumber') ||
+    norm.includes('creditcard') ||
+    norm === 'card' ||
+    norm === 'cvv' ||
+    norm === 'cc'
+  ) {
+    return true;
+  }
+
+  // 9. Signatures & hashes used for authentication
+  if (norm === 'sig' || norm.includes('signature')) return true;
+
+  // 10. Credentials
+  if (norm.includes('credential')) return true;
+
+  return false;
+}
+
+/**
+ * Sanitizes a parameter value to ensure embedded tokens or nested URLs are redacted.
+ */
+function sanitizeQueryParamValue(val: string): string {
+  if (!val || typeof val !== 'string') return val;
+
+  if (JWT_PATTERN.test(val)) return '[REDACTED_JWT]';
+  if (/^(?:sk_live_|sk_test_|ghp_|AIzaSy|xox[baprs]-)/.test(val)) return '[REDACTED_API_KEY]';
+
+  // Check if val contains a nested absolute or relative URL
+  if (
+    val.includes('http%3A') ||
+    val.includes('https%3A') ||
+    val.startsWith('http://') ||
+    val.startsWith('https://') ||
+    val.startsWith('//')
+  ) {
+    let decoded = val;
+    let wasEncoded = false;
+    try {
+      decoded = decodeURIComponent(val);
+      wasEncoded = decoded !== val;
+    } catch {
+      // Keep val if malformed
+    }
+    const redacted = redactUrl(decoded);
+    if (redacted !== decoded) {
+      const cleanRedacted = redacted.replace(/%5BREDACTED%5D/g, '[REDACTED]');
+      return wasEncoded ? encodeURIComponent(cleanRedacted) : cleanRedacted;
+    }
+  }
+
+  // Check if val has query parameters or fragments: e.g. /login?token=abc
+  if (val.includes('?') || val.includes('#')) {
+    const qIdx = val.indexOf('?');
+    const hIdx = val.indexOf('#');
+    const splitIdx = qIdx !== -1 ? qIdx : hIdx;
+    const base = val.slice(0, splitIdx);
+    const rest = val.slice(splitIdx);
+    const redactedRest = redactUrlFallback(rest);
+    if (redactedRest !== rest) {
+      return `${base}${redactedRest}`;
+    }
+  }
+
+  return val;
+}
+
+/**
+ * Redacts sensitive key-value pairs in a query string.
+ */
+function redactQueryString(qs: string): { modified: boolean; result: string } {
+  const parts = qs.split('&');
+  let modified = false;
+
+  const resultParts = parts.map(part => {
+    const eqIdx = part.indexOf('=');
+    if (eqIdx === -1) {
+      if (isSensitiveQueryKey(part)) {
+        modified = true;
+        return `${part}=[REDACTED]`;
+      }
+      return part;
+    }
+
+    const key = part.slice(0, eqIdx);
+    const val = part.slice(eqIdx + 1);
+
+    if (isSensitiveQueryKey(key)) {
+      modified = true;
+      return `${key}=[REDACTED]`;
+    }
+
+    const sanitizedVal = sanitizeQueryParamValue(val);
+    if (sanitizedVal !== val) {
+      modified = true;
+      return `${key}=${sanitizedVal}`;
+    }
+
+    return part;
+  });
+
+  return { modified, result: resultParts.join('&') };
+}
+
+/**
+ * Redacts sensitive credentials, tokens, or query strings inside URL fragments (hashes).
+ */
+function redactFragment(fragment: string): { modified: boolean; result: string } {
+  if (!fragment || fragment === '#') return { modified: false, result: fragment };
+
+  const rawContent = fragment.startsWith('#') ? fragment.slice(1) : fragment;
+
+  if (JWT_PATTERN.test(rawContent)) return { modified: true, result: '#[REDACTED_JWT]' };
+  if (/^(?:sk_live_|sk_test_|ghp_|AIzaSy|xox[baprs]-)/.test(rawContent)) {
+    return { modified: true, result: '#[REDACTED_API_KEY]' };
+  }
+
+  const queryIndex = rawContent.indexOf('?');
+  if (queryIndex !== -1) {
+    const routePart = rawContent.slice(0, queryIndex);
+    const queryPart = rawContent.slice(queryIndex + 1);
+    const { modified, result } = redactQueryString(queryPart);
+    if (modified) {
+      return { modified: true, result: `#${routePart}?${result}` };
+    }
+  }
+
+  if (rawContent.includes('=')) {
+    const { modified, result } = redactQueryString(rawContent);
+    if (modified) {
+      return { modified: true, result: `#${result}` };
+    }
+  }
+
+  return { modified: false, result: fragment };
+}
+
+/**
+ * Fallback regex-based redactor for malformed URLs, relative paths, or non-standard inputs.
+ */
+export function redactUrlFallback(rawUrl: string): string {
+  if (!rawUrl || typeof rawUrl !== 'string') return rawUrl;
+
+  let result = rawUrl;
+
+  // Redact credentials embedded in authority (e.g. http://user:pass@example.com)
+  result = result.replace(/(https?:\/\/)([^/@\s]+):([^/@\s]+)@/gi, '$1$2:[REDACTED]@');
+
+  // Redact query and fragment parameters matching sensitive keys
+  if (
+    result.includes('?') ||
+    result.includes('&') ||
+    result.includes('#') ||
+    result.includes(';')
+  ) {
+    result = result.replace(/([?&#;])([^=&#;\s]+)=([^&#;\s]*)/g, (match, prefix, key, val) => {
+      if (isSensitiveQueryKey(key)) {
+        return `${prefix}${key}=[REDACTED]`;
+      }
+      const sanitizedVal = sanitizeQueryParamValue(val);
+      if (sanitizedVal !== val) {
+        return `${prefix}${key}=${sanitizedVal}`;
+      }
+      return match;
+    });
+  }
+
+  // Redact standalone JWTs
+  result = result.replace(
+    /\beyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]+\b/g,
+    '[REDACTED_JWT]',
+  );
+
+  return result;
+}
+
+/**
+ * Redacts sensitive credentials, query parameters, embedded path tokens, and URL fragments.
+ * Preserves benign query parameters and keeps URL parsing safe and deterministic.
  */
 export function redactUrl(rawUrl: string): string {
   if (!rawUrl || typeof rawUrl !== 'string') {
@@ -112,12 +365,17 @@ export function redactUrl(rawUrl: string): string {
       modified = true;
     }
 
-    // 2. Redact sensitive query parameters
-    for (const [key] of parsed.searchParams) {
-      const isSensitive = SENSITIVE_QUERY_KEY_PATTERNS.some(pattern => pattern.test(key));
-      if (isSensitive) {
+    // 2. Redact sensitive query parameters and nested URLs in query values
+    for (const [key, val] of parsed.searchParams) {
+      if (isSensitiveQueryKey(key)) {
         parsed.searchParams.set(key, '[REDACTED]');
         modified = true;
+      } else if (val) {
+        const sanitizedVal = sanitizeQueryParamValue(val);
+        if (sanitizedVal !== val) {
+          parsed.searchParams.set(key, sanitizedVal);
+          modified = true;
+        }
       }
     }
 
@@ -148,15 +406,19 @@ export function redactUrl(rawUrl: string): string {
       modified = true;
     }
 
+    // 4. Redact sensitive credentials/tokens in URL hash / fragment
+    if (parsed.hash) {
+      const { modified: hashModified, result: redactedHash } = redactFragment(parsed.hash);
+      if (hashModified) {
+        parsed.hash = redactedHash;
+        modified = true;
+      }
+    }
+
     return modified ? parsed.toString() : rawUrl;
   } catch {
-    // If URL parsing fails, apply regex fallback for query parameters
-    let result = rawUrl;
-    for (const pattern of SENSITIVE_QUERY_KEY_PATTERNS) {
-      const regex = new RegExp(`([?&])(${pattern.source})=([^&\\s]+)`, 'gi');
-      result = result.replace(regex, '$1$2=[REDACTED]');
-    }
-    return result;
+    // If URL parsing fails, apply regex fallback for query parameters and fragments
+    return redactUrlFallback(rawUrl);
   }
 }
 

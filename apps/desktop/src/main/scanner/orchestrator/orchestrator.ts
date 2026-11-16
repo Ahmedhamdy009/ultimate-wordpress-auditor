@@ -226,11 +226,11 @@ export class ScanOrchestrator implements IScanOrchestrator {
       );
     }
 
-    // 6. Create record in SQLite (status: 'pending')
+    // 6. Create record in SQLite (status: 'pending') with sensitive credentials redacted
     return this.scanRunRepo.create({
       siteId: site.id,
       scanType: parsedRequest.scanType ?? 'full',
-      targetUrl: normalizedTarget.href,
+      targetUrl: redactUrl(normalizedTarget.href),
       config: configResult.data,
     });
   }

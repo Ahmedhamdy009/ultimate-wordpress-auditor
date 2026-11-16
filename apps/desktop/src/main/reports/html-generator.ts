@@ -1,4 +1,5 @@
 import {
+  CATEGORY_LABELS_I18N,
   classifyFindingConfidenceBucket,
   extractPerformanceSummary,
   FINDING_CATEGORY_FILTER_ORDER,
@@ -6,17 +7,22 @@ import {
   LABORATORY_CONTEXT_DISCLAIMER,
   normalizeFindingCategoryId,
   normalizeFindingLifecycleStatus,
+  resolveBilingualText,
+  type RecommendationViewModel,
+  type ReportLocale,
+  type ReportViewModel,
 } from '@auditor/shared';
-import type { ReportPresentationOptions } from './assembler.js';
+import { ensureReportViewModel, type ReportPresentationOptions } from './assembler.js';
+import { renderAuditChartsSection } from './chart-renderer.js';
+import { getStandaloneReportCss } from './html-styles.js';
+import { escapeHtml, redactSensitiveData, sanitizeUrl } from './security.js';
 import type { ReportModel } from './types.js';
-import { escapeHtml, sanitizeUrl, redactSensitiveData } from './security.js';
 import { getScreenshotEvidenceKey } from './visual-evidence.js';
 
 function formatDuration(ms: number | null): string {
   if (ms === null || ms === undefined || ms < 0) return 'N/A';
   if (ms < 1000) return `${ms}ms`;
-  const seconds = (ms / 1000).toFixed(1);
-  return `${seconds}s`;
+  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 function formatDate(iso: string | null): string {
@@ -28,21 +34,302 @@ function formatDate(iso: string | null): string {
   }
 }
 
+function renderVisualEvidenceBlock(
+  evObj: Record<string, unknown>,
+  model: ReportModel,
+  ruleId: string,
+  locale: ReportLocale,
+): string {
+  let html = '';
+  if (evObj.screenshot && typeof evObj.screenshot === 'object') {
+    const sc = evObj.screenshot as Record<string, unknown>;
+    const scKey = getScreenshotEvidenceKey(sc);
+    const visualEntry = scKey && model.visualEvidence ? model.visualEvidence[scKey] : undefined;
+    const viewport = String(sc.viewportProfile ?? sc.viewport ?? 'viewport');
+    const captureType = typeof sc.captureType === 'string' ? sc.captureType : null;
+    const captureStatus = typeof sc.status === 'string' ? sc.status : null;
+    const pageUrl = typeof sc.pageUrl === 'string' ? sc.pageUrl : null;
+    const width = Number(sc.width ?? 0);
+    const height = Number(sc.height ?? 0);
+    const kb = Math.round(Number(sc.fileSizeBytes ?? visualEntry?.byteLength ?? 0) / 1024);
+
+    const metaBits = [
+      `${viewport} (${width}x${height}px`,
+      `${kb} KB)`,
+      captureType ? `${locale === 'ar' ? 'النوع' : 'Type'}: ${captureType}` : null,
+      captureStatus ? `${locale === 'ar' ? 'الحالة' : 'Status'}: ${captureStatus}` : null,
+    ]
+      .filter(Boolean)
+      .join(' &bull; ');
+
+    const headerLabel = locale === 'ar' ? 'دليل بصري ملتقط:' : 'Visual Evidence Captured:';
+
+    html += `
+      <div class="visual-evidence-badge" style="margin-top: 8px; margin-bottom: 8px; padding: 6px 10px; background: rgba(56, 189, 248, 0.1); border-inline-start: 3px solid var(--accent); border-radius: 4px; font-size: 12px;">
+        &#128247; <strong>${escapeHtml(headerLabel)}</strong> ${escapeHtml(metaBits)}
+        ${pageUrl ? `<div class="font-mono" dir="ltr" style="font-size:11px; margin-top:2px;">${escapeHtml(String(redactSensitiveData(pageUrl)))}</div>` : ''}
+      </div>
+    `;
+
+    if (visualEntry?.embedded && visualEntry.dataUri) {
+      html += `
+        <figure class="visual-evidence-figure">
+          <img class="visual-evidence-img" src="${escapeHtml(visualEntry.dataUri)}" alt="Visual evidence screenshot (${escapeHtml(viewport)}) for ${escapeHtml(ruleId)}" />
+          <figcaption class="visual-evidence-caption" dir="ltr">${escapeHtml(visualEntry.fileName)} &bull; ${Math.round(visualEntry.byteLength / 1024)} KB</figcaption>
+        </figure>
+      `;
+    } else {
+      html += `
+        <div class="visual-evidence-fallback">
+          ${escapeHtml(visualEntry?.omittedReason ?? (locale === 'ar' ? 'المعاينة البصرية غير متاحة في هذا التصدير.' : 'Visual preview unavailable: screenshot image not bundled in this export.'))}
+        </div>
+      `;
+    }
+  }
+  return html;
+}
+
+function renderRecommendationsSection(
+  dualVm: ReportViewModel,
+  activeVm: ReportViewModel,
+): string {
+  const locale = activeVm.locale;
+  const heading = activeVm.labels.findingsAndRemediation;
+
+  if (dualVm.recommendations.length === 0) {
+    return `
+      <section class="section-card">
+        <h2 class="section-title">${escapeHtml(heading)}</h2>
+        <p class="text-muted">${escapeHtml(locale === 'ar' ? 'لا توجد توصيات إصلاح نشطة في هذا الفحص.' : 'No active actionable recommendations generated for this scan.')}</p>
+      </section>
+    `;
+  }
+
+  const cardsHtml = dualVm.recommendations
+    .map((rec: RecommendationViewModel, idx: number) => {
+      const sevClass = `sev-${(rec.severity === 'informational' ? 'info' : rec.severity).toLowerCase()}`;
+      const confBucket = classifyFindingConfidenceBucket(rec.originalConfidence);
+      const confClass =
+        confBucket === 'confirmed'
+          ? 'conf-confirmed'
+          : confBucket === 'firm'
+            ? 'conf-firm'
+            : 'conf-potential';
+
+      const simpleProblem = rec.problem.simpleText ?? rec.problem.primaryText;
+      const techProblem = rec.problem.technicalText ?? rec.problem.primaryText;
+      const simpleImpact = rec.impact.simpleText ?? rec.impact.primaryText;
+      const techImpact = rec.impact.technicalText ?? rec.impact.primaryText;
+
+      const confirmedList =
+        rec.confirmedCauses.length > 0
+          ? `<div class="finding-detail-section">
+               <h5 class="detail-label">${escapeHtml(activeVm.labels.confirmedCauses)}</h5>
+               <ul class="step-list">${rec.confirmedCauses.map(c => `<li>${escapeHtml(c)}</li>`).join('')}</ul>
+             </div>`
+          : '';
+
+      const possibleList =
+        rec.possibleCauses.length > 0
+          ? `<div class="finding-detail-section">
+               <h5 class="detail-label">${escapeHtml(activeVm.labels.possibleCauses)}</h5>
+               <ul class="step-list">${rec.possibleCauses.map(c => `<li>${escapeHtml(c)}</li>`).join('')}</ul>
+             </div>`
+          : '';
+
+      const stepsSimple = rec.remediationSteps
+        .map(s => `<li>${escapeHtml(s.text.simpleText ?? s.text.primaryText)}</li>`)
+        .join('');
+      const stepsTech = rec.remediationSteps
+        .map(s => `<li>${escapeHtml(s.text.technicalText ?? s.text.primaryText)}</li>`)
+        .join('');
+
+      const verifySimple = rec.verificationSteps
+        .map(s => `<li>${escapeHtml(s.text.simpleText ?? s.text.primaryText)}</li>`)
+        .join('');
+      const verifyTech = rec.verificationSteps
+        .map(s => `<li>${escapeHtml(s.text.technicalText ?? s.text.primaryText)}</li>`)
+        .join('');
+
+      const platformHtml =
+        rec.platformGuidance.length > 0
+          ? `<div class="finding-detail-section">
+               <h5 class="detail-label">${escapeHtml(activeVm.labels.platformSpecificGuidance)}</h5>
+               ${rec.platformGuidance
+                 .map(
+                   pg => `
+                   <div style="padding:10px; border:1px solid var(--border); border-radius:6px; margin-top:6px;">
+                     <strong>${escapeHtml(pg.platform.toUpperCase())}</strong>
+                     <div style="font-size:12px; color:var(--text-dim);">${escapeHtml(pg.evidenceReason)}</div>
+                     <p style="margin-top:4px;">${escapeHtml(pg.summary.simpleText ?? pg.summary.primaryText)}</p>
+                     <ul class="step-list">${pg.steps.map(st => `<li>${escapeHtml(st)}</li>`).join('')}</ul>
+                   </div>
+                 `,
+                 )
+                 .join('')}
+             </div>`
+          : '';
+
+      const codeHtml =
+        rec.codeExamples.length > 0
+          ? `<div class="finding-detail-section audience-technical">
+               <h5 class="detail-label">${escapeHtml(activeVm.labels.codeExampleLabel)}</h5>
+               ${rec.codeExamples
+                 .map(
+                   ex => `
+                   <div style="margin-top:6px;">
+                     <strong>${escapeHtml(ex.title)}</strong> <span class="badge">${escapeHtml(ex.language)}</span>
+                     <div style="font-size:11px; color:var(--text-dim);">${escapeHtml(ex.scopeDisclaimer)}</div>
+                     <pre class="code-block" dir="ltr"><code>${escapeHtml(ex.snippet)}</code></pre>
+                   </div>
+                 `,
+                 )
+                 .join('')}
+             </div>`
+          : '';
+
+      const urlsListHtml =
+        rec.exactLocation.urls.length > 0
+          ? `<ul class="step-list" dir="ltr">${rec.exactLocation.urls
+              .slice(0, 15)
+              .map(u => {
+                const safe = sanitizeUrl(u);
+                return safe !== '#'
+                  ? `<li><a class="text-accent font-mono" href="${safe}" target="_blank" rel="noopener noreferrer">${escapeHtml(u)}</a></li>`
+                  : `<li><code dir="ltr">${escapeHtml(u)}</code></li>`;
+              })
+              .join('')}</ul>`
+          : '';
+
+      const selectorsHtml =
+        rec.exactLocation.selectors.length > 0
+          ? `<div style="margin-top:6px;"><strong>${locale === 'ar' ? 'المحددات:' : 'Selectors:'}</strong> ${rec.exactLocation.selectors.slice(0, 10).map(s => `<code dir="ltr">${escapeHtml(s)}</code>`).join(', ')}</div>`
+          : '';
+
+      const rawEvidenceSnapshot = redactSensitiveData(rec.preservedOriginalFinding.preservedEvidence);
+      const rawEvidenceStr =
+        rawEvidenceSnapshot !== null && rawEvidenceSnapshot !== undefined
+          ? typeof rawEvidenceSnapshot === 'string'
+            ? rawEvidenceSnapshot
+            : JSON.stringify(rawEvidenceSnapshot, null, 2)
+          : '';
+
+      return `
+        <article class="rec-card ${sevClass}" id="rec-${idx + 1}">
+          <header class="finding-header">
+            <div class="finding-title-row">
+              <span class="finding-index" dir="ltr">#${idx + 1}</span>
+              <h3 class="finding-title">${escapeHtml(simpleProblem)}</h3>
+            </div>
+            <div class="finding-badges">
+              <span class="badge badge-sev ${sevClass}">${escapeHtml(rec.severityLabel)}</span>
+              <span class="badge badge-conf ${confClass}">${escapeHtml(rec.causeConfidenceLabel)}</span>
+              <span class="badge">${escapeHtml(rec.categoryLabel)}</span>
+              <span class="badge font-mono" dir="ltr">${escapeHtml(rec.ruleId)}</span>
+              <span class="badge" dir="ltr">${escapeHtml(activeVm.labels.occurrencesLabel)}: ${rec.occurrenceCount}</span>
+            </div>
+          </header>
+
+          <div class="finding-detail-section">
+            <h5 class="detail-label">${escapeHtml(activeVm.labels.affectedLocation)}</h5>
+            <p class="font-mono" dir="ltr" style="font-size:12px;">${escapeHtml(rec.exactLocation.summaryText)}</p>
+            ${urlsListHtml}
+            ${selectorsHtml}
+          </div>
+
+          <div class="audience-simple">
+            <div class="finding-detail-section">
+              <h5 class="detail-label">${escapeHtml(activeVm.labels.impactAnalysis)}</h5>
+              <p>${escapeHtml(simpleImpact)}</p>
+            </div>
+            <div class="finding-detail-section">
+              <h5 class="detail-label">${escapeHtml(activeVm.labels.remediationSteps)}</h5>
+              <ol class="step-list">${stepsSimple}</ol>
+            </div>
+            <div class="finding-detail-section">
+              <h5 class="detail-label">${escapeHtml(activeVm.labels.verificationSteps)}</h5>
+              <ol class="step-list">${verifySimple}</ol>
+            </div>
+          </div>
+
+          <div class="audience-technical">
+            <div class="finding-detail-section">
+              <h5 class="detail-label">${escapeHtml(activeVm.labels.problemSummary)} (${escapeHtml(activeVm.labels.viewModeTechnicalLabel)})</h5>
+              <p>${escapeHtml(techProblem)}</p>
+            </div>
+            <div class="finding-detail-section">
+              <h5 class="detail-label">${escapeHtml(activeVm.labels.impactAnalysis)}</h5>
+              <p>${escapeHtml(techImpact)}</p>
+            </div>
+            ${confirmedList}
+            ${possibleList}
+            <div class="finding-detail-section">
+              <h5 class="detail-label">${escapeHtml(activeVm.labels.remediationSteps)}</h5>
+              <ol class="step-list">${stepsTech}</ol>
+            </div>
+            ${codeHtml}
+            <div class="finding-detail-section">
+              <h5 class="detail-label">${escapeHtml(activeVm.labels.verificationSteps)}</h5>
+              <ol class="step-list">${verifyTech}</ol>
+            </div>
+            <details style="margin-top:10px;">
+              <summary style="cursor:pointer; color:var(--accent); font-weight:600; font-size:12px;">
+                ${escapeHtml(activeVm.labels.rawEvidenceLabel)} (Finding IDs: ${escapeHtml(rec.preservedOriginalFinding.findingIds.join(', ') || rec.ruleId)})
+              </summary>
+              <div style="margin-top:8px; font-size:12px;">
+                <p><strong>${escapeHtml(rec.preservedOriginalFinding.title)}</strong> &mdash; ${escapeHtml(rec.preservedOriginalFinding.description)}</p>
+                ${rawEvidenceStr ? `<pre class="evidence-block" dir="ltr"><code>${escapeHtml(rawEvidenceStr)}</code></pre>` : ''}
+              </div>
+            </details>
+          </div>
+
+          ${platformHtml}
+
+          <div class="finding-detail-section">
+            <h5 class="detail-label">${escapeHtml(activeVm.labels.knownLimitations)}</h5>
+            <ul class="step-list" style="font-size:12px; color:var(--text-muted);">
+              ${rec.limitations.map(lim => `<li>${escapeHtml(lim)}</li>`).join('')}
+            </ul>
+          </div>
+        </article>
+      `;
+    })
+    .join('\n');
+
+  return `
+    <section class="section-card" aria-label="${escapeHtml(heading)}">
+      <h2 class="section-title">${escapeHtml(heading)} (${dualVm.recommendations.length})</h2>
+      <p class="section-subtitle">${escapeHtml(activeVm.disclosures.readOnlyAuditNotice)}</p>
+      ${cardsHtml}
+    </section>
+  `;
+}
+
 /**
- * Generates a complete, professional, standalone HTML audit report.
- * Features:
- * - 100% self-contained: embedded CSS, zero external JS/fonts/trackers.
- * - Restrictive Content Security Policy (default-src 'none').
- * - Strict context-aware HTML escaping and safe URL protocol filtering.
- * - Deep secret redaction of sensitive credentials and headers in evidence.
- * - Prominent warning callouts for partial/failed/cancelled scan runs.
+ * Generates a complete, self-contained, bilingual, offline-capable HTML audit report.
+ * Powered exclusively by `@auditor/shared` via `ensureReportViewModel()`, preserving all
+ * strict CSP (`default-src 'none'; script-src 'none'`), XSS, URL, and secret redaction rules.
  */
 export function generateHtmlReport(
   model: ReportModel,
-  _options?: ReportPresentationOptions,
+  options?: ReportPresentationOptions,
 ): string {
-  const isFailedOrCancelled = model.summary.scanStatus === 'failed' || model.summary.scanStatus === 'cancelled';
-  const isPartialCoverage = !isFailedOrCancelled && Boolean(model.summary.isPartialCoverage || model.summary.coverageStatus === 'partial');
+  const activeVm = ensureReportViewModel(model, options);
+  const dualVm =
+    activeVm.viewMode === 'dual'
+      ? activeVm
+      : ensureReportViewModel(model, { locale: activeVm.locale, viewMode: 'dual' });
+
+  const locale: ReportLocale = activeVm.locale;
+  const isArabic = locale === 'ar';
+  const dirAttr = activeVm.direction;
+  const htmlOpenTag = isArabic ? '<html lang="ar" dir="rtl">' : '<html lang="en">';
+
+  const isFailedOrCancelled =
+    model.summary.scanStatus === 'failed' || model.summary.scanStatus === 'cancelled';
+  const isPartialCoverage =
+    !isFailedOrCancelled &&
+    Boolean(model.summary.isPartialCoverage || model.summary.coverageStatus === 'partial');
   const hasBrowserUnavailable = model.findings.some(f => f.ruleId === 'SYS_BROWSER_UNAVAILABLE');
   const statusUpper = model.summary.scanStatus.toUpperCase();
 
@@ -54,252 +341,237 @@ export function generateHtmlReport(
     ? model.summary.interruptedEngine.toUpperCase()
     : 'None';
 
-  // Findings list HTML
-  const findingsListHtml = model.findings.length === 0
-    ? `<div class="empty-findings">
-         <div class="empty-icon">&#10003;</div>
-         <h3>No Findings Detected</h3>
-         <p>The automated security and quality analyzers did not detect any issues within the scanned scope.</p>
-       </div>`
-    : model.findings.map((f, index) => {
-        const sevClass = `sev-${(f.severity === 'informational' ? 'info' : f.severity).toLowerCase()}`;
-        const confidenceBucket = classifyFindingConfidenceBucket(f.confidence);
-        const confText = confidenceBucket.toUpperCase();
-        const confClass =
-          confidenceBucket === 'confirmed'
-            ? 'conf-confirmed'
-            : confidenceBucket === 'firm'
-              ? 'conf-firm'
-              : 'conf-potential';
-        const statusBucket = normalizeFindingLifecycleStatus(f.status, f.confidence);
-        const statusLabel = statusBucket.replace(/_/g, ' ').toUpperCase();
-        const categoryLabel = getFindingCategoryLabel(f);
+  // Detailed raw findings cards (preserved verbatim + visual screenshot evidence)
+  const findingsListHtml =
+    model.findings.length === 0
+      ? `<div class="empty-findings">
+           <div class="empty-icon">&#10003;</div>
+           <h3>${isArabic ? 'لم تُرصد ملاحظات' : 'No Findings Detected'}</h3>
+           <p>${isArabic ? 'لم ترصد أدوات الفحص أي ملاحظات ضمن النطاق المفحوص.' : 'The automated security and quality analyzers did not detect any issues within the scanned scope.'}</p>
+         </div>`
+      : model.findings
+          .map((f, index) => {
+            const sevClass = `sev-${(f.severity === 'informational' ? 'info' : f.severity).toLowerCase()}`;
+            const confidenceBucket = classifyFindingConfidenceBucket(f.confidence);
+            const confText = confidenceBucket.toUpperCase();
+            const confClass =
+              confidenceBucket === 'confirmed'
+                ? 'conf-confirmed'
+                : confidenceBucket === 'firm'
+                  ? 'conf-firm'
+                  : 'conf-potential';
+            const statusBucket = normalizeFindingLifecycleStatus(f.status, f.confidence);
+            const statusLabel = statusBucket.replace(/_/g, ' ').toUpperCase();
+            const categoryId = normalizeFindingCategoryId({
+              category: f.category,
+              ruleId: f.ruleId,
+            });
+            const categoryLabel = isArabic
+              ? resolveBilingualText(
+                  CATEGORY_LABELS_I18N[categoryId],
+                  'ar',
+                  getFindingCategoryLabel(f),
+                ).text
+              : getFindingCategoryLabel(f);
 
-        // Redact evidence and format JSON/text
-        let evidenceHtml = '';
-        let causalityBadge = '';
-        let classificationBadge = '';
+            let evidenceHtml = '';
+            let causalityBadge = '';
+            let classificationBadge = '';
 
-        if (f.evidence !== null && f.evidence !== undefined) {
-          const redacted = redactSensitiveData(f.evidence);
-          const evidenceStr = typeof redacted === 'string'
-            ? redacted
-            : JSON.stringify(redacted, null, 2);
+            if (f.evidence !== null && f.evidence !== undefined) {
+              const redacted = redactSensitiveData(f.evidence);
+              const evidenceStr =
+                typeof redacted === 'string' ? redacted : JSON.stringify(redacted, null, 2);
 
-          let visualExtra = '';
-          let perfExtra = '';
+              let visualExtra = '';
+              let perfExtra = '';
 
-          if (typeof redacted === 'object' && redacted !== null) {
-            const evObj = redacted as Record<string, unknown>;
+              if (typeof redacted === 'object' && redacted !== null) {
+                const evObj = redacted as Record<string, unknown>;
 
-            // Performance Causality & Classification Badges
-            if (evObj.causality === 'causal') {
-              causalityBadge =
-                '<span class="badge badge-causal">CAUSAL (PROVEN CAUSE)</span>';
-            } else if (evObj.causality === 'correlational') {
-              causalityBadge =
-                '<span class="badge badge-correlational">CORRELATIONAL (ASSOCIATED FACTOR)</span>';
-            }
-
-            if (typeof evObj.classification === 'string') {
-              classificationBadge = `<span class="badge badge-bottleneck">BOTTLENECK: ${escapeHtml(evObj.classification)}</span>`;
-            }
-
-            // Metric comparison box
-            let observedValStr = '';
-            if (evObj.observedValue !== undefined && evObj.observedValue !== null) {
-              observedValStr = `${evObj.observedValue}${evObj.unit ? ` ${evObj.unit}` : ''}`;
-            } else if (typeof evObj.observedValueMs === 'number') {
-              observedValStr = `${evObj.observedValueMs} ms`;
-            }
-
-            let thresholdValStr = '';
-            if (evObj.thresholdValue !== undefined && evObj.thresholdValue !== null) {
-              thresholdValStr = `${evObj.thresholdValue}${evObj.unit ? ` ${evObj.unit}` : ''}`;
-            } else if (typeof evObj.thresholdMs === 'number') {
-              thresholdValStr = `${evObj.thresholdMs} ms`;
-            } else if (evObj.threshold !== undefined && evObj.threshold !== null) {
-              thresholdValStr = String(evObj.threshold);
-            }
-
-            if (observedValStr && thresholdValStr) {
-              perfExtra += `
-                <div class="metric-comparison-box">
-                  <span class="metric-comp-label">Observed Metric:</span> <strong>${escapeHtml(observedValStr)}</strong> &bull;
-                  <span class="metric-comp-label">Target Budget:</span> <strong>${escapeHtml(thresholdValStr)}</strong>
-                </div>
-              `;
-            }
-
-            if (typeof evObj.inferenceRationale === 'string') {
-              perfExtra += `
-                <div class="inference-rationale-box">
-                  <strong>Inference Rationale:</strong> ${escapeHtml(evObj.inferenceRationale)}
-                </div>
-              `;
-            }
-
-            const limNotice = evObj.limitationsNotice ?? evObj.limitationNotice;
-            if (typeof limNotice === 'string') {
-              perfExtra += `
-                <div class="limitations-box">
-                  <h5 class="detail-label">&#9888; Measurement Limitations</h5>
-                  <p>${escapeHtml(limNotice)}</p>
-                </div>
-              `;
-            }
-
-            // Affected resources list if present
-            const resourcesList = Array.isArray(evObj.resources)
-              ? evObj.resources
-              : Array.isArray(evObj.renderBlockingResources)
-                ? evObj.renderBlockingResources
-                : Array.isArray(evObj.uncompressedAssets)
-                  ? evObj.uncompressedAssets
-                  : Array.isArray(evObj.oversizedImages)
-                    ? evObj.oversizedImages
-                    : null;
-
-            if (resourcesList && resourcesList.length > 0) {
-              const items = resourcesList
-                .slice(0, 10)
-                .map((r: unknown) => {
-                  if (typeof r === 'object' && r !== null) {
-                    const resObj = r as Record<string, unknown>;
-                    const u = String(resObj.url ?? resObj.currentSrc ?? resObj.targetUrl ?? '');
-                    const size =
-                      typeof resObj.transferSizeBytes === 'number'
-                        ? `(${Math.round(resObj.transferSizeBytes / 1024)} KB)`
-                        : '';
-                    return `<li><code>${escapeHtml(u)}</code> ${size}</li>`;
-                  }
-                  return `<li><code>${escapeHtml(String(r))}</code></li>`;
-                })
-                .join('');
-              perfExtra += `
-                <div class="affected-resources-box">
-                  <h5 class="detail-label">&#128196; Affected Resources (${resourcesList.length}${resourcesList.length > 10 ? ', showing top 10' : ''})</h5>
-                  <ul class="affected-resources-list">${items}</ul>
-                </div>
-              `;
-            }
-
-            if (evObj.screenshot && typeof evObj.screenshot === 'object') {
-              const sc = evObj.screenshot as Record<string, unknown>;
-              const scKey = getScreenshotEvidenceKey(sc);
-              const visualEntry =
-                scKey && model.visualEvidence ? model.visualEvidence[scKey] : undefined;
-              visualExtra += `
-                <div class="visual-evidence-badge" style="margin-bottom: 8px; padding: 6px 10px; background: rgba(56, 189, 248, 0.1); border-left: 3px solid var(--accent); border-radius: 4px; font-size: 12px;">
-                  &#128247; <strong>Visual Evidence Captured:</strong> ${escapeHtml(String(sc.viewportProfile ?? 'viewport'))} (${sc.width ?? 0}x${sc.height ?? 0}px &bull; ${Math.round(Number(sc.fileSizeBytes ?? 0) / 1024)} KB)
-                </div>
-              `;
-              if (visualEntry?.embedded && visualEntry.dataUri) {
-                visualExtra += `
-                  <figure class="visual-evidence-figure">
-                    <img class="visual-evidence-img" src="${escapeHtml(visualEntry.dataUri)}" alt="Visual evidence screenshot (${escapeHtml(String(sc.viewportProfile ?? 'viewport'))}) for ${escapeHtml(f.ruleId)}" />
-                    <figcaption class="visual-evidence-caption">${escapeHtml(visualEntry.fileName)} &bull; ${Math.round(visualEntry.byteLength / 1024)} KB</figcaption>
-                  </figure>
-                `;
-              } else {
-                visualExtra += `
-                  <div class="visual-evidence-fallback">
-                    ${escapeHtml(visualEntry?.omittedReason ?? 'Visual preview unavailable: screenshot image not bundled in this export.')}
-                  </div>
-                `;
-              }
-            }
-            if (typeof evObj.selectorNotice === 'string') {
-              visualExtra += `
-                <div class="selector-notice-badge font-mono" style="margin-bottom: 8px; padding: 4px 8px; background: rgba(148, 163, 184, 0.1); border-radius: 4px; font-size: 11px; color: var(--text-muted);">
-                  &#128274; ${escapeHtml(evObj.selectorNotice)}
-                </div>
-              `;
-            }
-          }
-
-          evidenceHtml = `
-            <div class="finding-detail-section">
-              <h5 class="detail-label">Observed Evidence</h5>
-              ${perfExtra}
-              ${visualExtra}
-              <pre class="evidence-block"><code>${escapeHtml(evidenceStr)}</code></pre>
-            </div>
-          `;
-        }
-
-        let remediationHtml = '';
-        if (f.remediation) {
-          remediationHtml = `
-            <div class="finding-detail-section remediation-box">
-              <h5 class="detail-label">&#9881; Remediation Guidance</h5>
-              <p>${escapeHtml(f.remediation)}</p>
-            </div>
-          `;
-        }
-
-        let referencesHtml = '';
-        if (f.references && Array.isArray(f.references) && f.references.length > 0) {
-          const links = f.references.map(ref => {
-            const safe = sanitizeUrl(ref);
-            if (safe === '#') {
-              return `<li><code>${escapeHtml(ref)}</code></li>`;
-            }
-            return `<li><a href="${safe}" target="_blank" rel="noopener noreferrer">${escapeHtml(ref)}</a></li>`;
-          }).join('\n');
-          referencesHtml = `
-            <div class="finding-detail-section">
-              <h5 class="detail-label">References</h5>
-              <ul class="references-list">${links}</ul>
-            </div>
-          `;
-        }
-
-        const safeTargetUrl = sanitizeUrl(f.targetUrl);
-
-        return `
-          <article class="finding-card ${sevClass}" id="finding-${index + 1}">
-            <header class="finding-header">
-              <div class="finding-title-row">
-                <span class="finding-index">#${index + 1}</span>
-                <h4 class="finding-title">${escapeHtml(f.title)}</h4>
-              </div>
-              <div class="finding-badges">
-                <span class="badge badge-sev ${sevClass}">${escapeHtml(f.severity.toUpperCase())}</span>
-                ${
-                  f.status === 'needs_manual_review' || f.ruleId.startsWith('a11y-review-')
-                    ? '<span class="badge badge-conf" style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.4); font-weight: 600;">MANUAL REVIEW REQUIRED</span>'
-                    : `<span class="badge badge-conf ${confClass}">${escapeHtml(confText)}</span>`
+                if (evObj.causality === 'causal') {
+                  causalityBadge =
+                    '<span class="badge badge-causal">CAUSAL (PROVEN CAUSE)</span>';
+                } else if (evObj.causality === 'correlational') {
+                  causalityBadge =
+                    '<span class="badge badge-correlational">CORRELATIONAL (ASSOCIATED FACTOR)</span>';
                 }
-                <span class="badge badge-status status-${escapeHtml(statusBucket)}">${escapeHtml(statusLabel)}</span>
-                <span class="badge badge-cat">${escapeHtml(categoryLabel)}</span>
-                <span class="badge badge-rule">Rule: ${escapeHtml(f.ruleId)}</span>
-                ${causalityBadge}
-                ${classificationBadge}
-              </div>
-            </header>
-            <div class="finding-body">
-              <div class="finding-detail-section">
-                <h5 class="detail-label">Affected Target URL</h5>
-                <div class="target-url-container">
-                  ${safeTargetUrl !== '#'
-                    ? `<a href="${safeTargetUrl}" class="target-url" target="_blank" rel="noopener noreferrer">${escapeHtml(f.targetUrl)}</a>`
-                    : `<span class="target-url">${escapeHtml(f.targetUrl)}</span>`}
-                </div>
-              </div>
-              <div class="finding-detail-section">
-                <h5 class="detail-label">Description</h5>
-                <p class="finding-description">${escapeHtml(f.description)}</p>
-              </div>
-              ${evidenceHtml}
-              ${remediationHtml}
-              ${referencesHtml}
-            </div>
-          </article>
-        `;
-      }).join('\n');
 
-  // Category breakdown rows in canonical deterministic order without cross-domain overlap
+                if (typeof evObj.classification === 'string') {
+                  classificationBadge = `<span class="badge badge-bottleneck">BOTTLENECK: ${escapeHtml(evObj.classification)}</span>`;
+                }
+
+                let observedValStr = '';
+                if (evObj.observedValue !== undefined && evObj.observedValue !== null) {
+                  observedValStr = `${evObj.observedValue}${evObj.unit ? ` ${evObj.unit}` : ''}`;
+                } else if (typeof evObj.observedValueMs === 'number') {
+                  observedValStr = `${evObj.observedValueMs} ms`;
+                }
+
+                let thresholdValStr = '';
+                if (evObj.thresholdValue !== undefined && evObj.thresholdValue !== null) {
+                  thresholdValStr = `${evObj.thresholdValue}${evObj.unit ? ` ${evObj.unit}` : ''}`;
+                } else if (typeof evObj.thresholdMs === 'number') {
+                  thresholdValStr = `${evObj.thresholdMs} ms`;
+                } else if (evObj.threshold !== undefined && evObj.threshold !== null) {
+                  thresholdValStr = String(evObj.threshold);
+                }
+
+                if (observedValStr && thresholdValStr) {
+                  perfExtra += `
+                    <div class="metric-comparison-box">
+                      <span class="metric-comp-label">Observed Metric:</span> <strong dir="ltr">${escapeHtml(observedValStr)}</strong> &bull;
+                      <span class="metric-comp-label">Target Budget:</span> <strong dir="ltr">${escapeHtml(thresholdValStr)}</strong>
+                    </div>
+                  `;
+                }
+
+                if (typeof evObj.inferenceRationale === 'string') {
+                  perfExtra += `
+                    <div class="inference-rationale-box">
+                      <strong>Inference Rationale:</strong> ${escapeHtml(evObj.inferenceRationale)}
+                    </div>
+                  `;
+                }
+
+                const limNotice = evObj.limitationsNotice ?? evObj.limitationNotice;
+                if (typeof limNotice === 'string') {
+                  perfExtra += `
+                    <div class="limitations-box">
+                      <h5 class="detail-label">&#9888; Measurement Limitations</h5>
+                      <p>${escapeHtml(limNotice)}</p>
+                    </div>
+                  `;
+                }
+
+                const resourcesList = Array.isArray(evObj.resources)
+                  ? evObj.resources
+                  : Array.isArray(evObj.renderBlockingResources)
+                    ? evObj.renderBlockingResources
+                    : Array.isArray(evObj.uncompressedAssets)
+                      ? evObj.uncompressedAssets
+                      : Array.isArray(evObj.oversizedImages)
+                        ? evObj.oversizedImages
+                        : null;
+
+                if (resourcesList && resourcesList.length > 0) {
+                  const items = resourcesList
+                    .slice(0, 10)
+                    .map((r: unknown) => {
+                      if (typeof r === 'object' && r !== null) {
+                        const resObj = r as Record<string, unknown>;
+                        const u = String(resObj.url ?? resObj.currentSrc ?? resObj.targetUrl ?? '');
+                        const size =
+                          typeof resObj.transferSizeBytes === 'number'
+                            ? `(${Math.round(resObj.transferSizeBytes / 1024)} KB)`
+                            : '';
+                        return `<li><code dir="ltr">${escapeHtml(u)}</code> ${size}</li>`;
+                      }
+                      return `<li><code dir="ltr">${escapeHtml(String(r))}</code></li>`;
+                    })
+                    .join('');
+                  perfExtra += `
+                    <div class="affected-resources-box">
+                      <h5 class="detail-label">&#128196; Affected Resources (${resourcesList.length}${resourcesList.length > 10 ? ', showing top 10' : ''})</h5>
+                      <ul class="step-list">${items}</ul>
+                    </div>
+                  `;
+                }
+
+                visualExtra += renderVisualEvidenceBlock(evObj, model, f.ruleId, locale);
+
+                if (typeof evObj.selectorNotice === 'string') {
+                  visualExtra += `
+                    <div class="selector-notice-badge font-mono" style="margin-bottom: 8px; padding: 4px 8px; background: rgba(148, 163, 184, 0.1); border-radius: 4px; font-size: 11px; color: var(--text-muted);">
+                      &#128274; ${escapeHtml(evObj.selectorNotice)}
+                    </div>
+                  `;
+                }
+              }
+
+              evidenceHtml = `
+                <div class="finding-detail-section">
+                  <h5 class="detail-label">${isArabic ? 'الأدلة المرصودة' : 'Observed Evidence'}</h5>
+                  ${perfExtra}
+                  ${visualExtra}
+                  <pre class="evidence-block" dir="ltr"><code>${escapeHtml(evidenceStr)}</code></pre>
+                </div>
+              `;
+            }
+
+            const remediationHtml = f.remediation
+              ? `<div class="finding-detail-section remediation-box">
+                   <h5 class="detail-label">&#9881; ${isArabic ? 'إرشاد المعالجة المرفق' : 'Remediation Guidance'}</h5>
+                   <p>${escapeHtml(f.remediation)}</p>
+                 </div>`
+              : '';
+
+            let referencesHtml = '';
+            if (f.references && Array.isArray(f.references) && f.references.length > 0) {
+              const links = f.references
+                .map(ref => {
+                  const safe = sanitizeUrl(ref);
+                  return safe === '#'
+                    ? `<li><code dir="ltr">${escapeHtml(ref)}</code></li>`
+                    : `<li><a href="${safe}" class="text-accent" dir="ltr" target="_blank" rel="noopener noreferrer">${escapeHtml(ref)}</a></li>`;
+                })
+                .join('\n');
+              referencesHtml = `
+                <div class="finding-detail-section">
+                  <h5 class="detail-label">${escapeHtml(activeVm.labels.referencesLabel)}</h5>
+                  <ul class="step-list">${links}</ul>
+                </div>
+              `;
+            }
+
+            const safeTargetUrl = sanitizeUrl(f.targetUrl);
+
+            return `
+              <article class="finding-card ${sevClass}" id="finding-${index + 1}">
+                <header class="finding-header">
+                  <div class="finding-title-row">
+                    <span class="finding-index" dir="ltr">#${index + 1}</span>
+                    <h4 class="finding-title">${escapeHtml(f.title)}</h4>
+                  </div>
+                  <div class="finding-badges">
+                    <span class="badge badge-sev ${sevClass}">${escapeHtml(f.severity.toUpperCase())}</span>
+                    ${
+                      f.status === 'needs_manual_review' || f.ruleId.startsWith('a11y-review-')
+                        ? '<span class="badge badge-conf" style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.4); font-weight: 600;">MANUAL REVIEW REQUIRED</span>'
+                        : `<span class="badge badge-conf ${confClass}">${escapeHtml(confText)}</span>`
+                    }
+                    <span class="badge badge-status status-${escapeHtml(statusBucket)}">${escapeHtml(statusLabel)}</span>
+                    <span class="badge badge-cat">${escapeHtml(categoryLabel)}</span>
+                    <span class="badge badge-rule font-mono" dir="ltr">Rule: ${escapeHtml(f.ruleId)}</span>
+                    ${causalityBadge}
+                    ${classificationBadge}
+                  </div>
+                </header>
+                <div class="finding-body">
+                  <div class="finding-detail-section">
+                    <h5 class="detail-label">${isArabic ? 'الرابط المستهدف' : 'Affected Target URL'}</h5>
+                    <div class="target-url-container" dir="ltr">
+                      ${
+                        safeTargetUrl !== '#'
+                          ? `<a href="${safeTargetUrl}" class="target-url text-accent font-mono" target="_blank" rel="noopener noreferrer">${escapeHtml(f.targetUrl)}</a>`
+                          : `<span class="target-url font-mono">${escapeHtml(f.targetUrl)}</span>`
+                      }
+                    </div>
+                  </div>
+                  <div class="finding-detail-section">
+                    <h5 class="detail-label">${isArabic ? 'الوصف' : 'Description'}</h5>
+                    <p class="finding-description">${escapeHtml(f.description)}</p>
+                  </div>
+                  ${evidenceHtml}
+                  ${remediationHtml}
+                  ${referencesHtml}
+                </div>
+              </article>
+            `;
+          })
+          .join('\n');
+
+  // Category breakdown rows
   const normalizedCategoryCounts = new Map<string, number>();
   for (const [rawCat, count] of Object.entries(model.summary.byCategory)) {
     const canonicalCat = normalizeFindingCategoryId({ category: rawCat });
@@ -309,69 +581,73 @@ export function generateHtmlReport(
   const categoryEntries = Array.from(normalizedCategoryCounts.entries()).sort(([a], [b]) => {
     const idxA = orderedCategoryIds.indexOf(a as (typeof orderedCategoryIds)[number]);
     const idxB = orderedCategoryIds.indexOf(b as (typeof orderedCategoryIds)[number]);
-    return (idxA === -1 ? Number.MAX_SAFE_INTEGER : idxA) - (idxB === -1 ? Number.MAX_SAFE_INTEGER : idxB);
+    return (
+      (idxA === -1 ? Number.MAX_SAFE_INTEGER : idxA) -
+      (idxB === -1 ? Number.MAX_SAFE_INTEGER : idxB)
+    );
   });
-  const categoryHtml = categoryEntries.length === 0
-    ? '<tr><td colspan="2" class="text-muted">No findings</td></tr>'
-    : categoryEntries.map(([cat, count]) => `
-        <tr>
-          <td class="cat-name">${escapeHtml(getFindingCategoryLabel(cat))}</td>
-          <td class="cat-count font-mono">${count}</td>
-        </tr>
-      `).join('\n');
+  const categoryHtml =
+    categoryEntries.length === 0
+      ? `<tr><td colspan="2" class="text-muted">${isArabic ? 'لا توجد ملاحظات' : 'No findings'}</td></tr>`
+      : categoryEntries
+          .map(([cat, count]) => {
+            const catName = isArabic
+              ? resolveBilingualText(
+                  CATEGORY_LABELS_I18N[cat],
+                  'ar',
+                  getFindingCategoryLabel(cat),
+                ).text
+              : getFindingCategoryLabel(cat);
+            return `
+              <tr>
+                <td class="cat-name">${escapeHtml(catName)}</td>
+                <td class="cat-count font-mono" dir="ltr">${count}</td>
+              </tr>
+            `;
+          })
+          .join('\n');
 
-  // Consolidated findings section HTML
+  // Consolidated findings HTML
   let consolidatedHtml = '';
   if (model.consolidatedFindings && model.consolidatedFindings.length > 0) {
     const multiOccurrence = model.consolidatedFindings.filter(g => g.totalOccurrences > 1);
     consolidatedHtml = `
-    <!-- Consolidated Findings Summary -->
-    <section class="section-card">
-      <h2 class="section-title">Consolidated Issue Groups (${model.consolidatedFindings.length} Groups, ${multiOccurrence.length} Repeated/Shared)</h2>
-      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
-        Repeated findings with matching selectors, structural signatures, or shared templates are consolidated below to highlight root causes. Individual finding records and per-page evidence remain fully detailed in the section below.
-      </p>
-      <div style="display: grid; gap: 10px;">
-        ${model.consolidatedFindings.map(cf => {
-          const sevClass = `sev-${(cf.severity === 'informational' ? 'info' : cf.severity).toLowerCase()}`;
-          const groupBadge = cf.groupType === 'shared_template_component'
-            ? '<span class="status-pill" style="background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: 600;">SHARED TEMPLATE COMPONENT</span>'
-            : cf.groupType === 'repeated_issue'
-              ? '<span class="status-pill" style="background: rgba(148, 163, 184, 0.15); color: var(--text-muted); border: 1px solid rgba(148, 163, 184, 0.3); font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: 600;">REPEATED PATTERN</span>'
-              : '<span class="status-pill" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 11px; padding: 2px 6px; border-radius: 4px;">SINGLE OCCURRENCE</span>';
-
-          return `
-            <div class="finding-card ${sevClass}" style="margin-bottom: 6px; padding: 12px 16px;">
-              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px;">
-                <span class="badge badge-sev ${sevClass}">${escapeHtml(cf.severity.toUpperCase())}</span>
-                ${groupBadge}
-                <span class="badge badge-rule">Rule: ${escapeHtml(cf.ruleId)}</span>
-                <span style="font-size: 12px; font-weight: 600; color: var(--accent); margin-left: auto;">
-                  ${cf.totalOccurrences} occurrences across ${cf.affectedUrls.length} page(s)
-                </span>
-              </div>
-              <h4 class="finding-title" style="margin: 4px 0 6px 0; font-size: 14px;">${escapeHtml(cf.title)}</h4>
-              <p class="finding-desc" style="font-size: 13px; margin-bottom: 6px;">${escapeHtml(cf.description)}</p>
-              ${cf.selector ? `<p class="font-mono" style="font-size: 11px; background: rgba(0,0,0,0.15); padding: 4px 8px; border-radius: 4px; margin: 4px 0; word-break: break-all;"><strong>Locator:</strong> ${escapeHtml(cf.selector)}</p>` : ''}
-              ${cf.groupReason ? `<p style="font-size: 12px; color: var(--text-muted); font-style: italic; margin-bottom: 6px;">${escapeHtml(cf.groupReason)}</p>` : ''}
-              <details style="margin-top: 6px; font-size: 12px;">
-                <summary style="cursor: pointer; color: var(--accent); font-weight: 500;">View Affected URLs (${cf.affectedUrls.length})</summary>
-                <ul style="margin: 6px 0 6px 20px;">
-                  ${cf.affectedUrls.map(u => `<li><span class="font-mono">${escapeHtml(u)}</span></li>`).join('')}
-                </ul>
-              </details>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    </section>
+      <section class="section-card audience-technical">
+        <h2 class="section-title">${isArabic ? 'المجموعات المجمّعة للملاحظات' : 'Consolidated Issue Groups'} (${model.consolidatedFindings.length} Groups, ${multiOccurrence.length} Repeated/Shared)</h2>
+        <div style="display: grid; gap: 10px;">
+          ${model.consolidatedFindings
+            .map(cf => {
+              const sevClass = `sev-${(cf.severity === 'informational' ? 'info' : cf.severity).toLowerCase()}`;
+              return `
+                <div class="finding-card ${sevClass}" style="margin-bottom: 6px; padding: 12px 16px;">
+                  <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px;">
+                    <span class="badge badge-sev ${sevClass}">${escapeHtml(cf.severity.toUpperCase())}</span>
+                    <span class="badge badge-rule font-mono" dir="ltr">Rule: ${escapeHtml(cf.ruleId)}</span>
+                    <span dir="ltr" style="font-size: 12px; font-weight: 600; color: var(--accent);">
+                      ${cf.totalOccurrences} occurrences across ${cf.affectedUrls.length} page(s)
+                    </span>
+                  </div>
+                  <h4 class="finding-title" style="margin: 4px 0 6px 0; font-size: 14px;">${escapeHtml(cf.title)}</h4>
+                  <p class="finding-desc" style="font-size: 13px; margin-bottom: 6px;">${escapeHtml(cf.description)}</p>
+                  ${cf.selector ? `<p class="font-mono" dir="ltr" style="font-size: 11px; padding: 4px 8px; border-radius: 4px; margin: 4px 0;"><strong>Locator:</strong> ${escapeHtml(cf.selector)}</p>` : ''}
+                  <details style="margin-top: 6px; font-size: 12px;">
+                    <summary style="cursor: pointer; color: var(--accent); font-weight: 500;">${escapeHtml(activeVm.labels.affectedUrls)} (${cf.affectedUrls.length})</summary>
+                    <ul class="step-list" dir="ltr">
+                      ${cf.affectedUrls.map(u => `<li><span class="font-mono">${escapeHtml(u)}</span></li>`).join('')}
+                    </ul>
+                  </details>
+                </div>
+              `;
+            })
+            .join('')}
+        </div>
+      </section>
     `;
   }
 
-  // Laboratory Performance Diagnostics & Web Vitals Section
+  // Laboratory Performance Section (preserved cleanly when performance metrics exist; omitted when absent on historical scans)
   const perfSummary = extractPerformanceSummary(model.summary.performanceMetrics, model.findings);
   let performanceSectionHtml = '';
-
   if (perfSummary) {
     const vitalsList = [
       perfSummary.ttfb,
@@ -380,7 +656,6 @@ export function generateHtmlReport(
       perfSummary.cls,
       perfSummary.tbt,
     ];
-
     const vitalsCardsHtml = vitalsList
       .map(v => {
         const ratingClass = `rating-${v.rating.replace(/_/g, '-')}`;
@@ -392,19 +667,18 @@ export function generateHtmlReport(
               ? v.value.toFixed(3)
               : `${Math.round(v.value)} ${v.unit}`
             : 'Unavailable';
-
         return `
-        <div class="perf-metric-tile ${ratingClass}">
-          <div class="perf-metric-top">
-            <span class="perf-metric-label">${escapeHtml(v.label)}</span>
-            <span class="badge badge-rating ${ratingClass}">${escapeHtml(ratingLabel)}</span>
+          <div class="perf-metric-tile ${ratingClass}">
+            <div class="perf-metric-top">
+              <span class="perf-metric-label" dir="ltr">${escapeHtml(v.label)}</span>
+              <span class="badge badge-rating ${ratingClass}">${escapeHtml(ratingLabel)}</span>
+            </div>
+            <div class="perf-metric-value font-mono" dir="ltr">${escapeHtml(valStr)}</div>
+            <div class="perf-metric-target font-mono" dir="ltr">Target: ${escapeHtml(v.targetLabel)}</div>
+            ${v.name === 'lcp' && v.isCapped ? '<div class="perf-metric-capped">&#9888; Capped by 5,000ms deadline ceiling</div>' : ''}
+            ${v.limitationNotice ? `<div class="perf-metric-limitation">${escapeHtml(v.limitationNotice)}</div>` : ''}
           </div>
-          <div class="perf-metric-value font-mono">${escapeHtml(valStr)}</div>
-          <div class="perf-metric-target font-mono">Target: ${escapeHtml(v.targetLabel)}</div>
-          ${v.name === 'lcp' && v.isCapped ? '<div class="perf-metric-capped">&#9888; Capped by 5,000ms deadline ceiling</div>' : ''}
-          ${v.limitationNotice ? `<div class="perf-metric-limitation">${escapeHtml(v.limitationNotice)}</div>` : ''}
-        </div>
-      `;
+        `;
       })
       .join('\n');
 
@@ -419,26 +693,11 @@ export function generateHtmlReport(
         <div class="perf-resources-summary">
           <h3 class="meta-label" style="margin-bottom: 8px;">Page Resource Metrics</h3>
           <div class="perf-resources-grid">
-            <div class="perf-resource-stat">
-              <span class="perf-stat-label">Total Transferred</span>
-              <span class="perf-stat-val font-mono">${transferKb}</span>
-            </div>
-            <div class="perf-resource-stat">
-              <span class="perf-stat-label">Render-Blocking</span>
-              <span class="perf-stat-val font-mono">${res.renderBlockingCount ?? 0}</span>
-            </div>
-            <div class="perf-resource-stat">
-              <span class="perf-stat-label">Scripts / Stylesheets</span>
-              <span class="perf-stat-val font-mono">${res.scriptsCount ?? 0} / ${res.stylesheetsCount ?? 0}</span>
-            </div>
-            <div class="perf-resource-stat">
-              <span class="perf-stat-label">Images (Oversized)</span>
-              <span class="perf-stat-val font-mono">${res.imagesCount ?? 0} (${res.oversizedImagesCount ?? 0} oversized)</span>
-            </div>
-            <div class="perf-resource-stat">
-              <span class="perf-stat-label">Uncompressed Assets</span>
-              <span class="perf-stat-val font-mono">${res.uncompressedAssetsCount ?? 0}</span>
-            </div>
+            <div class="perf-resource-stat"><span class="perf-stat-label">Total Transferred</span><span class="perf-stat-val font-mono" dir="ltr">${transferKb}</span></div>
+            <div class="perf-resource-stat"><span class="perf-stat-label">Render-Blocking</span><span class="perf-stat-val font-mono" dir="ltr">${res.renderBlockingCount ?? 0}</span></div>
+            <div class="perf-resource-stat"><span class="perf-stat-label">Scripts / Stylesheets</span><span class="perf-stat-val font-mono" dir="ltr">${res.scriptsCount ?? 0} / ${res.stylesheetsCount ?? 0}</span></div>
+            <div class="perf-resource-stat"><span class="perf-stat-label">Images (Oversized)</span><span class="perf-stat-val font-mono" dir="ltr">${res.imagesCount ?? 0} (${res.oversizedImagesCount ?? 0} oversized)</span></div>
+            <div class="perf-resource-stat"><span class="perf-stat-label">Uncompressed Assets</span><span class="perf-stat-val font-mono" dir="ltr">${res.uncompressedAssetsCount ?? 0}</span></div>
           </div>
         </div>
       `;
@@ -458,18 +717,18 @@ export function generateHtmlReport(
                     ? 'CAUSAL (PROVEN CAUSE)'
                     : 'CORRELATIONAL (ASSOCIATED FACTOR)';
                 return `
-                <div class="perf-bottleneck-card">
-                  <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 4px;">
-                    <span class="badge badge-bottleneck">${escapeHtml(b.classification)}</span>
-                    <span class="badge badge-${causalityClass}">${escapeHtml(causalityText)}</span>
-                    <span class="badge badge-sev sev-${b.severity.toLowerCase()}">${escapeHtml(b.severity.toUpperCase())}</span>
-                    <span class="badge badge-conf conf-${b.confidence.toLowerCase()}">${escapeHtml(b.confidence.toUpperCase())}</span>
+                  <div class="perf-bottleneck-card">
+                    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 4px;">
+                      <span class="badge badge-bottleneck">${escapeHtml(b.classification)}</span>
+                      <span class="badge badge-${causalityClass}">${escapeHtml(causalityText)}</span>
+                      <span class="badge badge-sev sev-${b.severity.toLowerCase()}">${escapeHtml(b.severity.toUpperCase())}</span>
+                      <span class="badge badge-conf conf-${b.confidence.toLowerCase()}">${escapeHtml(b.confidence.toUpperCase())}</span>
+                    </div>
+                    <h4 style="font-size: 14px; font-weight: 600; margin: 4px 0;">${escapeHtml(b.title)}</h4>
+                    ${b.observedValueText && b.thresholdText ? `<div class="font-mono" dir="ltr" style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">Observed: <strong>${escapeHtml(b.observedValueText)}</strong> vs Budget: <strong>${escapeHtml(b.thresholdText)}</strong></div>` : ''}
+                    ${b.limitationsNotice ? `<div style="font-size: 11px; color: var(--warning); margin-top: 4px;">&#9888; ${escapeHtml(b.limitationsNotice)}</div>` : ''}
                   </div>
-                  <h4 style="font-size: 14px; font-weight: 600; margin: 4px 0;">${escapeHtml(b.title)}</h4>
-                  ${b.observedValueText && b.thresholdText ? `<div style="font-size: 12px; color: var(--text-muted); font-family: var(--font-mono); margin-bottom: 4px;">Observed: <strong>${escapeHtml(b.observedValueText)}</strong> vs Budget: <strong>${escapeHtml(b.thresholdText)}</strong></div>` : ''}
-                  ${b.limitationsNotice ? `<div style="font-size: 11px; color: var(--warning); margin-top: 4px;">&#9888; ${escapeHtml(b.limitationsNotice)}</div>` : ''}
-                </div>
-              `;
+                `;
               })
               .join('\n')}
           </div>
@@ -478,810 +737,302 @@ export function generateHtmlReport(
     }
 
     performanceSectionHtml = `
-    <!-- Laboratory Performance Diagnostics & Web Vitals -->
-    <section class="section-card perf-section">
-      <div class="perf-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
-        <h2 class="section-title" style="margin: 0;">Laboratory Web Vitals &amp; Performance Diagnostics</h2>
-        <span class="badge badge-lab-context" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);">AUTOMATED CHROMIUM SESSION</span>
-      </div>
-
-      <div class="perf-disclaimer-callout">
-        <div class="perf-disclaimer-title">&#9432; Laboratory Context &amp; Methodology Notice</div>
-        <p>${escapeHtml(LABORATORY_CONTEXT_DISCLAIMER)}</p>
-      </div>
-
-      <div class="perf-metrics-grid">
-        ${vitalsCardsHtml}
-      </div>
-
-      ${resourcesBarHtml}
-      ${bottlenecksSummaryHtml}
-    </section>
+      <section class="section-card perf-section">
+        <div class="perf-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+          <h2 class="section-title" style="margin: 0;">Laboratory Web Vitals &amp; Performance Diagnostics</h2>
+          <span class="badge badge-lab-context" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);">AUTOMATED CHROMIUM SESSION</span>
+        </div>
+        <div class="perf-disclaimer-callout">
+          <div>&#9432; <strong>Laboratory Context &amp; Methodology Notice</strong></div>
+          <p>${escapeHtml(LABORATORY_CONTEXT_DISCLAIMER)}</p>
+        </div>
+        <div class="perf-metrics-grid">${vitalsCardsHtml}</div>
+        ${resourcesBarHtml}
+        ${bottlenecksSummaryHtml}
+      </section>
     `;
   }
 
+  // Detected Stack Section (Evidence-Gated)
+  const stack = activeVm.detectedStack;
+  const stackChips: string[] = [];
+  if (stack.isWordPress) {
+    stackChips.push(
+      `WordPress${stack.wordPressVersion ? ` v${stack.wordPressVersion}` : ''} (${stack.wordPressConfidence})`,
+    );
+  }
+  if (stack.isElementorPro) stackChips.push('Elementor Pro');
+  else if (stack.isElementor) stackChips.push('Elementor');
+  if (stack.isWooCommerce) stackChips.push('WooCommerce');
+  for (const t of stack.detectedThemes) stackChips.push(`Theme: ${t}`);
+  for (const p of stack.detectedPlugins) stackChips.push(`Plugin: ${p}`);
+  for (const c of stack.cdnOrCacheHints) stackChips.push(`CDN/Cache: ${c}`);
+  for (const s of stack.serverHints) stackChips.push(`Server: ${s}`);
+
+  const stackSectionHtml = `
+    <section class="section-card">
+      <h2 class="section-title">${escapeHtml(activeVm.labels.detectedStackSection)}</h2>
+      ${
+        stackChips.length > 0
+          ? `<div class="stack-grid">${stackChips.map(ch => `<span class="stack-chip font-mono" dir="ltr">${escapeHtml(ch)}</span>`).join('')}</div>`
+          : `<p class="text-muted">${isArabic ? 'لم تُرصد إشارات منصة ووردبريس أو طبقة CDN محددة في أدلة هذا الفحص.' : 'No specific WordPress, plugin, or CDN markers were observed in persisted scan evidence.'}</p>`
+      }
+    </section>
+  `;
+
+  // Health Overview Section (D1–D4 Dimensions + Reasons from Shared Model)
+  const ho = activeVm.healthOverview;
+  const healthScoreDisplay =
+    ho.healthIndexScore !== null ? `${ho.healthIndexScore}/100` : isArabic ? 'غير متاح' : 'Unavailable';
+
+  const dimensionsHtml = ho.dimensions
+    .map(
+      d => `
+      <tr>
+        <td>${escapeHtml(d.label)}</td>
+        <td><span class="chart-status-pill chart-status-${escapeHtml(d.status)}">${escapeHtml(d.statusLabel)}</span></td>
+        <td class="font-mono" dir="ltr">${d.percent}%</td>
+        <td class="font-mono" dir="ltr">${d.weight}%</td>
+      </tr>
+    `,
+    )
+    .join('');
+
+  const telemetryReasonsHtml =
+    ho.telemetryReasons.length > 0
+      ? `<div class="finding-detail-section">
+           <h5 class="detail-label">${isArabic ? 'أسباب دقة القياس والتقريب' : 'Coverage & Telemetry Disclosures'}</h5>
+           <ul class="step-list" style="font-size:12px;">
+             ${ho.telemetryReasons.map(r => `<li><code dir="ltr">${escapeHtml(r.code)}</code> &mdash; ${escapeHtml(r.label)}</li>`).join('')}
+           </ul>
+         </div>`
+      : '';
+
+  const chartsSectionHtml = renderAuditChartsSection(activeVm.charts, locale);
+  const recommendationsHtml = renderRecommendationsSection(dualVm, activeVm);
+
   return `<!DOCTYPE html>
-<html lang="en">
+${htmlOpenTag}
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none'; script-src 'none'; connect-src 'none'; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none';">
   <title>${escapeHtml(model.title)}</title>
-  <style>
-    :root {
-      --bg: #0f172a;
-      --card-bg: #1e293b;
-      --card-subtle: #334155;
-      --border: #334155;
-      --text: #f8fafc;
-      --text-muted: #94a3b8;
-      --text-dim: #64748b;
-      --accent: #38bdf8;
-      --critical: #ef4444;
-      --critical-bg: rgba(239, 68, 68, 0.15);
-      --high: #f97316;
-      --high-bg: rgba(249, 115, 22, 0.15);
-      --medium: #f59e0b;
-      --medium-bg: rgba(245, 158, 11, 0.15);
-      --low: #3b82f6;
-      --low-bg: rgba(59, 130, 246, 0.15);
-      --info: #64748b;
-      --info-bg: rgba(100, 116, 139, 0.15);
-      --success: #10b981;
-      --success-bg: rgba(16, 185, 129, 0.15);
-      --warning: #eab308;
-      --warning-bg: rgba(234, 179, 8, 0.15);
-      --radius-sm: 4px;
-      --radius-md: 8px;
-      --radius-lg: 12px;
-      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    }
-
-    @media (prefers-color-scheme: light) {
-      :root {
-        --bg: #f8fafc;
-        --card-bg: #ffffff;
-        --card-subtle: #f1f5f9;
-        --border: #e2e8f0;
-        --text: #0f172a;
-        --text-muted: #475569;
-        --text-dim: #94a3b8;
-        --accent: #0284c7;
-        --critical: #dc2626;
-        --critical-bg: #fee2e2;
-        --high: #ea580c;
-        --high-bg: #ffedd5;
-        --medium: #d97706;
-        --medium-bg: #fef3c7;
-        --low: #2563eb;
-        --low-bg: #dbeafe;
-        --info: #475569;
-        --info-bg: #f1f5f9;
-        --success: #059669;
-        --success-bg: #d1fae5;
-        --warning: #ca8a04;
-        --warning-bg: #fef9c3;
-      }
-    }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--font-sans);
-      line-height: 1.6;
-      font-size: 14px;
-      padding: 32px 16px;
-    }
-
-    .container {
-      max-width: 1040px;
-      margin: 0 auto;
-    }
-
-    /* Header / Cover */
-    .report-header {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 32px;
-      margin-bottom: 24px;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    }
-    .brand-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-      padding-bottom: 16px;
-      border-bottom: 1px solid var(--border);
-    }
-    .brand-title {
-      font-size: 13px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--accent);
-    }
-    .status-badge {
-      display: inline-block;
-      padding: 4px 12px;
-      border-radius: 9999px;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.05em;
-    }
-    .status-badge.completed { background: var(--success-bg); color: var(--success); border: 1px solid var(--success); }
-    .status-badge.failed { background: var(--critical-bg); color: var(--critical); border: 1px solid var(--critical); }
-    .status-badge.cancelled { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning); }
-    .status-badge.running { background: var(--low-bg); color: var(--low); border: 1px solid var(--low); }
-
-    .report-main-title {
-      font-size: 26px;
-      font-weight: 800;
-      line-height: 1.3;
-      margin-bottom: 12px;
-    }
-    .site-target-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 16px;
-      align-items: center;
-      color: var(--text-muted);
-      font-size: 14px;
-      margin-bottom: 16px;
-    }
-    .site-name { font-weight: 600; color: var(--text); }
-    .meta-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
-      margin-top: 20px;
-      padding-top: 16px;
-      border-top: 1px solid var(--border);
-    }
-    .meta-item { display: flex; flex-direction: column; }
-    .meta-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 2px; }
-    .meta-value { font-size: 13px; font-weight: 600; }
-    .font-mono { font-family: var(--font-mono); font-size: 12px; }
-
-    /* Alert Banner */
-    .alert-banner {
-      border-radius: var(--radius-md);
-      padding: 16px 20px;
-      margin-bottom: 24px;
-      font-size: 14px;
-    }
-    .alert-banner.alert-warning {
-      background: var(--warning-bg);
-      border: 1px solid var(--warning);
-      color: var(--text);
-    }
-    .alert-banner strong { display: block; margin-bottom: 4px; font-size: 15px; }
-
-    /* Executive Summary Cards */
-    .summary-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 12px;
-      margin-bottom: 24px;
-    }
-    .summary-card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: 16px;
-      text-align: center;
-      transition: transform 0.15s ease;
-    }
-    .summary-card .count { font-size: 28px; font-weight: 800; line-height: 1; margin-bottom: 6px; }
-    .summary-card .label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
-    .summary-card.card-total { border-color: var(--accent); }
-    .summary-card.card-total .count { color: var(--accent); }
-    .summary-card.card-critical { border-color: var(--critical); }
-    .summary-card.card-critical .count { color: var(--critical); }
-    .summary-card.card-high { border-color: var(--high); }
-    .summary-card.card-high .count { color: var(--high); }
-    .summary-card.card-medium { border-color: var(--medium); }
-    .summary-card.card-medium .count { color: var(--medium); }
-    .summary-card.card-low { border-color: var(--low); }
-    .summary-card.card-low .count { color: var(--low); }
-    .summary-card.card-info { border-color: var(--info); }
-    .summary-card.card-info .count { color: var(--info); }
-
-    /* Section Styling */
-    .section-card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 24px;
-      margin-bottom: 24px;
-    }
-    .section-title {
-      font-size: 18px;
-      font-weight: 700;
-      margin-bottom: 16px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    /* Details Grid */
-    .details-table-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 24px;
-    }
-    @media (max-width: 768px) {
-      .details-table-grid { grid-template-columns: 1fr; }
-    }
-    .data-table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    .data-table th, .data-table td {
-      padding: 8px 12px;
-      text-align: left;
-      border-bottom: 1px solid var(--border);
-      font-size: 13px;
-    }
-    .data-table th { color: var(--text-dim); font-size: 11px; text-transform: uppercase; }
-
-    /* Finding Card */
-    .finding-card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-left: 5px solid var(--info);
-      border-radius: var(--radius-md);
-      margin-bottom: 16px;
-      overflow: hidden;
-    }
-    .finding-card.sev-critical { border-left-color: var(--critical); }
-    .finding-card.sev-high { border-left-color: var(--high); }
-    .finding-card.sev-medium { border-left-color: var(--medium); }
-    .finding-card.sev-low { border-left-color: var(--low); }
-    .finding-card.sev-info { border-left-color: var(--info); }
-
-    .finding-header {
-      padding: 16px 20px;
-      background: var(--card-subtle);
-      border-bottom: 1px solid var(--border);
-    }
-    .finding-title-row {
-      display: flex;
-      align-items: baseline;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-    .finding-index { font-family: var(--font-mono); font-size: 12px; color: var(--text-dim); }
-    .finding-title { font-size: 16px; font-weight: 700; color: var(--text); }
-    .finding-badges { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: var(--radius-sm);
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-    .badge-sev.sev-critical { background: var(--critical-bg); color: var(--critical); }
-    .badge-sev.sev-high { background: var(--high-bg); color: var(--high); }
-    .badge-sev.sev-medium { background: var(--medium-bg); color: var(--medium); }
-    .badge-sev.sev-low { background: var(--low-bg); color: var(--low); }
-    .badge-sev.sev-info { background: var(--info-bg); color: var(--info); }
-
-    .badge-conf.conf-confirmed { background: var(--success-bg); color: var(--success); }
-    .badge-conf.conf-firm { background: var(--low-bg); color: var(--low); }
-    .badge-conf.conf-potential { background: var(--warning-bg); color: var(--warning); }
-    .badge-status { background: rgba(148, 163, 184, 0.14); color: var(--text-muted); border: 1px solid var(--border); }
-    .badge-status.status-confirmed, .badge-status.status-resolved, .badge-status.status-fixed { background: var(--success-bg); color: var(--success); border-color: transparent; }
-    .badge-status.status-potential, .badge-status.status-needs_manual_review, .badge-status.status-retest_required { background: var(--warning-bg); color: var(--warning); border-color: transparent; }
-    .visual-evidence-figure {
-      margin: 8px 0 12px 0;
-      padding: 8px;
-      background: #020617;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-    }
-    .visual-evidence-img {
-      display: block;
-      max-width: 100%;
-      max-height: 480px;
-      width: auto;
-      height: auto;
-      object-fit: contain;
-      border-radius: var(--radius-sm);
-      margin: 0 auto;
-    }
-    .visual-evidence-caption {
-      margin-top: 6px;
-      font-size: 11px;
-      color: var(--text-muted);
-      font-family: var(--font-mono);
-      text-align: center;
-    }
-    .visual-evidence-fallback {
-      margin-bottom: 8px;
-      padding: 6px 10px;
-      background: rgba(148, 163, 184, 0.08);
-      border: 1px dashed var(--border);
-      border-radius: var(--radius-sm);
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-    .badge-cat { background: var(--border); color: var(--text-muted); }
-    .badge-rule { background: transparent; border: 1px solid var(--border); color: var(--text-dim); font-family: var(--font-mono); }
-
-    .finding-body { padding: 20px; }
-    .finding-detail-section { margin-bottom: 16px; }
-    .finding-detail-section:last-child { margin-bottom: 0; }
-    .detail-label {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--text-dim);
-      margin-bottom: 4px;
-      font-weight: 700;
-    }
-    .target-url-container {
-      background: var(--card-subtle);
-      padding: 6px 12px;
-      border-radius: var(--radius-sm);
-      word-break: break-all;
-    }
-    .target-url { font-family: var(--font-mono); font-size: 12px; color: var(--accent); text-decoration: none; }
-    .target-url:hover { text-decoration: underline; }
-    .finding-description { font-size: 13.5px; color: var(--text); }
-
-    .evidence-block {
-      background: #020617;
-      color: #38bdf8;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 12px;
-      font-family: var(--font-mono);
-      font-size: 12px;
-      overflow-x: auto;
-      white-space: pre-wrap;
-      word-break: break-all;
-      max-height: 300px;
-    }
-
-    .remediation-box {
-      background: rgba(56, 189, 248, 0.08);
-      border: 1px solid rgba(56, 189, 248, 0.2);
-      border-radius: var(--radius-sm);
-      padding: 12px 16px;
-    }
-    .remediation-box p { font-size: 13px; color: var(--text); }
-
-    .references-list {
-      list-style-type: disc;
-      padding-left: 20px;
-      font-size: 12px;
-    }
-    .references-list a { color: var(--accent); text-decoration: none; }
-    .references-list a:hover { text-decoration: underline; }
-
-    .empty-findings {
-      text-align: center;
-      padding: 48px 24px;
-      color: var(--text-muted);
-    }
-    .empty-icon { font-size: 36px; color: var(--success); margin-bottom: 12px; }
-
-    /* Performance Diagnostics Styles */
-    .perf-disclaimer-callout {
-      background: rgba(15, 23, 42, 0.7);
-      border: 1px solid var(--border);
-      border-left: 3px solid var(--accent);
-      border-radius: var(--radius-sm);
-      padding: 12px 16px;
-      margin-bottom: 16px;
-      font-size: 12px;
-      color: var(--text-muted);
-      line-height: 1.5;
-    }
-    .perf-disclaimer-title {
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 4px;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-    .perf-metrics-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 12px;
-      margin-bottom: 20px;
-    }
-    .perf-metric-tile {
-      background: var(--card-subtle);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 12px 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .perf-metric-tile.rating-good { border-top: 3px solid var(--success); }
-    .perf-metric-tile.rating-needs-improvement { border-top: 3px solid var(--warning); }
-    .perf-metric-tile.rating-poor { border-top: 3px solid var(--critical); }
-    .perf-metric-tile.rating-unavailable { border-top: 3px solid var(--border); }
-    .perf-metric-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 6px;
-    }
-    .perf-metric-label {
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-    .badge-rating.rating-good { background: var(--success-bg); color: var(--success); }
-    .badge-rating.rating-needs-improvement { background: var(--warning-bg); color: var(--warning); }
-    .badge-rating.rating-poor { background: var(--critical-bg); color: var(--critical); }
-    .badge-rating.rating-unavailable { background: rgba(148, 163, 184, 0.1); color: var(--text-dim); }
-    .perf-metric-value {
-      font-size: 20px;
-      font-weight: 700;
-      color: var(--text);
-    }
-    .perf-metric-target {
-      font-size: 11px;
-      color: var(--text-dim);
-    }
-    .perf-metric-capped {
-      font-size: 11px;
-      color: var(--warning);
-      margin-top: 2px;
-    }
-    .perf-metric-limitation {
-      font-size: 10px;
-      color: var(--text-dim);
-      font-style: italic;
-      margin-top: 2px;
-      line-height: 1.3;
-    }
-    .perf-resources-summary {
-      background: rgba(15, 23, 42, 0.5);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 12px 16px;
-      margin-bottom: 16px;
-    }
-    .perf-resources-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 12px;
-    }
-    .perf-resource-stat {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-    .perf-stat-label {
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-    .perf-stat-val {
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--text);
-    }
-    .perf-bottleneck-card {
-      background: var(--card-subtle);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 10px 14px;
-      margin-bottom: 8px;
-    }
-    .badge-causal {
-      background: var(--success-bg);
-      color: var(--success);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-    }
-    .badge-correlational {
-      background: rgba(148, 163, 184, 0.15);
-      color: var(--text-muted);
-      border: 1px solid var(--border);
-    }
-    .badge-bottleneck {
-      background: rgba(139, 92, 246, 0.15);
-      color: #a78bfa;
-      border: 1px solid rgba(139, 92, 246, 0.3);
-      font-family: var(--font-mono);
-    }
-    .metric-comparison-box {
-      background: rgba(15, 23, 42, 0.6);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 8px 12px;
-      font-size: 12px;
-      color: var(--text);
-      font-family: var(--font-mono);
-      margin-bottom: 8px;
-    }
-    .metric-comp-label {
-      color: var(--text-muted);
-      font-weight: 600;
-    }
-    .inference-rationale-box {
-      font-size: 12px;
-      color: var(--text);
-      background: rgba(99, 102, 241, 0.08);
-      border-left: 3px solid #6366f1;
-      padding: 6px 10px;
-      border-radius: var(--radius-sm);
-      margin-bottom: 8px;
-    }
-    .limitations-box {
-      background: rgba(245, 158, 11, 0.08);
-      border-left: 3px solid var(--warning);
-      border-radius: var(--radius-sm);
-      padding: 8px 12px;
-      margin-bottom: 8px;
-      font-size: 12px;
-      color: var(--text);
-    }
-    .limitations-box p { margin: 0; font-size: 12px; color: var(--text); }
-    .affected-resources-box {
-      background: rgba(15, 23, 42, 0.5);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 8px 12px;
-      margin-bottom: 8px;
-    }
-    .affected-resources-list {
-      list-style-type: none;
-      padding-left: 0;
-      margin: 6px 0 0 0;
-      font-size: 11px;
-      font-family: var(--font-mono);
-    }
-    .affected-resources-list li {
-      margin-bottom: 4px;
-      word-break: break-all;
-    }
-
-    /* Footer */
-    .report-footer {
-      text-align: center;
-      padding: 32px 16px;
-      color: var(--text-dim);
-      font-size: 12px;
-      border-top: 1px solid var(--border);
-      margin-top: 32px;
-    }
-    .report-footer p { margin-bottom: 6px; }
-
-    @media print {
-      body { background: #fff !important; color: #000 !important; font-size: 11pt; padding: 0; }
-      .container { max-width: 100%; }
-      .report-header, .section-card, .finding-card { box-shadow: none !important; border: 1px solid #ccc !important; page-break-inside: avoid; }
-      .evidence-block { background: #f5f5f5 !important; color: #111 !important; }
-    }
-  </style>
+  <style>${getStandaloneReportCss()}</style>
 </head>
-<body>
+<body dir="${dirAttr}" data-locale="${locale}" data-initial-view-mode="${activeVm.viewMode}">
   <div class="container">
-    <!-- Header / Cover -->
-    <header class="report-header">
-      <div class="brand-row">
-        <span class="brand-title">Ultimate WordPress &amp; Website Auditor</span>
-        <span class="status-badge ${escapeHtml(model.summary.scanStatus.toLowerCase())}">
-          SCAN ${escapeHtml(statusUpper)}
-        </span>
-        ${isPartialCoverage ? `
-          <span class="status-badge" style="margin-left: 8px; background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning);">
-            PARTIAL BROWSER COVERAGE
-          </span>
-        ` : !isFailedOrCancelled ? `
-          <span class="status-badge" style="margin-left: 8px; background: var(--success-bg); color: var(--success); border: 1px solid var(--success);">
-            FULL COVERAGE
-          </span>
-        ` : ''}
+    <!-- Pure-CSS Accessible View-Mode Switcher (Offline, Zero-JS, Script-Src 'none') -->
+    <input type="radio" name="auditor-view-mode" id="vm-simple" class="vm-radio" ${activeVm.viewMode === 'simple' ? 'checked' : ''}>
+    <input type="radio" name="auditor-view-mode" id="vm-technical" class="vm-radio" ${activeVm.viewMode === 'technical' ? 'checked' : ''}>
+    <input type="radio" name="auditor-view-mode" id="vm-dual" class="vm-radio" ${activeVm.viewMode === 'dual' ? 'checked' : ''}>
+
+    <div class="vm-switcher-bar no-print" role="region" aria-label="View Mode">
+      <span style="font-weight:700; font-size:13px;">${escapeHtml(activeVm.labels.executiveSummary)} &mdash; ${escapeHtml(activeVm.labels.viewModeDualLabel)}</span>
+      <div class="vm-labels">
+        <label for="vm-simple" class="vm-tab vm-tab-simple">${escapeHtml(activeVm.labels.viewModeSimpleLabel)}</label>
+        <label for="vm-technical" class="vm-tab vm-tab-technical">${escapeHtml(activeVm.labels.viewModeTechnicalLabel)}</label>
+        <label for="vm-dual" class="vm-tab vm-tab-dual">${escapeHtml(activeVm.labels.viewModeDualLabel)}</label>
       </div>
-      <h1 class="report-main-title">${escapeHtml(model.title)}</h1>
-      <div class="site-target-row">
-        <span>Site: <strong class="site-name">${escapeHtml(model.site.name)}</strong></span>
-        <span>Target: <a href="${sanitizeUrl(model.scanRun.targetUrl)}" class="font-mono text-accent" target="_blank" rel="noopener noreferrer">${escapeHtml(model.scanRun.targetUrl)}</a></span>
-        <span>Platform: <strong>${escapeHtml(model.site.platformType)}</strong></span>
-        <span>Env: <strong>${escapeHtml(model.site.environmentType)}</strong></span>
-      </div>
-      <div class="meta-grid">
-        <div class="meta-item">
-          <span class="meta-label">Report ID</span>
-          <span class="meta-value font-mono">${escapeHtml(model.reportId)}</span>
+    </div>
+
+    <main class="report-main">
+      <!-- Header / Cover -->
+      <header class="report-header">
+        <div class="brand-row">
+          <span class="brand-title">Ultimate WordPress &amp; Website Auditor</span>
+          <div class="brand-badges">
+            <span class="status-badge ${escapeHtml(model.summary.scanStatus.toLowerCase())}">
+              SCAN ${escapeHtml(statusUpper)}
+            </span>
+            ${
+              isPartialCoverage
+                ? `<span class="status-badge" style="background: var(--warning-bg); color: var(--warning); border-color: var(--warning);">PARTIAL BROWSER COVERAGE</span>`
+                : !isFailedOrCancelled
+                  ? `<span class="status-badge" style="background: var(--success-bg); color: var(--success); border-color: var(--success);">FULL COVERAGE</span>`
+                  : ''
+            }
+          </div>
         </div>
-        <div class="meta-item">
-          <span class="meta-label">Scan Run ID</span>
-          <span class="meta-value font-mono">${escapeHtml(model.scanRun.id)}</span>
+        <h1 class="report-main-title">${escapeHtml(model.title)}</h1>
+        <div class="site-target-row">
+          <span>${isArabic ? 'الموقع:' : 'Site:'} <strong class="site-name">${escapeHtml(model.site.name)}</strong></span>
+          <span>${isArabic ? 'الهدف:' : 'Target:'} <a href="${sanitizeUrl(model.scanRun.targetUrl)}" class="font-mono text-accent" dir="ltr" target="_blank" rel="noopener noreferrer">${escapeHtml(model.scanRun.targetUrl)}</a></span>
+          <span>${isArabic ? 'المنصة:' : 'Platform:'} <strong>${escapeHtml(model.site.platformType)}</strong></span>
+          <span>${isArabic ? 'البيئة:' : 'Env:'} <strong>${escapeHtml(model.site.environmentType)}</strong></span>
         </div>
-        <div class="meta-item">
-          <span class="meta-label">Generated At</span>
-          <span class="meta-value">${formatDate(model.generatedAt)}</span>
+        <div class="meta-grid">
+          <div class="meta-item"><span class="meta-label">Report ID</span><span class="meta-value font-mono" dir="ltr">${escapeHtml(model.reportId)}</span></div>
+          <div class="meta-item"><span class="meta-label">Scan Run ID</span><span class="meta-value font-mono" dir="ltr">${escapeHtml(model.scanRun.id)}</span></div>
+          <div class="meta-item"><span class="meta-label">${isArabic ? 'تاريخ التوليد' : 'Generated At'}</span><span class="meta-value" dir="ltr">${formatDate(model.generatedAt)}</span></div>
+          <div class="meta-item"><span class="meta-label">${isArabic ? 'المدة' : 'Scan Duration'}</span><span class="meta-value" dir="ltr">${formatDuration(model.summary.scanDurationMs)}</span></div>
         </div>
-        <div class="meta-item">
-          <span class="meta-label">Scan Duration</span>
-          <span class="meta-value">${formatDuration(model.summary.scanDurationMs)}</span>
+      </header>
+
+      ${
+        isFailedOrCancelled
+          ? `<div class="alert-banner alert-warning" role="alert">
+               <strong>&#9888; Warning: Incomplete / ${escapeHtml(statusUpper)} Scan Run</strong>
+               <p>${isArabic ? 'تم إنشاء هذا التقرير من فحص انتهى بحالة غير مكتملة:' : 'This audit report was generated from a scan that terminated with status'} <strong>${escapeHtml(statusUpper)}</strong>.</p>
+               <ul>
+                 <li><strong>Audit Coverage:</strong> PARTIAL AUDIT (INTERRUPTED)</li>
+                 <li><strong>Completed Engines:</strong> ${escapeHtml(completedEnginesText)}</li>
+                 <li><strong>Interrupted Engine:</strong> ${escapeHtml(interruptedEngineText)}</li>
+                 <li><strong>Findings Collected Prior to Interruption:</strong> ${model.summary.totalFindings} findings</li>
+               </ul>
+               <p>The findings and metrics below represent partial evidence collected before termination and do NOT constitute a complete security assessment.</p>
+             </div>`
+          : ''
+      }
+
+      ${
+        isPartialCoverage
+          ? `<div class="alert-banner alert-warning" role="alert">
+               <strong>&#9888; Notice: Audit Completed with Partial Browser Coverage</strong>
+               <p>This audit successfully crawled <strong>${model.summary.pagesScanned}</strong> pages, but evaluated <strong>${model.summary.browserPagesAudited ?? 0} of ${model.summary.browserCandidatesTotal ?? model.summary.browserPagesAudited ?? 0}</strong> browser candidate pages due to scan time constraints.</p>
+               <ul>
+                 <li><strong>Crawl &amp; Static Analyzers:</strong> Completed across all ${model.summary.pagesScanned} discovered pages.</li>
+                 <li><strong>Browser &amp; Accessibility Engine:</strong> Partial coverage (${model.summary.browserPagesAudited ?? 0} audited${(model.summary.browserCandidatesSkipped ?? 0) > 0 ? `, ${model.summary.browserCandidatesSkipped} skipped due to time budget` : ''}).</li>
+               </ul>
+             </div>`
+          : ''
+      }
+
+      ${
+        hasBrowserUnavailable
+          ? `<div class="alert-banner alert-warning" role="alert">
+               <strong>&#9888; ${isArabic ? 'ملاحظة: تعذر تشغيل المتصفح الآلي' : 'Limitation Notice: Browser Engine Unavailable'}</strong>
+               <p>${isArabic ? 'تعذر تشغيل متصفح Chromium أثناء الفحص؛ لذا اقتصرت النتائج على الفحوص الثابتة ولم تُفحص إمكانية الوصول أو الأداء المعملي أو لقطات الشاشة.' : 'A compatible Chromium-based browser was not available during this scan run. HTTP, WordPress, and security header analyzers completed; client-side runtime errors, WCAG accessibility, responsive layout shifts, and screenshots could not be evaluated.'}</p>
+             </div>`
+          : ''
+      }
+
+      <!-- Health Triad Overview -->
+      <section class="section-card" aria-label="${escapeHtml(activeVm.labels.healthOverview)}">
+        <h2 class="section-title">${escapeHtml(activeVm.labels.healthOverview)}</h2>
+        <div class="triad-grid">
+          <div class="triad-card">
+            <div class="meta-label">${escapeHtml(activeVm.labels.healthIndexLabel)}</div>
+            <div class="triad-value" dir="ltr">${escapeHtml(healthScoreDisplay)}</div>
+            <div class="triad-sub"><strong>${escapeHtml(ho.healthBandLabel)}</strong></div>
+          </div>
+          <div class="triad-card">
+            <div class="meta-label">${escapeHtml(activeVm.labels.auditCoverageLabel)}</div>
+            <div class="triad-value" dir="ltr">${ho.coveragePercent}%</div>
+            <div class="triad-sub">${escapeHtml(ho.coverageStatusLabel)}</div>
+          </div>
+          <div class="triad-card">
+            <div class="meta-label">${escapeHtml(activeVm.labels.auditConfidenceLabel)}</div>
+            <div class="triad-value" dir="ltr">${ho.confidenceScore}%</div>
+            <div class="triad-sub">${escapeHtml(ho.confidenceBandLabel)}</div>
+          </div>
         </div>
-      </div>
-    </header>
+        <h3 class="meta-label" style="margin-bottom:8px;">${escapeHtml(activeVm.labels.dimensionBreakdown)}</h3>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>${isArabic ? 'البُعد' : 'Dimension'}</th>
+              <th>${isArabic ? 'الحالة' : 'Status'}</th>
+              <th>${isArabic ? 'النسبة' : 'Coverage'}</th>
+              <th>${isArabic ? 'الوزن' : 'Weight'}</th>
+            </tr>
+          </thead>
+          <tbody>${dimensionsHtml}</tbody>
+        </table>
+        ${telemetryReasonsHtml}
+        <p style="font-size:12px; color:var(--text-dim); margin-top:10px;">${escapeHtml(activeVm.disclosures.healthIndexDisclaimer)}</p>
+      </section>
 
-    ${isFailedOrCancelled ? `
-      <!-- Warning Banner for Interrupted / Failed Scans -->
-      <div class="alert-banner alert-warning" role="alert">
-        <strong>&#9888; Warning: Incomplete / ${escapeHtml(statusUpper)} Scan Run</strong>
-        <p>This audit report was generated from a scan that terminated with status <strong>${escapeHtml(statusUpper)}</strong>.</p>
-        <ul style="margin: 8px 0 8px 20px; font-size: 13px;">
-          <li><strong>Audit Coverage:</strong> PARTIAL AUDIT (INTERRUPTED)</li>
-          <li><strong>Completed Engines:</strong> ${escapeHtml(completedEnginesText)}</li>
-          <li><strong>Interrupted Engine:</strong> ${escapeHtml(interruptedEngineText)}</li>
-          <li><strong>Findings Collected Prior to Interruption:</strong> ${model.summary.totalFindings} findings</li>
-          <li><strong>Remaining Unverified Areas:</strong> Audit modules associated with the interrupted engine and downstream stages did not execute.</li>
-        </ul>
-        <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
-          The findings and metrics below represent partial evidence collected before termination and do NOT constitute a complete security assessment.
-        </p>
-      </div>
-    ` : ''}
+      <!-- Severity Summary Metrics -->
+      <section class="summary-grid" aria-label="Findings Severity Summary">
+        <div class="summary-card card-total"><div class="count" dir="ltr">${model.summary.totalFindings}</div><div class="label">${isArabic ? 'إجمالي الملاحظات' : 'Total Findings'}</div></div>
+        <div class="summary-card card-critical"><div class="count" dir="ltr">${model.summary.bySeverity.critical}</div><div class="label">${isArabic ? 'حرج' : 'Critical'}</div></div>
+        <div class="summary-card card-high"><div class="count" dir="ltr">${model.summary.bySeverity.high}</div><div class="label">${isArabic ? 'مرتفع' : 'High'}</div></div>
+        <div class="summary-card card-medium"><div class="count" dir="ltr">${model.summary.bySeverity.medium}</div><div class="label">${isArabic ? 'متوسط' : 'Medium'}</div></div>
+        <div class="summary-card card-low"><div class="count" dir="ltr">${model.summary.bySeverity.low}</div><div class="label">${isArabic ? 'منخفض' : 'Low'}</div></div>
+        <div class="summary-card card-info"><div class="count" dir="ltr">${model.summary.bySeverity.info}</div><div class="label">${isArabic ? 'معلوماتي' : 'Info'}</div></div>
+      </section>
 
-    ${isPartialCoverage ? `
-      <!-- Notice Banner for Completed Scan with Partial Browser Coverage -->
-      <div class="alert-banner alert-warning" role="alert">
-        <strong>&#9888; Notice: Audit Completed with Partial Browser Coverage</strong>
-        <p>This audit successfully crawled <strong>${model.summary.pagesScanned}</strong> pages, but evaluated <strong>${model.summary.browserPagesAudited ?? 0} of ${model.summary.browserCandidatesTotal ?? model.summary.browserPagesAudited ?? 0}</strong> browser candidate pages due to scan time constraints.</p>
-        <ul style="margin: 8px 0 8px 20px; font-size: 13px;">
-          <li><strong>Crawl &amp; Static Analyzers:</strong> Completed across all ${model.summary.pagesScanned} discovered pages.</li>
-          <li><strong>Browser &amp; Accessibility Engine:</strong> Partial coverage (${model.summary.browserPagesAudited ?? 0} audited${(model.summary.browserCandidatesSkipped ?? 0) > 0 ? `, ${model.summary.browserCandidatesSkipped} skipped due to time budget` : ''}).</li>
-          <li><strong>Important Notice:</strong> WCAG accessibility, visual screenshots, and client-side runtime errors reflect the audited pages only and do NOT imply full site-wide browser audit coverage.</li>
-        </ul>
-      </div>
-    ` : ''}
+      ${stackSectionHtml}
 
-    ${hasBrowserUnavailable ? `
-      <!-- Notice Banner for Browser Engine Unavailable -->
-      <div class="alert-banner alert-warning" role="alert">
-        <strong>&#9888; Limitation Notice: Browser Engine Unavailable</strong>
-        <p>A compatible Chromium-based browser was not available during this scan run. HTTP, WordPress, and security header analyzers completed successfully; however, client-side runtime errors, WCAG accessibility, responsive layout shifts, and visual screenshots could not be evaluated. Install an approved Chromium browser to unlock full browser-based audits.</p>
-      </div>
-    ` : ''}
+      <!-- 7 Shared Chart Analytics Section -->
+      ${chartsSectionHtml}
 
-    <!-- Executive Summary Metrics -->
-    <section class="summary-grid" aria-label="Findings Severity Summary">
-      <div class="summary-card card-total">
-        <div class="count">${model.summary.totalFindings}</div>
-        <div class="label">Total Findings</div>
-      </div>
-      <div class="summary-card card-critical">
-        <div class="count">${model.summary.bySeverity.critical}</div>
-        <div class="label">Critical</div>
-      </div>
-      <div class="summary-card card-high">
-        <div class="count">${model.summary.bySeverity.high}</div>
-        <div class="label">High</div>
-      </div>
-      <div class="summary-card card-medium">
-        <div class="count">${model.summary.bySeverity.medium}</div>
-        <div class="label">Medium</div>
-      </div>
-      <div class="summary-card card-low">
-        <div class="count">${model.summary.bySeverity.low}</div>
-        <div class="label">Low</div>
-      </div>
-      <div class="summary-card card-info">
-        <div class="count">${model.summary.bySeverity.info}</div>
-        <div class="label">Info</div>
-      </div>
-    </section>
-
-    <!-- Scan Scope & Category Breakdown -->
-    <section class="section-card">
-      <h2 class="section-title">Scan Coverage &amp; Distribution</h2>
-      <div class="details-table-grid">
-        <div>
-          <h3 class="meta-label" style="margin-bottom: 8px;">Execution Coverage</h3>
-          <table class="data-table">
-            <tbody>
-              <tr><td>Target URL</td><td class="font-mono">${escapeHtml(model.scanRun.targetUrl)}</td></tr>
-              <tr><td>Scan Type</td><td>${escapeHtml(model.scanRun.scanType)}</td></tr>
-              <tr><td>Scan Status</td><td><span class="status-badge ${escapeHtml(model.summary.scanStatus.toLowerCase())}">${escapeHtml(statusUpper)}</span></td></tr>
-              <tr><td>Audit Coverage</td><td><strong>${
-                isFailedOrCancelled
-                  ? 'PARTIAL AUDIT (INTERRUPTED)'
-                  : isPartialCoverage
-                    ? 'COMPLETED (PARTIAL BROWSER COVERAGE)'
-                    : 'COMPLETE AUDIT (FULL COVERAGE)'
-              }</strong></td></tr>
-              ${isPartialCoverage && model.summary.coverageWarning ? `
-                <tr><td>Coverage Notice</td><td style="color: var(--warning);">${escapeHtml(model.summary.coverageWarning)}</td></tr>
-              ` : ''}
-              ${typeof model.summary.browserCandidatesTotal === 'number' && model.summary.browserCandidatesTotal > 0 ? `
-                <tr><td>Browser Candidates</td><td class="font-mono">${model.summary.browserPagesAudited ?? 0} of ${model.summary.browserCandidatesTotal} audited${(model.summary.browserCandidatesSkipped ?? 0) > 0 ? ` (${model.summary.browserCandidatesSkipped} skipped due to budget)` : ''}</td></tr>
-              ` : ''}
-              ${model.summary.isPartialAudit ? `
-                <tr><td>Completed Engines</td><td class="font-mono">${escapeHtml(completedEnginesText)}</td></tr>
-                <tr><td>Interrupted Engine</td><td class="font-mono">${escapeHtml(interruptedEngineText)}</td></tr>
-              ` : ''}
-              <tr><td>Pages Crawled (Static Analysis)</td><td class="font-mono">${model.summary.pagesScanned} pages (100% static coverage)</td></tr>
-              <tr><td>Browser Pages Audited</td><td class="font-mono">${model.summary.browserPagesAudited ?? 0} of ${model.summary.pagesScanned} pages (${Math.round(((model.summary.browserPagesAudited ?? 0) / Math.max(1, model.summary.pagesScanned)) * 100)}% browser coverage)</td></tr>
-              <tr><td>Browser Coverage Accounting</td><td><strong>${
-                (model.summary.browserPagesAudited ?? 0) >= model.summary.pagesScanned && !(model.summary.browserCandidatesSkipped ?? 0)
-                  ? 'Full Browser Coverage (100%)'
-                  : `Partial Browser Coverage (${model.summary.browserPagesAudited ?? 0}/${model.summary.pagesScanned} pages audited)`
-              }</strong></td></tr>
-              <tr><td>Screenshots Captured</td><td class="font-mono">${model.summary.screenshotsCaptured ?? 0}</td></tr>
-              <tr><td>Pages Failed / Errored</td><td class="font-mono">${model.summary.pagesFailed}</td></tr>
-              <tr><td>Execution Duration</td><td class="font-mono">${formatDuration(model.summary.scanDurationMs)}</td></tr>
-              <tr><td>Scan Started At</td><td>${formatDate(model.scanRun.startedAt)}</td></tr>
-              <tr><td>Scan Ended At</td><td>${formatDate(model.scanRun.completedAt ?? model.scanRun.cancelledAt)}</td></tr>
-            </tbody>
-          </table>
+      <!-- Scan Coverage & Category Breakdown -->
+      <section class="section-card">
+        <h2 class="section-title">${isArabic ? 'نطاق التنفيذ وتوزيع الفئات' : 'Scan Coverage & Distribution'}</h2>
+        <div class="details-table-grid">
+          <div>
+            <h3 class="meta-label" style="margin-bottom:8px;">Execution Coverage</h3>
+            <table class="data-table">
+              <tbody>
+                <tr><td>Target URL</td><td class="font-mono" dir="ltr">${escapeHtml(model.scanRun.targetUrl)}</td></tr>
+                <tr><td>Scan Type</td><td>${escapeHtml(model.scanRun.scanType)}</td></tr>
+                <tr><td>Scan Status</td><td><span class="status-badge ${escapeHtml(model.summary.scanStatus.toLowerCase())}">${escapeHtml(statusUpper)}</span></td></tr>
+                <tr><td>Audit Coverage</td><td><strong>${
+                  isFailedOrCancelled
+                    ? 'PARTIAL AUDIT (INTERRUPTED)'
+                    : isPartialCoverage
+                      ? 'COMPLETED (PARTIAL BROWSER COVERAGE)'
+                      : 'COMPLETE AUDIT (FULL COVERAGE)'
+                }</strong></td></tr>
+                ${isPartialCoverage && model.summary.coverageWarning ? `<tr><td>Coverage Notice</td><td style="color:var(--warning);">${escapeHtml(model.summary.coverageWarning)}</td></tr>` : ''}
+                ${typeof model.summary.browserCandidatesTotal === 'number' && model.summary.browserCandidatesTotal > 0 ? `<tr><td>Browser Candidates</td><td class="font-mono" dir="ltr">${model.summary.browserPagesAudited ?? 0} of ${model.summary.browserCandidatesTotal} audited${(model.summary.browserCandidatesSkipped ?? 0) > 0 ? ` (${model.summary.browserCandidatesSkipped} skipped due to budget)` : ''}</td></tr>` : ''}
+                <tr><td>Pages Crawled (Static Analysis)</td><td class="font-mono" dir="ltr">${model.summary.pagesScanned} pages</td></tr>
+                <tr><td>Browser Pages Audited</td><td class="font-mono" dir="ltr">${model.summary.browserPagesAudited ?? 0} of ${model.summary.pagesScanned} pages</td></tr>
+                <tr><td>Screenshots Captured</td><td class="font-mono" dir="ltr">${model.summary.screenshotsCaptured ?? 0}</td></tr>
+                <tr><td>Pages Failed / Errored</td><td class="font-mono" dir="ltr">${model.summary.pagesFailed}</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div>
+            <h3 class="meta-label" style="margin-bottom:8px;">Findings by Category &amp; Confidence</h3>
+            <table class="data-table">
+              <thead><tr><th>Category</th><th>Count</th></tr></thead>
+              <tbody>${categoryHtml}</tbody>
+              <tfoot>
+                <tr>
+                  <td style="font-weight:700; border-top:1px solid var(--border);">Verification State</td>
+                  <td style="border-top:1px solid var(--border); font-size:12px;">
+                    <span class="badge badge-conf conf-confirmed">${model.summary.confirmedCount} Confirmed</span>
+                    <span class="badge badge-conf conf-firm">${model.summary.firmCount ?? 0} Firm</span>
+                    <span class="badge badge-conf conf-potential">${model.summary.potentialCount} Potential</span>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
-        <div>
-          <h3 class="meta-label" style="margin-bottom: 8px;">Findings by Category &amp; Confidence</h3>
-          <table class="data-table">
-            <thead>
-              <tr><th>Category</th><th>Count</th></tr>
-            </thead>
-            <tbody>
-              ${categoryHtml}
-            </tbody>
-            <tfoot>
-              <tr>
-                <td style="font-weight: 700; border-top: 1px solid var(--border);">Verification State</td>
-                <td style="border-top: 1px solid var(--border); font-size: 12px;">
-                  <span class="badge badge-conf conf-confirmed">${model.summary.confirmedCount} Confirmed</span>
-                  <span class="badge badge-conf conf-firm" style="margin-left: 4px;">${model.summary.firmCount ?? 0} Firm</span>
-                  <span class="badge badge-conf conf-potential" style="margin-left: 4px;">${model.summary.potentialCount} Potential</span>
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+      </section>
+
+      ${performanceSectionHtml}
+
+      <!-- Actionable Findings & Bilingual Recommendations -->
+      ${recommendationsHtml}
+
+      ${consolidatedHtml}
+
+      <!-- Raw Persisted Findings & Visual Screenshot Evidence -->
+      <section class="section-card">
+        <h2 class="section-title">${isArabic ? 'سجل الملاحظات التفصيلية والأدلة البصرية' : 'Detailed Findings'} (${model.findings.length})</h2>
+        <div class="findings-list">${findingsListHtml}</div>
+      </section>
+
+      <!-- Limitations & Disclaimers -->
+      <section class="section-card">
+        <h2 class="section-title">${escapeHtml(activeVm.labels.knownLimitations)}</h2>
+        <div style="font-size:12px; line-height:1.65; color:var(--text-muted);">
+          <p style="margin-bottom:8px;">${escapeHtml(activeVm.disclosures.readOnlyAuditNotice)}</p>
+          <p style="margin-bottom:8px;">${escapeHtml(activeVm.disclosures.noComplianceCertificationNotice)}</p>
+          <p style="margin-bottom:8px;">${escapeHtml(activeVm.disclosures.laboratoryContextNotice)}</p>
+          <p>${escapeHtml(activeVm.disclosures.healthIndexDisclaimer)}</p>
         </div>
-      </div>
-    </section>
+      </section>
+    </main>
 
-    ${consolidatedHtml}
-
-    ${performanceSectionHtml}
-
-    <!-- Detailed Findings List -->
-    <section class="section-card">
-      <div class="section-title">
-        <span>Detailed Findings (${model.findings.length})</span>
-      </div>
-      <div class="findings-list">
-        ${findingsListHtml}
-      </div>
-    </section>
-
-    <!-- Scan Limitations & Compliance Boundary -->
-    <section class="section-card">
-      <h2 class="section-title">Scan Limitations &amp; Disclaimers</h2>
-      <div style="font-size: 12px; line-height: 1.6; color: var(--text-muted);">
-        <p style="margin-bottom: 8px;"><strong>Automated Scan Limitations:</strong> This report reflects automated observations collected under bounded execution parameters at scan time. Automated audits cannot guarantee the discovery of all vulnerabilities, zero-day defects, or business-logic flaws.</p>
-        <p style="margin-bottom: 8px;"><strong>Accessibility Disclaimers:</strong> Automated accessibility evaluations using axe-core verify specific programmatic WCAG 2.0, 2.1, and 2.2 AA success criteria (e.g. contrast, alt text, ARIA roles). Automated rules verify only a subset of WCAG requirements. This report does not constitute a legal certification of WCAG compliance. Items marked as Manual Review require evaluation with assistive technologies.</p>
-        <p style="margin-bottom: 8px;"><strong>Layout Stability &amp; Performance:</strong> Synthetic layout shift (CLS) measurements are observed under simulated headless viewport conditions and do not substitute for Real User Monitoring (RUM) field metrics from Chrome UX Report (CrUX).</p>
-        <p><strong>Laboratory Performance Telemetry:</strong> All Core Web Vitals (TTFB, FCP, LCP, CLS, TBT) and asset timing telemetry represent single-pass automated Chromium laboratory diagnostics. Laboratory metrics isolate underlying browser rendering mechanics, but do not replace aggregate field user experiences. Interaction to Next Paint (INP) is fundamentally unavailable in read-only lab audits.</p>
-      </div>
-    </section>
-
-    <!-- Footer -->
     <footer class="report-footer">
       <p><strong>Ultimate WordPress &amp; Website Auditor</strong> &bull; Version ${escapeHtml(model.version)}</p>
-      <p>Report ID: <span class="font-mono">${escapeHtml(model.reportId)}</span> &bull; Generated: ${formatDate(model.generatedAt)}</p>
-      <p style="margin-top: 8px; font-size: 11px;">Disclaimer: This automated audit reflects technical observations and findings collected at the time of scan execution. It does not certify the complete absence of undiscovered vulnerabilities or security defects.</p>
+      <p dir="ltr">Report ID: <span class="font-mono">${escapeHtml(model.reportId)}</span> &bull; Generated: ${formatDate(model.generatedAt)}</p>
     </footer>
   </div>
 </body>

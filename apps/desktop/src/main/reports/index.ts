@@ -2,6 +2,7 @@ export * from './types.js';
 export * from './paths.js';
 export * from './security.js';
 export * from './visual-evidence.js';
+export * from './chart-renderer.js';
 export * from './assembler.js';
 export * from './html-generator.js';
 export * from './json-generator.js';

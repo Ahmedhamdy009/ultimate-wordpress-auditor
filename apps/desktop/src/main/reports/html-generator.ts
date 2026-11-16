@@ -1021,8 +1021,8 @@ ${htmlOpenTag}
                 }</strong></td></tr>
                 ${isPartialCoverage && model.summary.coverageWarning ? `<tr><td>Coverage Notice</td><td style="color:var(--warning);">${escapeHtml(model.summary.coverageWarning)}</td></tr>` : ''}
                 ${typeof model.summary.browserCandidatesTotal === 'number' && model.summary.browserCandidatesTotal > 0 ? `<tr><td>Browser Candidates</td><td class="font-mono" dir="ltr">${model.summary.browserPagesAudited ?? 0} of ${model.summary.browserCandidatesTotal} audited${(model.summary.browserCandidatesSkipped ?? 0) > 0 ? ` (${model.summary.browserCandidatesSkipped} skipped due to budget)` : ''}</td></tr>` : ''}
-                <tr><td>Pages Crawled (Static Analysis)</td><td class="font-mono" dir="ltr">${model.summary.pagesScanned} pages</td></tr>
-                <tr><td>Browser Pages Audited</td><td class="font-mono" dir="ltr">${model.summary.browserPagesAudited ?? 0} of ${model.summary.pagesScanned} pages</td></tr>
+                <tr><td>Pages Crawled (Static Analysis)</td><td class="font-mono" dir="ltr">${model.summary.pagesScanned} pages (${model.summary.staticCoverageStatus === 'partial' ? 'partial' : '100%'} static coverage)</td></tr>
+                <tr><td>Browser Pages Audited</td><td class="font-mono" dir="ltr">${model.summary.browserPagesAudited ?? 0} of ${model.summary.pagesScanned} pages (${Math.round(((model.summary.browserPagesAudited ?? 0) / Math.max(1, model.summary.pagesScanned)) * 100)}% browser coverage)</td></tr>
                 <tr><td>Screenshots Captured</td><td class="font-mono" dir="ltr">${model.summary.screenshotsCaptured ?? 0}</td></tr>
                 <tr><td>Pages Failed / Errored</td><td class="font-mono" dir="ltr">${model.summary.pagesFailed}</td></tr>
               </tbody>
@@ -1065,7 +1065,7 @@ ${htmlOpenTag}
 
       <!-- Limitations & Disclaimers -->
       <section class="section-card">
-        <h2 class="section-title">${escapeHtml(activeVm.labels.knownLimitations)}</h2>
+        <h2 class="section-title">${isArabic ? escapeHtml(activeVm.labels.knownLimitations) : 'Scan Limitations &amp; Disclaimers'}</h2>
         <div style="font-size:12px; line-height:1.65; color:var(--text-muted);">
           <p style="margin-bottom:8px;">${escapeHtml(activeVm.disclosures.readOnlyAuditNotice)}</p>
           <p style="margin-bottom:8px;">${escapeHtml(activeVm.disclosures.noComplianceCertificationNotice)}</p>

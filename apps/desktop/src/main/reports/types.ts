@@ -45,6 +45,14 @@ export interface ReportScanRunModel {
   readonly a11yPagesCompleted?: number;
   readonly clsPagesExpected?: number;
   readonly clsPagesCompleted?: number;
+  readonly staticModulesExecuted?: number;
+  readonly staticModulesTotal?: number;
+  readonly staticPagesAnalyzed?: number;
+  readonly runtimeAuditsCompleted?: number;
+  readonly viewportsCompleted?: number;
+  readonly accessibilityCandidatesTotal?: number;
+  readonly accessibilityAuditsCompleted?: number;
+  readonly layoutStabilityPagesCompleted?: number;
   readonly pageScreenshots?: readonly Record<string, unknown>[];
   readonly errorDetails?: Record<string, unknown> | null;
   readonly isPartialAudit?: boolean;

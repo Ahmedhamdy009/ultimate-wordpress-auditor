@@ -11,6 +11,7 @@ import type {
   ScanRunDTO,
   ScanStage,
   CreateFindingRequest,
+  PageScreenshotRecord,
 } from '@auditor/shared';
 import type { CrawlConfig, CrawlResult } from '../crawler/types.js';
 import type { BoundedCrawler } from '../crawler/crawler.js';
@@ -41,6 +42,10 @@ export interface BrowserAuditExecutionResult {
   findings: CreateFindingRequest[];
   failedPages: Array<{ url: string; error: string }>;
   performanceMetrics?: Record<string, unknown> | null;
+  runtimeAuditsCompleted?: number;
+  layoutStabilityPagesCompleted?: number;
+  accessibilityCandidatesTotal?: number;
+  pageScreenshots?: PageScreenshotRecord[];
 }
 
 export interface ScanExecutionContext {

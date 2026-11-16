@@ -4,6 +4,7 @@
  * secret redaction, and atomic finding persistence into SQLite.
  */
 
+import path from 'node:path';
 import {
   type CreateScanRunRequest,
   type CancelScanRunRequest,
@@ -14,6 +15,8 @@ import {
   type ScanRunSummaryDTO,
   type AuditModulesConfig,
   type CreateFindingRequest,
+  type PageScreenshotRecord,
+  type ViewportCategoryBucket,
   DEFAULT_AUDIT_MODULES,
   CreateScanRunRequestSchema,
   CancelScanRunRequestSchema,
@@ -61,6 +64,20 @@ import type {
   ScanStage,
 } from './types.js';
 import { SCAN_ORCHESTRATOR_ERROR_CODES, ScanOrchestratorError } from './errors.js';
+
+function resolveViewportCategory(profile: {
+  id?: string;
+  width: number;
+  isMobile?: boolean;
+}): ViewportCategoryBucket {
+  if (profile.id?.includes('mobile') || (profile.isMobile && profile.width < 768)) {
+    return 'mobile';
+  }
+  if (profile.id?.includes('tablet') || profile.width <= 1024) {
+    return 'tablet';
+  }
+  return 'desktop';
+}
 
 export class ScanOrchestrator implements IScanOrchestrator {
   private readonly scanRunRepo: ScanRunRepository;
@@ -457,7 +474,13 @@ export class ScanOrchestrator implements IScanOrchestrator {
 
         browserResult = await this.executeBrowserAudit(context, crawlResult, modules, onProgress);
         context.browserResult = browserResult;
-        context.completedEngines.push('browser');
+        if (
+          browserResult &&
+          (browserResult.pagesAudited > 0 ||
+            !browserResult.findings.some(f => f.ruleId === 'SYS_BROWSER_UNAVAILABLE'))
+        ) {
+          context.completedEngines.push('browser');
+        }
         context.interruptedEngine = null;
         this.checkAborted(context);
       }
@@ -540,6 +563,13 @@ export class ScanOrchestrator implements IScanOrchestrator {
               : undefined
         : undefined;
 
+      const staticModuleKeys = ['http', 'wordpress', 'securityHeaders', 'cookies', 'seo'] as const;
+      const staticModulesTotal = staticModuleKeys.filter(k => modules[k] !== false).length;
+      const staticModulesExecuted = context.completedEngines.includes('analyzers')
+        ? staticModulesTotal
+        : 0;
+      const staticPagesAnalyzed = analyzerResult.stats.pagesAnalyzed;
+
       const summary: ScanRunSummaryDTO = {
         totalFindings: allPersisted.length,
         criticalCount: countsBySeverity.critical,
@@ -550,10 +580,20 @@ export class ScanOrchestrator implements IScanOrchestrator {
         urlsCrawled: crawlResult.summary.totalPagesAttempted,
         pagesScanned,
         pagesFailed: totalPagesFailed,
+        crawlFailedPages: crawlResult.summary.failedPages,
+        browserFailedPages: browserResult?.failedPages.length ?? 0,
+        staticModulesExecuted,
+        staticModulesTotal,
+        staticPagesAnalyzed,
         browserPagesAudited,
+        runtimeAuditsCompleted: browserResult?.runtimeAuditsCompleted ?? 0,
         viewportsCompleted: browserResult?.viewportsCompleted ?? 0,
+        accessibilityCandidatesTotal: browserResult?.accessibilityCandidatesTotal ?? 0,
         accessibilityAuditsCompleted: browserResult?.accessibilityAuditsCompleted ?? 0,
+        layoutStabilityPagesCompleted: browserResult?.layoutStabilityPagesCompleted ?? 0,
         screenshotsCaptured: browserResult?.screenshotsCaptured ?? 0,
+        pageScreenshots: browserResult?.pageScreenshots ?? [],
+        completedEngines: [...context.completedEngines],
         browserCandidatesTotal,
         browserCandidatesSkipped,
         isPartialCoverage,
@@ -922,6 +962,7 @@ export class ScanOrchestrator implements IScanOrchestrator {
           pagesScanned:
             context.crawlResult?.summary?.successfulPages ?? context.progress.pagesSucceeded,
           pagesFailed: context.crawlResult?.summary?.failedPages ?? context.progress.pagesFailed,
+          crawlFailedPages: context.crawlResult?.summary?.failedPages,
           browserPagesAudited: context.progress.browserPagesAudited,
           viewportsCompleted: context.progress.viewportsCompleted,
           accessibilityAuditsCompleted: context.progress.accessibilityAuditsCompleted,
@@ -1060,6 +1101,9 @@ export class ScanOrchestrator implements IScanOrchestrator {
     let viewportsCompleted = 0;
     let accessibilityAuditsCompleted = 0;
     let screenshotsCaptured = 0;
+    let runtimeAuditsCompleted = 0;
+    let layoutStabilityPagesCompleted = 0;
+    const pageScreenshots: PageScreenshotRecord[] = [];
     const pagePerformanceSnapshots: Array<{
       pageUrl: string;
       isEntryUrl: boolean;
@@ -1277,6 +1321,10 @@ export class ScanOrchestrator implements IScanOrchestrator {
         browserCandidatesSkipped: browserCandidatesTotal,
         findings,
         failedPages: [{ url: context.entryUrl, error: errMsg }],
+        runtimeAuditsCompleted: 0,
+        layoutStabilityPagesCompleted: 0,
+        accessibilityCandidatesTotal: modules.accessibility ? browserCandidatesTotal : 0,
+        pageScreenshots: [],
       };
     }
 
@@ -1319,6 +1367,7 @@ export class ScanOrchestrator implements IScanOrchestrator {
         let runtimeAuditor: RuntimeResourceAuditor | null = null;
         let performanceAuditor: PerformanceAuditor | null = null;
         const pageAuditStartTime = Date.now();
+        let pageHadLayoutStability = false;
 
         try {
           const needsDomAudit =
@@ -1413,6 +1462,14 @@ export class ScanOrchestrator implements IScanOrchestrator {
                   },
                 );
                 findings.push(...perfResult.findings);
+                if (
+                  modules.layoutStability &&
+                  perfResult.labMetrics &&
+                  typeof perfResult.labMetrics.cls === 'number' &&
+                  Number.isFinite(perfResult.labMetrics.cls)
+                ) {
+                  pageHadLayoutStability = true;
+                }
                 if (perfResult.labMetrics || perfResult.resourceSummary) {
                   let isEntryPage = false;
                   try {
@@ -1495,6 +1552,7 @@ export class ScanOrchestrator implements IScanOrchestrator {
                     references: f.references ? [...f.references] : [],
                   })),
                 );
+                runtimeAuditsCompleted++;
               }
               runtimeAuditor.detach();
               runtimeAuditor = null;
@@ -1529,8 +1587,32 @@ export class ScanOrchestrator implements IScanOrchestrator {
             context.progress.viewportsCompleted = viewportsCompleted;
             context.progress.screenshotsCaptured = screenshotsCaptured;
 
+            if (modules.layoutStability && visualReport.viewportResults.length > 0) {
+              pageHadLayoutStability = true;
+            }
+
             // Associate primary viewport screenshot with accessibility and page-level findings for this pageUrl
             const allPageScreenshots = visualReport.viewportResults.flatMap(vr => vr.screenshots);
+            for (const s of allPageScreenshots) {
+              const viewportCategory = resolveViewportCategory(s.viewport);
+              pageScreenshots.push({
+                id: s.id,
+                pageUrl: redactUrl(s.targetUrl),
+                viewportId: s.viewport.id,
+                viewportName: s.viewport.name,
+                viewportCategory,
+                width: s.width,
+                height: s.height,
+                captureType: s.captureType,
+                relativePath: s.relativePath,
+                fileName: s.relativePath ? path.basename(s.relativePath) : `${s.id}.${s.format}`,
+                fileSizeBytes: s.fileSizeBytes,
+                format: s.format,
+                status: 'captured',
+                findingIds: s.findingId ? [s.findingId] : [],
+              });
+            }
+
             const primaryPageScreenshot =
               allPageScreenshots.find(
                 s => s.viewport.id === 'desktop' && s.captureType === 'viewport',
@@ -1569,6 +1651,9 @@ export class ScanOrchestrator implements IScanOrchestrator {
           }
 
           pagesAudited++;
+          if (pageHadLayoutStability) {
+            layoutStabilityPagesCompleted++;
+          }
           observedPageDurations.push(Date.now() - pageAuditStartTime);
           context.progress.browserPagesAudited = pagesAudited;
           this.notifyProgress(context, onProgress);
@@ -1644,6 +1729,10 @@ export class ScanOrchestrator implements IScanOrchestrator {
       findings,
       failedPages,
       performanceMetrics,
+      runtimeAuditsCompleted,
+      layoutStabilityPagesCompleted,
+      accessibilityCandidatesTotal: modules.accessibility ? candidateUrls.size : 0,
+      pageScreenshots,
     };
   }
 

@@ -200,11 +200,13 @@ export function assembleReportData(
               : undefined
         : undefined;
 
-  const completedEngines: readonly string[] = Array.isArray(errorDetails?.completedEngines)
-    ? (errorDetails!.completedEngines as string[])
-    : scanRun.status === 'completed'
-      ? ['crawler', 'analyzers', ...(browserPagesAudited > 0 ? ['browser'] : [])]
-      : ['crawler'];
+  const completedEngines: readonly string[] = Array.isArray(metricsSource.completedEngines)
+    ? (metricsSource.completedEngines as string[])
+    : Array.isArray(errorDetails?.completedEngines)
+      ? (errorDetails!.completedEngines as string[])
+      : scanRun.status === 'completed'
+        ? ['crawler', 'analyzers', ...(browserPagesAudited > 0 ? ['browser'] : [])]
+        : ['crawler'];
 
   const interruptedEngine: string | null =
     typeof errorDetails?.interruptedEngine === 'string'
@@ -298,6 +300,30 @@ export function assembleReportData(
       : {}),
     ...(typeof metricsSource.clsPagesCompleted === 'number'
       ? { clsPagesCompleted: metricsSource.clsPagesCompleted }
+      : {}),
+    ...(typeof metricsSource.staticModulesExecuted === 'number'
+      ? { staticModulesExecuted: metricsSource.staticModulesExecuted }
+      : {}),
+    ...(typeof metricsSource.staticModulesTotal === 'number'
+      ? { staticModulesTotal: metricsSource.staticModulesTotal }
+      : {}),
+    ...(typeof metricsSource.staticPagesAnalyzed === 'number'
+      ? { staticPagesAnalyzed: metricsSource.staticPagesAnalyzed }
+      : {}),
+    ...(typeof metricsSource.runtimeAuditsCompleted === 'number'
+      ? { runtimeAuditsCompleted: metricsSource.runtimeAuditsCompleted }
+      : {}),
+    ...(typeof metricsSource.viewportsCompleted === 'number'
+      ? { viewportsCompleted: metricsSource.viewportsCompleted }
+      : {}),
+    ...(typeof metricsSource.accessibilityCandidatesTotal === 'number'
+      ? { accessibilityCandidatesTotal: metricsSource.accessibilityCandidatesTotal }
+      : {}),
+    ...(typeof metricsSource.accessibilityAuditsCompleted === 'number'
+      ? { accessibilityAuditsCompleted: metricsSource.accessibilityAuditsCompleted }
+      : {}),
+    ...(typeof metricsSource.layoutStabilityPagesCompleted === 'number'
+      ? { layoutStabilityPagesCompleted: metricsSource.layoutStabilityPagesCompleted }
       : {}),
     ...(Array.isArray(metricsSource.pageScreenshots)
       ? { pageScreenshots: metricsSource.pageScreenshots as readonly Record<string, unknown>[] }

@@ -144,6 +144,7 @@ export interface ScanRunSummaryDTO {
   performanceMetrics?: Record<string, unknown> | null;
   pageScreenshots?: PageScreenshotRecord[];
   resourceBytesByType?: ResourceBytesByType;
+  completedEngines?: string[];
 }
 
 export const ScanRunSummaryDTOSchema = z.object({
@@ -179,6 +180,7 @@ export const ScanRunSummaryDTOSchema = z.object({
   performanceMetrics: z.record(z.string(), z.unknown()).optional().nullable(),
   pageScreenshots: z.array(PageScreenshotRecordSchema).max(500).optional(),
   resourceBytesByType: ResourceBytesByTypeSchema.optional(),
+  completedEngines: z.array(z.string().min(1).max(100)).max(50).optional(),
 });
 
 export interface ScanRunErrorDTO {

@@ -67,11 +67,13 @@ export function adaptScanRunForViewModel(params: {
 
   const browserPagesAudited = readSafeCount(metricsSource, 'browserPagesAudited') ?? 0;
 
-  const completedEngines: readonly string[] = Array.isArray(errorDetails?.completedEngines)
-    ? (errorDetails.completedEngines as string[])
-    : scanRun.status === 'completed'
-      ? ['crawler', 'analyzers', ...(browserPagesAudited > 0 ? ['browser'] : [])]
-      : ['crawler'];
+  const completedEngines: readonly string[] = Array.isArray(metricsSource.completedEngines)
+    ? (metricsSource.completedEngines as string[])
+    : Array.isArray(errorDetails?.completedEngines)
+      ? (errorDetails.completedEngines as string[])
+      : scanRun.status === 'completed'
+        ? ['crawler', 'analyzers', ...(browserPagesAudited > 0 ? ['browser'] : [])]
+        : ['crawler'];
 
   return buildReportViewModel({
     locale,

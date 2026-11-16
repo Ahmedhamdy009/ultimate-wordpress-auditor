@@ -39,6 +39,14 @@ export interface ExtractedLink {
   readonly rejectionReason?: string;
 }
 
+export interface ExtractedHreflangLink {
+  readonly hreflang: string;
+  readonly normalizedHreflang: string;
+  readonly rawHref: string;
+  readonly resolvedUrl: string | null;
+  readonly isSelfReference: boolean;
+}
+
 export interface ExtractedImage {
   readonly src: string | null;
   readonly srcset: string | null;
@@ -122,6 +130,7 @@ export interface ParsedHtmlDocument {
   readonly metrics: ParserMetrics;
   readonly visibleWordCount?: number;
   readonly jsonLdScripts?: readonly string[];
+  readonly hreflangs?: readonly ExtractedHreflangLink[];
 }
 
 export interface HtmlParserOptions {
@@ -148,4 +157,10 @@ export interface HtmlParserOptions {
    * Default: 500.
    */
   readonly maxResources?: number;
+
+  /**
+   * Maximum hreflang annotations to extract per page.
+   * Default: 50.
+   */
+  readonly maxHreflangs?: number;
 }

@@ -568,7 +568,7 @@ export class ScanOrchestrator implements IScanOrchestrator {
       const staticModulesExecuted = context.completedEngines.includes('analyzers')
         ? staticModulesTotal
         : 0;
-      const staticPagesAnalyzed = analyzerResult.stats.pagesAnalyzed;
+      const staticPagesAnalyzed = analyzerResult?.stats?.pagesAnalyzed ?? 0;
 
       const summary: ScanRunSummaryDTO = {
         totalFindings: allPersisted.length,

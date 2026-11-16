@@ -7,6 +7,8 @@
  */
 
 import type { CrawledPageResult, CrawlResult } from '../crawler/types.js';
+import { redactUrl } from '../../browser/redactor.js';
+import { areHreflangTagsConsistent } from '../parser/hreflang-validator.js';
 import type {
   AnalyzerContext,
   AnalyzerFinding,
@@ -20,6 +22,7 @@ export interface CrossPageData {
   readonly brokenInternalLinksCount: number;
   readonly canonicalIssuesCount?: number;
   readonly duplicateContentCandidatesCount?: number;
+  readonly hreflangIssuesCount?: number;
 }
 
 export class CrossPageAnalyzer implements SiteAnalyzer<CrossPageData> {
@@ -372,12 +375,269 @@ export class CrossPageAnalyzer implements SiteAnalyzer<CrossPageData> {
       }
     }
 
+    // ==========================================
+    // 6. Hreflang & Multilingual Cross-Page Validation
+    // ==========================================
+    let hreflangIssuesCount = 0;
+    const reportedHreflangIssues = new Set<string>();
+
+    for (const sourcePage of crawlResult.pages) {
+      const sourceHreflangs = sourcePage.parsedDocument?.hreflangs;
+      if (!sourceHreflangs || sourceHreflangs.length === 0) continue;
+
+      const sourceUrl = sourcePage.requestedUrl;
+      const authorizedOrigin = crawlResult.summary.authorizedOrigin;
+
+      // Determine expected source language
+      const sourceSelfLink = sourceHreflangs.find(h => h.isSelfReference);
+      const sourceExpectedLang =
+        sourceSelfLink?.normalizedHreflang ||
+        sourcePage.parsedDocument?.metadata.lang?.toLowerCase().trim();
+
+      for (const alt of sourceHreflangs) {
+        if (!alt.resolvedUrl) continue;
+        if (alt.isSelfReference) continue;
+
+        const targetUrl = alt.resolvedUrl;
+        const normLang = alt.normalizedHreflang;
+
+        // Check if target is external origin (out-of-scope)
+        let isExternal: boolean;
+        try {
+          const targetOrigin = new URL(targetUrl).origin;
+          const authOrigin = new URL(authorizedOrigin).origin;
+          isExternal = targetOrigin !== authOrigin;
+        } catch {
+          isExternal = true;
+        }
+
+        const dedupeKey = `${sourceUrl}->${targetUrl}`;
+
+        if (isExternal) {
+          const issueKey = `${dedupeKey}:SEO_HREFLANG_EXTERNAL_TARGET`;
+          if (!reportedHreflangIssues.has(issueKey)) {
+            reportedHreflangIssues.add(issueKey);
+            hreflangIssuesCount++;
+            findings.push({
+              ruleId: 'SEO_HREFLANG_EXTERNAL_TARGET',
+              category: 'technical-seo',
+              title: `External Alternate Target in hreflang (${normLang})`,
+              description: `Page ${redactUrl(sourceUrl)} declares an alternate hreflang link to an external origin: ${redactUrl(targetUrl)}. Because this target is outside the crawl scope, reciprocal confirmation could not be automatically verified. (Target is not verified as broken).`,
+              severity: 'info',
+              confidence: 'potential',
+              status: 'potential',
+              targetUrl: redactUrl(sourceUrl),
+              evidence: {
+                sourceUrl: redactUrl(sourceUrl),
+                hreflang: normLang,
+                targetUrl: redactUrl(targetUrl),
+                scope: 'external-origin',
+              },
+              remediation:
+                'Ensure cross-domain hreflang annotations on external properties maintain valid reciprocal links and 200 OK responses.',
+              references: [
+                'https://developers.google.com/search/docs/specialty/international/localized-versions',
+              ],
+            });
+          }
+          continue;
+        }
+
+        // Target is in-scope internal URL. Look up in crawl results.
+        const targetPage =
+          pageByUrl.get(targetUrl) ||
+          pageByUrl.get(targetUrl.replace(/\/$/, '')) ||
+          pageByUrl.get(targetUrl + '/');
+        const targetErr =
+          errorByUrl.get(targetUrl) ||
+          errorByUrl.get(targetUrl.replace(/\/$/, '')) ||
+          errorByUrl.get(targetUrl + '/');
+
+        if (!targetPage) {
+          // Internal in-scope target was NOT crawled (depth or max-pages limit reached)
+          const issueKey = `${dedupeKey}:SEO_HREFLANG_UNCRAWLED_TARGET`;
+          if (!reportedHreflangIssues.has(issueKey)) {
+            reportedHreflangIssues.add(issueKey);
+            hreflangIssuesCount++;
+            findings.push({
+              ruleId: 'SEO_HREFLANG_UNCRAWLED_TARGET',
+              category: 'technical-seo',
+              title: `Uncrawled In-Scope hreflang Target (${normLang})`,
+              description: `Page ${redactUrl(sourceUrl)} declares an alternate hreflang link to ${redactUrl(targetUrl)}, which was within crawl scope but not visited during this scan (e.g. crawl depth or page limit reached). Reciprocal link status could not be verified. (Target is not verified as broken).`,
+              severity: 'info',
+              confidence: 'potential',
+              status: 'potential',
+              targetUrl: redactUrl(sourceUrl),
+              evidence: {
+                sourceUrl: redactUrl(sourceUrl),
+                hreflang: normLang,
+                targetUrl: redactUrl(targetUrl),
+                reason: 'Page not visited within crawl limits',
+              },
+              remediation:
+                'Increase scan page limit or depth if complete multilingual site audit is required.',
+              references: [
+                'https://developers.google.com/search/docs/specialty/international/localized-versions',
+              ],
+            });
+          }
+          continue;
+        }
+
+        // Target was crawled! Check for HTTP errors or fetch failures
+        if (targetPage.statusCode !== null && targetPage.statusCode >= 400) {
+          const issueKey = `${dedupeKey}:SEO_HREFLANG_TARGET_BROKEN_STATUS`;
+          if (!reportedHreflangIssues.has(issueKey)) {
+            reportedHreflangIssues.add(issueKey);
+            hreflangIssuesCount++;
+            findings.push({
+              ruleId: 'SEO_HREFLANG_TARGET_BROKEN',
+              category: 'technical-seo',
+              title: `Broken hreflang Target URL (HTTP ${targetPage.statusCode})`,
+              description: `Page ${redactUrl(sourceUrl)} declares an alternate hreflang ("${normLang}") pointing to ${redactUrl(targetUrl)}, but that destination returned HTTP ${targetPage.statusCode} (${targetPage.statusMessage || 'Error'}). Hreflang targets must return HTTP 200 OK.`,
+              severity: targetPage.statusCode >= 500 ? 'high' : 'medium',
+              confidence: 'confirmed',
+              status: 'confirmed',
+              targetUrl: redactUrl(sourceUrl),
+              evidence: {
+                sourceUrl: redactUrl(sourceUrl),
+                hreflang: normLang,
+                targetUrl: redactUrl(targetUrl),
+                statusCode: targetPage.statusCode,
+                statusMessage: targetPage.statusMessage,
+              },
+              remediation:
+                'Update or remove broken alternate URLs so that every hreflang link resolves to a live, indexable HTTP 200 page.',
+              references: [
+                'https://developers.google.com/search/docs/specialty/international/localized-versions',
+              ],
+            });
+          }
+          continue;
+        }
+
+        if (targetPage.error || targetErr) {
+          const issueKey = `${dedupeKey}:SEO_HREFLANG_TARGET_BROKEN_ERR`;
+          if (!reportedHreflangIssues.has(issueKey)) {
+            reportedHreflangIssues.add(issueKey);
+            hreflangIssuesCount++;
+            const errCode = targetPage.error?.code || targetErr?.code || 'FETCH_ERROR';
+            const errMsg = targetPage.error?.message || targetErr?.message || 'Network error';
+            findings.push({
+              ruleId: 'SEO_HREFLANG_TARGET_BROKEN',
+              category: 'technical-seo',
+              title: `hreflang Target Fetch Failure (${errCode})`,
+              description: `Page ${redactUrl(sourceUrl)} declares an alternate hreflang ("${normLang}") pointing to ${redactUrl(targetUrl)}, which failed to load during crawl (${errCode}: ${errMsg}).`,
+              severity: 'medium',
+              confidence: 'confirmed',
+              status: 'confirmed',
+              targetUrl: redactUrl(sourceUrl),
+              evidence: {
+                sourceUrl: redactUrl(sourceUrl),
+                hreflang: normLang,
+                targetUrl: redactUrl(targetUrl),
+                errorCode: errCode,
+                errorMessage: errMsg,
+              },
+              remediation:
+                'Fix target network reachability or remove the invalid alternate declaration.',
+              references: [
+                'https://developers.google.com/search/docs/specialty/international/localized-versions',
+              ],
+            });
+          }
+          continue;
+        }
+
+        // Target returned 200 OK. Now verify RECIPROCAL link!
+        const targetHreflangs = targetPage.parsedDocument?.hreflangs || [];
+        const normSourceUrl = sourceUrl.replace(/\/$/, '');
+        const normFinalSourceUrl = sourcePage.finalUrl?.replace(/\/$/, '');
+
+        const reciprocalLink = targetHreflangs.find(h => {
+          if (!h.resolvedUrl) return false;
+          const normTargetResolved = h.resolvedUrl.replace(/\/$/, '');
+          return (
+            normTargetResolved === normSourceUrl ||
+            (normFinalSourceUrl && normTargetResolved === normFinalSourceUrl)
+          );
+        });
+
+        if (!reciprocalLink) {
+          // Missing reciprocal link!
+          const issueKey = `${dedupeKey}:SEO_HREFLANG_MISSING_RECIPROCAL`;
+          if (!reportedHreflangIssues.has(issueKey)) {
+            reportedHreflangIssues.add(issueKey);
+            hreflangIssuesCount++;
+            findings.push({
+              ruleId: 'SEO_HREFLANG_MISSING_RECIPROCAL',
+              category: 'technical-seo',
+              title: 'Missing Reciprocal hreflang Annotation',
+              description: `Page ${redactUrl(sourceUrl)} declares ${redactUrl(targetUrl)} as an alternate for "${normLang}", but ${redactUrl(targetUrl)} does NOT declare a return (reciprocal) hreflang link back to ${redactUrl(sourceUrl)}. Search engines ignore hreflang annotations that lack reciprocal confirmations.`,
+              severity: 'medium',
+              confidence: 'confirmed',
+              status: 'confirmed',
+              targetUrl: redactUrl(sourceUrl),
+              evidence: {
+                sourceUrl: redactUrl(sourceUrl),
+                targetUrl: redactUrl(targetUrl),
+                declaredHreflang: normLang,
+                targetHreflangsFound: targetHreflangs.map(h => ({
+                  hreflang: h.normalizedHreflang,
+                  href: redactUrl(h.resolvedUrl || h.rawHref),
+                })),
+              },
+              remediation:
+                'Add a reciprocal <link rel="alternate" hreflang="..." href="..."> on the destination page pointing back to the source page.',
+              references: [
+                'https://developers.google.com/search/docs/specialty/international/localized-versions',
+              ],
+            });
+          }
+        } else {
+          // Reciprocal link exists! Now verify language agreement!
+          if (
+            sourceExpectedLang &&
+            !areHreflangTagsConsistent(sourceExpectedLang, reciprocalLink.normalizedHreflang)
+          ) {
+            const issueKey = `${dedupeKey}:SEO_HREFLANG_INCONSISTENT_LANGUAGE`;
+            if (!reportedHreflangIssues.has(issueKey)) {
+              reportedHreflangIssues.add(issueKey);
+              hreflangIssuesCount++;
+              findings.push({
+                ruleId: 'SEO_HREFLANG_INCONSISTENT_LANGUAGE',
+                category: 'technical-seo',
+                title: 'Inconsistent Language Mapping in Reciprocal hreflang',
+                description: `Page ${redactUrl(sourceUrl)} is referenced by ${redactUrl(targetUrl)} with language "${reciprocalLink.normalizedHreflang}", but ${redactUrl(sourceUrl)} declares its language as "${sourceExpectedLang}". Both pages in a reciprocal hreflang pair must agree on the declared language.`,
+                severity: 'medium',
+                confidence: 'confirmed',
+                status: 'confirmed',
+                targetUrl: redactUrl(sourceUrl),
+                evidence: {
+                  sourceUrl: redactUrl(sourceUrl),
+                  targetUrl: redactUrl(targetUrl),
+                  expectedLanguage: sourceExpectedLang,
+                  returnedLanguage: reciprocalLink.normalizedHreflang,
+                },
+                remediation:
+                  'Align the hreflang language tags between both pages so that reciprocal references agree.',
+                references: [
+                  'https://developers.google.com/search/docs/specialty/international/localized-versions',
+                ],
+              });
+            }
+          }
+        }
+      }
+    }
+
     const data: CrossPageData = {
       duplicateTitlesCount,
       duplicateDescriptionsCount,
       brokenInternalLinksCount,
       canonicalIssuesCount,
       duplicateContentCandidatesCount,
+      hreflangIssuesCount,
     };
 
     return {

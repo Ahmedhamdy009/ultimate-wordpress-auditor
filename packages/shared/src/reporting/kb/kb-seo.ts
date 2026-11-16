@@ -1580,4 +1580,294 @@ export const SEO_KB_ENTRIES: readonly RecommendationEntry[] = [
     refLabel: 'Google Sitemaps Best Practices',
     refUrl: 'https://developers.google.com/search/docs/crawling-indexing/sitemaps/overview',
   }),
+
+  // --- Hreflang & Multilingual SEO ---
+  simpleSeoEntry({
+    id: 'rec-seo-hreflang-invalid-tag',
+    ruleIds: ['SEO_HREFLANG_INVALID_TAG'],
+    problemSimpleEn:
+      'A link rel="alternate" hreflang tag contains an invalid or non-standard language code.',
+    problemSimpleAr:
+      'يحتوي وسم hreflang التابع للغات المتعددة على رمز لغة غير قياسي أو غير صالح وفق معيار BCP 47.',
+    problemTechEn:
+      'The hreflang attribute value fails BCP 47 syntax or semantic validation (e.g. using underscores instead of hyphens like en_US).',
+    problemTechAr:
+      'قيمة السمة hreflang تخالف معيار BCP 47 (مثل استخدام الشرطة السفلية en_US بدلاً من en-US).',
+    impactSimpleEn:
+      'Search engines will ignore the language alternate annotation, preventing correct localized version serving.',
+    impactSimpleAr:
+      'تتجاهل محركات البحث إعلان اللغة المعطوب ولا تُظهر النسخة المناسبة للغة المستخدم أو منطقته الجغرافية.',
+    impactTechEn:
+      'Search engines fail to index the internationalized alternate relationship and do not swap URLs in localized SERPs.',
+    impactTechAr:
+      'تفشل محركات البحث في ربط النسخ الدولية ولا تستبدل الروابط تلقائياً في نتائج البحث الإقليمية.',
+    confirmedCauseEn:
+      'HTML parser extracted an hreflang attribute that failed BCP 47 language/region format validation.',
+    confirmedCauseAr: 'أظهر استخراج HTML وسم hreflang لا يطابق معيار BCP 47 المعتمد دولياً.',
+    locationEn: '<head> -> <link rel="alternate" hreflang="..." href="...">.',
+    locationAr: 'داخل <head> -> وسم <link rel="alternate" hreflang="..." href="...">.',
+    step1SimpleEn:
+      'Replace underscores with hyphens (e.g. change en_US to en-US) and use valid ISO 639-1 language codes.',
+    step1SimpleAr:
+      'استبدل الشرطة السفلية بشرطة عادية (مثل تحويل en_US إلى en-US) واستخدم رموز ISO 639-1 الصحيحة.',
+    step1TechEn:
+      'Declare valid BCP 47 tags: language (ISO 639-1), optional script (ISO 15924), and optional region (ISO 3166-1 alpha-2 or UN M.49).',
+    step1TechAr:
+      'استخدم وسوم BCP 47 القياسية: رمز اللغة ثم الخط ثم رمز الدولة أو المنطقة بدون شرطات سفلية.',
+    verifyEn:
+      'Inspect the rendered <head> markup and verify that hreflang attributes conform to BCP 47.',
+    verifyAr: 'افحص ترويسة الصفحة وتأكد من مطابقة قيم hreflang لصيغة BCP 47 ثم أعد الفحص.',
+    refLabel: 'Google Localized Versions Guidelines',
+    refUrl: 'https://developers.google.com/search/docs/specialty/international/localized-versions',
+    platformGuidance: [WP_SEO_PLUGIN_NOTE],
+  }),
+
+  simpleSeoEntry({
+    id: 'rec-seo-hreflang-missing-reciprocal',
+    ruleIds: ['SEO_HREFLANG_MISSING_RECIPROCAL'],
+    problemSimpleEn:
+      'An alternate language page does not link back to this page with a reciprocal hreflang annotation.',
+    problemSimpleAr:
+      'الصفحة البديلة في لغة أخرى لا تحتوي على رابط تبادلي عكسي يشير إلى هذه الصفحة.',
+    problemTechEn:
+      'Page A declares Page B as an hreflang alternate, but crawled Page B lacks a return hreflang link pointing to Page A.',
+    problemTechAr:
+      'الصفحة الأولى تعلن الصفحة الثانية كبديل لغوي، لكن الصفحة الثانية لا تعلن الأولى كبديل عكسي.',
+    impactSimpleEn:
+      'Google and other search engines strictly ignore hreflang annotations that lack reciprocal confirmations.',
+    impactSimpleAr:
+      'تتجاهل محركات البحث إعلانات hreflang تماماً إذا لم تكن متبادلة ومؤكدة من الطرفين لمنع التزوير.',
+    impactTechEn:
+      'Asymmetric hreflang relationships are discarded by search engine indexing pipelines to prevent arbitrary cross-domain claiming.',
+    impactTechAr:
+      'يتم إلغاء تأثير الوسوم أحادية الاتجاه لمنع ادعاء التبعية اللغوية بين صفحات غير متوافقة.',
+    confirmedCauseEn:
+      'Cross-page audit crawled the alternate target and confirmed the absence of a return hreflang link.',
+    confirmedCauseAr: 'فحص الربط بين الصفحات أكد غياب الرابط العكسي في الصفحة البديلة.',
+    locationEn: 'Target alternate page <head> section.',
+    locationAr: 'ترويسة الصفحة البديلة في الموقع.',
+    step1SimpleEn:
+      'Add a reciprocal <link rel="alternate" hreflang="..." href="..."> on the target page pointing back to the source page.',
+    step1SimpleAr:
+      'أضف وسم <link rel="alternate" hreflang="..." href="..."> في الصفحة البديلة ليشير إلى الصفحة الحالية.',
+    step1TechEn:
+      'Ensure every page in the language cluster shares an identical set of bidirectional hreflang links.',
+    step1TechAr:
+      'تأكد من أن جميع الصفحات في المجموعة اللغوية تشترك في نفس قائمة وسوم hreflang التبادلية.',
+    verifyEn:
+      'Re-crawl both pages and confirm that reciprocal links are present in both directions.',
+    verifyAr: 'أعد فحص الصفحتين وتأكد من ظهور الرابط التبادلي في الاتجاهين.',
+    refLabel: 'Google Bidirectional Hreflang Requirements',
+    refUrl: 'https://developers.google.com/search/docs/specialty/international/localized-versions',
+    platformGuidance: [WP_SEO_PLUGIN_NOTE],
+  }),
+
+  simpleSeoEntry({
+    id: 'rec-seo-hreflang-conflicting-urls',
+    ruleIds: ['SEO_HREFLANG_CONFLICTING_URLS', 'SEO_HREFLANG_DUPLICATE_DECLARATION'],
+    problemSimpleEn:
+      'Multiple or conflicting destination URLs are declared for the same language code on this page.',
+    problemSimpleAr: 'تم إعلان روابط متعددة أو متضاربة لنفس رمز اللغة في الصفحة الواحدة.',
+    problemTechEn:
+      'The page specifies two or more <link rel="alternate"> tags with identical normalized hreflang values.',
+    problemTechAr:
+      'تحتوي الصفحة على وسمين أو أكثر من وسوم hreflang بنفس رمز اللغة ولكن بوجهات متضاربة.',
+    impactSimpleEn:
+      'Search engines cannot determine which URL to display to users for that language, risking indexing failure.',
+    impactSimpleAr: 'تعجز محركات البحث عن تحديد الرابط الصحيح لعرضه للزوار في تلك اللغة.',
+    impactTechEn:
+      'Ambiguous language-to-URL mappings cause search engines to ignore conflicting alternate declarations.',
+    impactTechAr: 'التضارب في تعيين اللغات يؤدي إلى تجاهل محركات البحث للوسوم المتعارضة.',
+    confirmedCauseEn:
+      'HTML parser detected duplicate or conflicting hreflang attributes on the same page.',
+    confirmedCauseAr: 'اكتشف فاحص HTML تكراراً أو تعارضاً في وسوم hreflang على نفس الصفحة.',
+    locationEn: '<head> -> multiple <link rel="alternate" hreflang="..."> tags.',
+    locationAr: 'ترويسة <head> -> وسوم hreflang مكررة أو متعارضة.',
+    step1SimpleEn: 'Ensure each language code corresponds to exactly one unique URL.',
+    step1SimpleAr: 'تأكد من تعيين رابط واحد فريد لكل رمز لغة في الصفحة.',
+    step1TechEn:
+      'De-duplicate the hreflang link elements so that each language-region pair maps to a single canonical URL.',
+    step1TechAr: 'احذف التكرارات واجعل كل لغة تشير إلى رابط معتمد واحد فقط.',
+    verifyEn: 'Check page head to ensure unique language-to-URL mapping and re-scan.',
+    verifyAr: 'تحقق من فرادة روابط اللغات في الصفحة ثم أعد الفحص.',
+    refLabel: 'Google Localized Versions Guidelines',
+    refUrl: 'https://developers.google.com/search/docs/specialty/international/localized-versions',
+    platformGuidance: [WP_SEO_PLUGIN_NOTE],
+  }),
+
+  simpleSeoEntry({
+    id: 'rec-seo-hreflang-x-default-invalid',
+    ruleIds: ['SEO_HREFLANG_X_DEFAULT_INVALID'],
+    problemSimpleEn:
+      'The x-default hreflang tag specifies an empty, invalid, or unresolvable destination URL.',
+    problemSimpleAr: 'وسم x-default الاحتياطي للغات يشير إلى رابط فارغ أو معطوب أو غير صالح.',
+    problemTechEn:
+      'A <link rel="alternate" hreflang="x-default"> was detected without a valid absolute or resolvable href attribute.',
+    problemTechAr:
+      'تم العثور على وسم x-default برابط href فارغ أو غير قابل للتحليل كعنوان URL صحيح.',
+    impactSimpleEn:
+      'Users without a matching language setting cannot be routed to the appropriate global fallback page.',
+    impactSimpleAr:
+      'لن يتمكن الزوار الذين لا تتطابق لغاتهم مع اللغات المتاحة من التوجيه للصفحة الافتراضية المناسبة.',
+    impactTechEn:
+      'Default international fallback routing signal is rendered invalid in search engine indexes.',
+    impactTechAr: 'يتعطل مؤشر التوجيه الاحتياطي الافتراضي في فهارس محركات البحث.',
+    confirmedCauseEn:
+      'HTML parser identified an x-default annotation with an invalid or empty href attribute.',
+    confirmedCauseAr: 'رصد الفاحص وسم x-default بقيمة href غير صالحة.',
+    locationEn: '<head> -> <link rel="alternate" hreflang="x-default" href="...">.',
+    locationAr: 'داخل <head> -> وسم x-default.',
+    step1SimpleEn: 'Provide a complete, valid absolute URL for the x-default alternate version.',
+    step1SimpleAr: 'أدخل رابطاً كاملاً وصحيحاً ومباشراً لنسخة x-default الافتراضية.',
+    step1TechEn:
+      'Set the href attribute to the international selector page or default English/global homepage.',
+    step1TechAr: 'اضبط قيمة href لتشير إلى صفحة اختيار الدولة/اللغة أو الصفحة الافتراضية العامة.',
+    verifyEn: 'Inspect the x-default link element and re-scan.',
+    verifyAr: 'تأكد من صحة رابط x-default ثم أعد الفحص.',
+    refLabel: 'Google x-default Hreflang Annotation',
+    refUrl:
+      'https://developers.google.com/search/docs/specialty/international/localized-versions#xdefault',
+    platformGuidance: [WP_SEO_PLUGIN_NOTE],
+  }),
+
+  simpleSeoEntry({
+    id: 'rec-seo-hreflang-missing-self-reference',
+    ruleIds: ['SEO_HREFLANG_MISSING_SELF_REFERENCE'],
+    problemSimpleEn:
+      'The page defines hreflang tags for other versions but omits a self-referencing hreflang tag.',
+    problemSimpleAr:
+      'تحدد الصفحة وسوم hreflang للغات الأخرى ولكنها تغفل الإشارة لنفسها بوسم لغة ذاتي.',
+    problemTechEn:
+      'Google guidelines recommend that a multilingual cluster includes a self-referencing hreflang link for the current page.',
+    problemTechAr:
+      'توصي إرشادات Google بأن تتضمن كل صفحة في المجموعة اللغوية وسم hreflang يشير إلى رابطها الذاتي.',
+    impactSimpleEn:
+      'Search engines may have difficulty establishing full reciprocal cluster confirmation.',
+    impactSimpleAr: 'قد تواجه محركات البحث صعوبة في التأكيد الكامل على شمولية المجموعة اللغوية.',
+    impactTechEn:
+      'Omitting self-reference reduces explicit cluster integrity confirmation signals.',
+    impactTechAr: 'إغفال الرابط الذاتي يقلل من اكتمال إشارات سلامة المجموعة اللغوية.',
+    confirmedCauseEn:
+      'HTML parser found external alternate hreflang tags but no tag pointing back to the page itself.',
+    confirmedCauseAr: 'وجد الفحص وسوماً بديلة للغات أخرى مع غياب وسم يشير لرابط الصفحة الحالي.',
+    locationEn:
+      '<head> -> missing self-referencing <link rel="alternate" hreflang="..." href="...">.',
+    locationAr: 'ترويسة الصفحة الحالية.',
+    step1SimpleEn:
+      'Add a self-referencing <link rel="alternate" hreflang="[current-lang]" href="[current-url]">.',
+    step1SimpleAr: 'أضف وسماً يشير لنفس الصفحة باللغة الحالية ورابطها المعتمد.',
+    step1TechEn: 'Include the current page canonical URL in its own hreflang cluster declarations.',
+    step1TechAr: 'أدرج الرابط المعتمد للصفحة الحالية ضمن قائمة وسوم hreflang في الترويسة.',
+    verifyEn: 'Confirm presence of self-referencing hreflang link and re-scan.',
+    verifyAr: 'تأكد من وجود الرابط الذاتي ثم أعد الفحص.',
+    refLabel: 'Google Localized Versions Guidelines',
+    refUrl: 'https://developers.google.com/search/docs/specialty/international/localized-versions',
+    platformGuidance: [WP_SEO_PLUGIN_NOTE],
+  }),
+
+  simpleSeoEntry({
+    id: 'rec-seo-hreflang-inconsistent-language',
+    ruleIds: ['SEO_HREFLANG_INCONSISTENT_LANGUAGE'],
+    problemSimpleEn:
+      'Reciprocal hreflang links between pages declare conflicting or inconsistent language codes.',
+    problemSimpleAr: 'الروابط التبادلية بين الصفحات تعلن رموز لغات متعارضة أو غير متسقة.',
+    problemTechEn:
+      'Page A points to Page B as language X, but Page B points back to Page A using a conflicting language Y.',
+    problemTechAr:
+      'الصفحة الأولى تشير للثانية بلغة معينة، بينما تشير الثانية للأولى برمز لغة مختلف ومتعارض.',
+    impactSimpleEn: 'Search engines will discard conflicting annotations due to language mismatch.',
+    impactSimpleAr:
+      'تتجاهل محركات البحث الإعلانات المتعارضة بسبب عدم اتساق تعيين اللغات بين الصفحتين.',
+    impactTechEn:
+      'Mismatched reciprocal language declarations invalidate the localized cluster relationship.',
+    impactTechAr: 'عدم تطابق الرموز التبادلية يبطل موثوقية الرابط اللغوي في محركات البحث.',
+    confirmedCauseEn:
+      'Cross-page analyzer verified reciprocal links but identified conflicting language tags.',
+    confirmedCauseAr: 'وجد الفاحص رابطاً عكسياً لكنه يعلن لغة مختلفة وغير متسقة مع الصفحة الأصلية.',
+    locationEn: 'Both pages in the reciprocal language pair.',
+    locationAr: 'الصفحتان المتبادلتان في المجموعة اللغوية.',
+    step1SimpleEn:
+      'Harmonize the language tags so that both pages agree on which URL represents which language.',
+    step1SimpleAr: 'وحّد رموز اللغات بحيث تتفق الصفحتان على رمز اللغة المخصص لكل رابط بدقة.',
+    step1TechEn:
+      'Align the hreflang attributes across both pages so that reciprocal references use matching BCP 47 codes.',
+    step1TechAr: 'وفق بين وسوم hreflang في الصفحتين لتطابق رموز BCP 47 التبادلية بدقة.',
+    verifyEn: 'Re-crawl both pages and verify consistent language mappings.',
+    verifyAr: 'أعد فحص الصفحتين وتأكد من اتساق وسوم اللغات.',
+    refLabel: 'Google Localized Versions Guidelines',
+    refUrl: 'https://developers.google.com/search/docs/specialty/international/localized-versions',
+    platformGuidance: [WP_SEO_PLUGIN_NOTE],
+  }),
+
+  simpleSeoEntry({
+    id: 'rec-seo-hreflang-target-broken',
+    ruleIds: ['SEO_HREFLANG_TARGET_BROKEN'],
+    problemSimpleEn:
+      'An alternate hreflang link points to a destination page that returned an HTTP error or failed to load.',
+    problemSimpleAr: 'يشير رابط hreflang البديل إلى صفحة تعيد خطأ HTTP أو تعذر تحميلها.',
+    problemTechEn:
+      'The hreflang destination URL returned HTTP 4xx/5xx or suffered a network fetch failure.',
+    problemTechAr: 'وجهة الرابط البديل في hreflang تعيد استجابة خطأ 4xx/5xx أو فشل نقل شبكي.',
+    impactSimpleEn:
+      'Visitors clicking language switchers hit error pages and search engines cannot index the translation.',
+    impactSimpleAr:
+      'يصل الزوار إلى صفحات خطأ عند تغيير اللغة وتفشل محركات البحث في أرشفة النسخة المترجمة.',
+    impactTechEn:
+      'Broken alternate targets waste crawl resources and invalidate internationalization signals.',
+    impactTechAr: 'الروابط البديلة المعطلة تهدر موارد الزحف وتبطل إشارات الترجمة المعتمدة.',
+    confirmedCauseEn:
+      'Crawl graph recorded a 4xx/5xx HTTP response or fetch error on an hreflang destination.',
+    confirmedCauseAr: 'سجّل الزحف استجابة خطأ 4xx أو 5xx أو تعطل اتصال على وجهة hreflang.',
+    locationEn: '<head> -> <link rel="alternate" hreflang="..." href="..."> destination.',
+    locationAr: 'الرابط المحدد في وسم hreflang.',
+    step1SimpleEn:
+      'Update the link to point to a live 200 OK URL or remove outdated alternate references.',
+    step1SimpleAr: 'حدّث الرابط ليشير لصفحة سليمة تعيد HTTP 200 أو احذف الرابط المعطل.',
+    step1TechEn:
+      'Ensure every declared hreflang target is a published, indexable, HTTP 200 response.',
+    step1TechAr: 'تأكد من أن كل صفحة بديلة منشورة ومتاحة وتعيد استجابة 200 OK.',
+    verifyEn: 'Visit the destination URL to confirm HTTP 200 and re-scan.',
+    verifyAr: 'تحقق من عمل الصفحة البديلة ورجوع استجابة 200 ثم أعد الفحص.',
+    refLabel: 'Google Localized Versions Guidelines',
+    refUrl: 'https://developers.google.com/search/docs/specialty/international/localized-versions',
+    platformGuidance: [WP_SEO_PLUGIN_NOTE],
+  }),
+
+  simpleSeoEntry({
+    id: 'rec-seo-hreflang-target-uncrawled-or-external',
+    ruleIds: ['SEO_HREFLANG_EXTERNAL_TARGET', 'SEO_HREFLANG_UNCRAWLED_TARGET'],
+    causeConfidence: 'mixed',
+    problemSimpleEn:
+      'An alternate hreflang destination could not be reciprocally verified because it is external or was not visited within scan limits.',
+    problemSimpleAr:
+      'تعذر التحقق من الرابط العكسي لصفحة hreflang بديلة لأنها على نطاق خارجي أو لم يُزحف إليها ضمن سقف الفحص.',
+    problemTechEn:
+      'The destination URL is either outside the crawl scope (different domain/origin) or was not reached within the configured page/depth budget. Note: This is an audit observation and does NOT mean the target is broken.',
+    problemTechAr:
+      'الرابط إما خارج نطاق الفحص (نطاق خارجي) أو لم تصله أداة الزحف لبلوغ سقف الصفحات. ملاحظة: هذا تنبيه استكشافي ولا يعني أن الرابط معطل.',
+    impactSimpleEn:
+      'Reciprocal verification cannot be confirmed automatically without expanding crawl parameters.',
+    impactSimpleAr:
+      'لا يمكن تأكيد وجود الرابط التبادلي آلياً دون توسيع حدود الفحص أو فحص النطاق الخارجي.',
+    impactTechEn:
+      'Audit confidence for cross-page reciprocal confirmation is marked potential rather than confirmed.',
+    impactTechAr: 'يتم تصنيف حالة التحقق التبادلي كحالة محتملة للاسترشاد دون تسجيل خطأ مؤكد.',
+    confirmedCauseEn:
+      'Cross-page analyzer verified target URL is out-of-scope or unvisited in the current crawl session.',
+    confirmedCauseAr: 'أكد فحص الروابط أن الوجهة تقع خارج نطاق الزحف الحالي أو تجاوزت سقف الصفحات.',
+    locationEn: '<head> -> <link rel="alternate" hreflang="..." href="..."> destination URL.',
+    locationAr: 'رابط الوجهة في وسم hreflang.',
+    step1SimpleEn:
+      'If the target is external, verify manually that it links back with a reciprocal hreflang tag.',
+    step1SimpleAr:
+      'إذا كانت الوجهة خارجية، تأكد يدوياً من وجود رابط عكسي في تلك الصفحة يشير إلى موقعك.',
+    step1TechEn:
+      'For internal targets unvisited due to limits, increase maxPages/maxDepth in scan configuration to verify reciprocity.',
+    step1TechAr: 'للصفحات الداخلية غير المفحوصة، ارفع سقف عدد الصفحات والعمق في إعدادات الفحص.',
+    verifyEn: 'Check external page markup directly or expand scan scope and re-run.',
+    verifyAr: 'افحص الصفحة الخارجية مباشرة أو وسّع نطاق الفحص ثم أعد التشغيل.',
+    refLabel: 'Google Cross-Domain Hreflang',
+    refUrl: 'https://developers.google.com/search/docs/specialty/international/localized-versions',
+    platformGuidance: [WP_SEO_PLUGIN_NOTE],
+  }),
 ];

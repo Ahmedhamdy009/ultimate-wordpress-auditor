@@ -10,6 +10,7 @@ import type {
   ExtractedButton,
   ExtractedForm,
   ExtractedFormField,
+  ExtractedHreflangLink,
   ExtractedImage,
   ExtractedLink,
   ExtractedMediaResource,
@@ -30,6 +31,7 @@ const DEFAULT_OPTIONS: Required<HtmlParserOptions> = {
   maxLinks: 500,
   maxImages: 500,
   maxResources: 500,
+  maxHreflangs: 50,
 };
 
 type DocumentNode = ReturnType<typeof parseDocument>;
@@ -250,6 +252,9 @@ export class HtmlParserEngine {
     // 3. Links
     const links: ExtractedLink[] = [];
 
+    // 3b. Hreflang Multilingual Annotations
+    const hreflangs: ExtractedHreflangLink[] = [];
+
     // 4. Images
     const images: ExtractedImage[] = [];
 
@@ -343,10 +348,38 @@ export class HtmlParserEngine {
         }
       }
 
-      // Link tags (canonical, stylesheets, icons)
+      // Link tags (canonical, stylesheets, icons, hreflang)
       if (tag === 'link') {
         const rel = attribs.rel ? attribs.rel.toLowerCase().trim() : '';
         const href = attribs.href ? attribs.href.trim() : '';
+        const rawHreflang = attribs.hreflang ? attribs.hreflang.trim() : '';
+        const relTokens = rel ? rel.split(/\s+/) : [];
+
+        // Hreflang multilingual alternate links: <link rel="alternate" hreflang="..." href="...">
+        if (
+          relTokens.includes('alternate') &&
+          rawHreflang &&
+          hreflangs.length < effectiveOptions.maxHreflangs
+        ) {
+          const boundedHreflang = rawHreflang.slice(0, 50);
+          const normalizedHreflang = boundedHreflang.toLowerCase();
+          const normalized = href ? normalizeCrawlUrl(href, pageUrl) : null;
+          const resolvedUrl = normalized ? normalized.href : null;
+
+          const isSelfReference = Boolean(
+            resolvedUrl &&
+            (resolvedUrl === pageUrl ||
+              resolvedUrl.replace(/\/$/, '') === pageUrl.replace(/\/$/, '')),
+          );
+
+          hreflangs.push({
+            hreflang: boundedHreflang,
+            normalizedHreflang,
+            rawHref: href,
+            resolvedUrl,
+            isSelfReference,
+          });
+        }
 
         if (rel === 'canonical' && href && canonical === null) {
           const normalized = normalizeCrawlUrl(href, pageUrl);
@@ -620,6 +653,7 @@ export class HtmlParserEngine {
       metrics,
       visibleWordCount,
       jsonLdScripts: Object.freeze(jsonLdScripts),
+      hreflangs: hreflangs.length > 0 ? Object.freeze(hreflangs) : undefined,
     };
   }
 }

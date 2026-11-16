@@ -5,6 +5,8 @@
  */
 
 import { normalizeCrawlUrl } from '@auditor/shared';
+import { redactUrl } from '../../browser/redactor.js';
+import { validateHreflangTag } from '../parser/hreflang-validator.js';
 import type { CrawledPageResult } from '../crawler/types.js';
 import type {
   AnalyzerContext,
@@ -31,6 +33,7 @@ export interface SeoPerformanceData {
   readonly stylesheetCount: number;
   readonly imageCount: number;
   readonly missingDimensionsImageCount: number;
+  readonly hreflangsCount?: number;
 }
 
 export class SeoPerformanceAnalyzer implements PageAnalyzer<SeoPerformanceData> {
@@ -42,7 +45,7 @@ export class SeoPerformanceAnalyzer implements PageAnalyzer<SeoPerformanceData> 
     context: AnalyzerContext,
   ): PageAnalysisResult<SeoPerformanceData> {
     const findings: AnalyzerFinding[] = [];
-    const url = page.requestedUrl;
+    const url = redactUrl(page.requestedUrl);
     const parsedDoc = page.parsedDocument;
 
     // Default metric accumulators
@@ -473,6 +476,147 @@ export class SeoPerformanceAnalyzer implements PageAnalyzer<SeoPerformanceData> 
         });
       }
 
+      // K. Hreflang Multilingual Annotations
+      const pageHreflangs = parsedDoc.hreflangs || [];
+      if (pageHreflangs.length > 0) {
+        let hasSelfReference = false;
+        const hreflangsByTag = new Map<string, (typeof pageHreflangs)[number][]>();
+
+        for (const item of pageHreflangs) {
+          if (item.isSelfReference) {
+            hasSelfReference = true;
+          }
+
+          // 1. Language tag BCP 47 syntax validation
+          const valResult = validateHreflangTag(item.hreflang);
+          if (!valResult.valid) {
+            findings.push({
+              ruleId: 'SEO_HREFLANG_INVALID_TAG',
+              category: 'technical-seo',
+              title: `Invalid hreflang Language Tag ("${item.hreflang}")`,
+              description: `The page declares a link rel="alternate" with an invalid or non-standard language tag ("${item.hreflang}"). Hreflang values must conform to BCP 47 standards (e.g., "en", "ar-EG", "zh-Hant") or "x-default". Reason: ${valResult.reason}.`,
+              severity: 'medium',
+              confidence: 'confirmed',
+              status: 'confirmed',
+              targetUrl: redactUrl(url),
+              evidence: {
+                rawHreflang: item.hreflang,
+                rawHref: redactUrl(item.rawHref),
+                resolvedUrl: item.resolvedUrl ? redactUrl(item.resolvedUrl) : null,
+                reason: valResult.reason,
+              },
+              remediation:
+                'Use a standard BCP 47 language code (such as "en-US" instead of "en_US") or "x-default".',
+              references: [
+                'https://developers.google.com/search/docs/specialty/international/localized-versions',
+              ],
+            });
+          }
+
+          // 2. x-default destination URL validity
+          if (item.normalizedHreflang === 'x-default') {
+            if (!item.resolvedUrl || item.rawHref.trim() === '' || item.rawHref.trim() === '#') {
+              findings.push({
+                ruleId: 'SEO_HREFLANG_X_DEFAULT_INVALID',
+                category: 'technical-seo',
+                title: 'Invalid Destination URL for x-default hreflang',
+                description:
+                  'The page declares an "x-default" hreflang fallback annotation, but its destination URL is empty, missing, or unresolvable.',
+                severity: 'medium',
+                confidence: 'confirmed',
+                status: 'confirmed',
+                targetUrl: redactUrl(url),
+                evidence: {
+                  hreflang: 'x-default',
+                  rawHref: redactUrl(item.rawHref),
+                },
+                remediation:
+                  'Provide a valid absolute or resolvable URL for the x-default alternate version.',
+                references: [
+                  'https://developers.google.com/search/docs/specialty/international/localized-versions#xdefault',
+                ],
+              });
+            }
+          }
+
+          const group = hreflangsByTag.get(item.normalizedHreflang) || [];
+          group.push(item);
+          hreflangsByTag.set(item.normalizedHreflang, group);
+        }
+
+        // 3. Duplicate and Conflicting declarations for the same language
+        for (const [normTag, items] of hreflangsByTag.entries()) {
+          if (items.length >= 2) {
+            const distinctUrls = Array.from(new Set(items.map(i => i.resolvedUrl || i.rawHref)));
+            if (distinctUrls.length > 1) {
+              findings.push({
+                ruleId: 'SEO_HREFLANG_CONFLICTING_URLS',
+                category: 'technical-seo',
+                title: `Conflicting Destination URLs for hreflang ("${normTag}")`,
+                description: `The page declares ${items.length} alternate links for the same language ("${normTag}") pointing to different destinations. Search engines cannot determine which URL is authoritative for this language.`,
+                severity: 'medium',
+                confidence: 'confirmed',
+                status: 'confirmed',
+                targetUrl: redactUrl(url),
+                evidence: {
+                  hreflang: normTag,
+                  conflictingUrls: distinctUrls.map(u => redactUrl(u)),
+                },
+                remediation:
+                  'Ensure each language or region tag is mapped to exactly one unique destination URL.',
+                references: [
+                  'https://developers.google.com/search/docs/specialty/international/localized-versions',
+                ],
+              });
+            } else {
+              findings.push({
+                ruleId: 'SEO_HREFLANG_DUPLICATE_DECLARATION',
+                category: 'technical-seo',
+                title: `Duplicate hreflang Declaration ("${normTag}")`,
+                description: `The page declares identical link rel="alternate" hreflang="${normTag}" multiple times pointing to the same destination.`,
+                severity: 'low',
+                confidence: 'confirmed',
+                status: 'confirmed',
+                targetUrl: redactUrl(url),
+                evidence: {
+                  hreflang: normTag,
+                  destinationUrl: redactUrl(distinctUrls[0]),
+                  count: items.length,
+                },
+                remediation:
+                  'Remove duplicate alternate link declarations to keep page markup clean.',
+                references: [
+                  'https://developers.google.com/search/docs/specialty/international/localized-versions',
+                ],
+              });
+            }
+          }
+        }
+
+        // 4. Missing self-reference recommendation
+        if (!hasSelfReference) {
+          findings.push({
+            ruleId: 'SEO_HREFLANG_MISSING_SELF_REFERENCE',
+            category: 'technical-seo',
+            title: 'Missing Self-Referencing hreflang Annotation',
+            description: `The page declares alternate hreflang links for other languages/regions but does not include a self-referencing hreflang link for its own URL. Google and BCP 47 guidelines recommend that alternate sets always include the current page URL.`,
+            severity: 'low',
+            confidence: 'confirmed',
+            status: 'confirmed',
+            targetUrl: redactUrl(url),
+            evidence: {
+              pageUrl: redactUrl(url),
+              hreflangsDeclared: pageHreflangs.map(h => h.normalizedHreflang),
+            },
+            remediation:
+              'Add a <link rel="alternate" hreflang="..." href="..."> pointing to the current page URL with its matching language code.',
+            references: [
+              'https://developers.google.com/search/docs/specialty/international/localized-versions',
+            ],
+          });
+        }
+      }
+
       // Resource counts
       scriptCount = parsedDoc.resources.filter(r => r.type === 'script').length;
       stylesheetCount = parsedDoc.resources.filter(r => r.type === 'stylesheet').length;
@@ -585,6 +729,7 @@ export class SeoPerformanceAnalyzer implements PageAnalyzer<SeoPerformanceData> 
       stylesheetCount,
       imageCount,
       missingDimensionsImageCount,
+      hreflangsCount: parsedDoc?.hreflangs?.length ?? 0,
     };
 
     return {

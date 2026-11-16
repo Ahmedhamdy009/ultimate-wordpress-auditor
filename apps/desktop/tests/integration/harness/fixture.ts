@@ -1004,6 +1004,414 @@ async function executeScenario(scenario, params) {
       \`);
     }
 
+    case 'TEST_BATCH_7_4_4_GUI_FLOW': {
+      const { getActiveDatabaseConnection } = await import('./out/main/index.js');
+      const conn = getActiveDatabaseConnection();
+      if (!conn) {
+        throw new Error('Active SQLite DatabaseConnection not available');
+      }
+      const db = conn.getRawDb();
+      const nowIso = '2026-11-16T10:00:00.000Z';
+      const projId = 'aaaaaaaa-1111-4111-8111-111111111101';
+      const siteId = 'bbbbbbbb-1111-4111-8111-111111111101';
+      const scan1Id = 'cccccccc-1111-4111-8111-111111111101';
+      const scan2Id = 'cccccccc-2222-4222-8222-222222222202';
+
+      // Write a controlled 1x1 PNG fixture screenshot inside the isolated userData screenshots folder
+      const screenshotsDir = path.join(app.getPath('userData'), 'reports', 'screenshots');
+      fs.mkdirSync(screenshotsDir, { recursive: true });
+      const pngBytes = Buffer.from(
+        '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c63000100000500010d0a2db40000000049454e44ae426082',
+        'hex',
+      );
+      fs.writeFileSync(path.join(screenshotsDir, 'gui-test-overflow.png'), pngBytes);
+
+      const summary1 = JSON.stringify({
+        totalFindings: 5,
+        criticalCount: 0,
+        highCount: 3,
+        mediumCount: 1,
+        lowCount: 0,
+        infoCount: 1,
+        urlsCrawled: 6,
+        pagesScanned: 6,
+        crawlFailedPages: 0,
+        staticModulesExecuted: 5,
+        staticModulesTotal: 5,
+        browserPagesAudited: 3,
+        browserCandidatesTotal: 3,
+        runtimeAuditsCompleted: 3,
+        accessibilityCandidatesTotal: 3,
+        accessibilityAuditsCompleted: 3,
+        layoutStabilityPagesCompleted: 3,
+        screenshotsCaptured: 1,
+        coverageStatus: 'full',
+        isPartialCoverage: false,
+        resourceBytesByType: { document: 42000, script: 280000, stylesheet: 90000, image: 410000 },
+        performanceMetrics: {
+          labMetrics: { ttfbMs: 320, fcpMs: 1100, lcpMs: 2800, cls: 0.04, tbtMs: 180, isLcpCapped: false },
+          resourceSummary: {
+            totalResources: 22,
+            totalTransferSizeBytes: 822000,
+            renderBlockingCount: 2,
+            scriptsCount: 8,
+            stylesheetsCount: 4,
+            imagesCount: 7,
+            oversizedImagesCount: 1,
+            uncompressedAssetsCount: 0,
+          },
+        },
+      });
+
+      const config1 = JSON.stringify({
+        maxPages: 25,
+        maxDepth: 3,
+        enableBrowserAudit: true,
+        auditModules: {
+          http: true,
+          wordpress: true,
+          securityHeaders: true,
+          cookies: true,
+          seo: true,
+          runtimeErrors: true,
+          networkResources: true,
+          responsiveLayout: true,
+          layoutStability: true,
+          screenshots: true,
+          accessibility: true,
+        },
+      });
+
+      db.prepare(
+        'INSERT INTO projects (id, name, description, is_archived, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)',
+      ).run(projId, 'GUI Test Project', 'Controlled fixture', nowIso, nowIso);
+
+      db.prepare(
+        'INSERT INTO sites (id, project_id, name, base_url, platform_type, environment_type, description, is_archived, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NULL, 0, ?, ?)',
+      ).run(siteId, projId, 'WP Demo Store', 'https://gui-fixture.example.test', 'wordpress', 'staging', nowIso, nowIso);
+
+      db.prepare(
+        'INSERT INTO scan_runs (id, site_id, scan_type, status, target_url, started_at, completed_at, cancelled_at, duration_ms, config_json, summary_json, error_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, NULL, ?, ?)',
+      ).run(scan1Id, siteId, 'full', 'completed', 'https://gui-fixture.example.test', nowIso, nowIso, 42000, config1, summary1, nowIso, nowIso);
+
+      db.prepare(
+        'INSERT INTO scan_runs (id, site_id, scan_type, status, target_url, started_at, completed_at, cancelled_at, duration_ms, config_json, summary_json, error_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, NULL, ?, ?, ?)',
+      ).run(
+        scan2Id,
+        siteId,
+        'full',
+        'cancelled',
+        'https://gui-fixture.example.test',
+        '2026-10-01T10:00:00.000Z',
+        '2026-10-01T10:00:10.000Z',
+        10000,
+        '{}',
+        JSON.stringify({ code: 'ERR_SCAN_CANCELLED', message: 'Cancelled historical scan' }),
+        '2026-10-01T10:00:00.000Z',
+        '2026-10-01T10:00:10.000Z',
+      );
+
+      const insertFinding = db.prepare(
+        'INSERT INTO findings (id, scan_run_id, rule_id, category, title, description, severity, confidence, status, target_url, evidence_json, remediation, references_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      );
+
+      insertFinding.run(
+        'dddddddd-1111-4111-8111-111111111101',
+        scan1Id,
+        'SEC_HEADER_CSP_MISSING',
+        'security',
+        'Missing Content-Security-Policy Header',
+        'CSP header missing on home.',
+        'high',
+        'confirmed',
+        'confirmed',
+        'https://gui-fixture.example.test/',
+        JSON.stringify({ headerName: 'Content-Security-Policy', headers: { server: 'nginx' } }),
+        'Add CSP header.',
+        '[]',
+        nowIso,
+      );
+      insertFinding.run(
+        'dddddddd-1111-4111-8111-111111111102',
+        scan1Id,
+        'SEC_HEADER_CSP_MISSING',
+        'security',
+        'Missing Content-Security-Policy Header',
+        'CSP header missing on shop.',
+        'high',
+        'confirmed',
+        'confirmed',
+        'https://gui-fixture.example.test/shop',
+        JSON.stringify({ headerName: 'Content-Security-Policy' }),
+        'Add CSP header.',
+        '[]',
+        nowIso,
+      );
+      insertFinding.run(
+        'dddddddd-1111-4111-8111-111111111103',
+        scan1Id,
+        'RESPONSIVE_HORIZONTAL_OVERFLOW',
+        'responsive-design',
+        'Horizontal Overflow Detected',
+        'Layout overflows mobile viewport.',
+        'medium',
+        'firm',
+        'confirmed',
+        'https://gui-fixture.example.test/shop',
+        JSON.stringify({
+          selector: '.gui-overflow-box',
+          screenshot: {
+            id: 'gui-test-overflow',
+            fileName: 'gui-test-overflow.png',
+            viewportProfile: 'mobile',
+            captureType: 'viewport',
+            width: 390,
+            height: 844,
+          },
+        }),
+        'Fix container overflow.',
+        '[]',
+        nowIso,
+      );
+      insertFinding.run(
+        'dddddddd-1111-4111-8111-111111111104',
+        scan1Id,
+        'PERF_BOTTLENECK_DIAGNOSIS',
+        'static-performance',
+        'Render-Blocking Assets',
+        'Render-blocking assets delayed LCP.',
+        'high',
+        'confirmed',
+        'confirmed',
+        'https://gui-fixture.example.test/',
+        JSON.stringify({
+          classification: 'RENDER_BLOCKING_ASSETS',
+          causality: 'causal',
+          primaryMetricName: 'LCP',
+          observedValue: 2800,
+          thresholdValue: 2500,
+          unit: 'ms',
+        }),
+        'Defer non-critical JS.',
+        '[]',
+        nowIso,
+      );
+      insertFinding.run(
+        'dddddddd-1111-4111-8111-111111111105',
+        scan1Id,
+        'WP_DETECTED',
+        'wordpress',
+        'WordPress Stack Detected',
+        'WordPress with Elementor Pro and WooCommerce.',
+        'info',
+        'confirmed',
+        'confirmed',
+        'https://gui-fixture.example.test/',
+        JSON.stringify({
+          confidence: 'confirmed',
+          version: '6.7.2',
+          plugins: ['elementor-pro', 'woocommerce'],
+          themes: ['hello-elementor'],
+        }),
+        null,
+        '[]',
+        nowIso,
+      );
+      insertFinding.run(
+        'dddddddd-2222-4222-8222-222222222201',
+        scan2Id,
+        'HIS_ONLY_FINDING',
+        'technical-seo',
+        'Historical Scan SEO Note',
+        'Persisted prior to cancel.',
+        'low',
+        'potential',
+        'potential',
+        'https://gui-fixture.example.test/old',
+        null,
+        null,
+        '[]',
+        '2026-10-01T10:00:05.000Z',
+      );
+
+      return await mainWindow.webContents.executeJavaScript(\`
+        (async () => {
+          const sleep = ms => new Promise(r => setTimeout(r, ms));
+          const waitFor = async (fn, timeoutMs = 6000) => {
+            const start = Date.now();
+            while (Date.now() - start < timeoutMs) {
+              const res = fn();
+              if (res) return res;
+              await sleep(40);
+            }
+            return null;
+          };
+
+          // Reload so OverviewView fetches freshly seeded DB records
+          document.getElementById('nav-item-projects')?.click();
+          await sleep(80);
+          document.getElementById('nav-item-overview')?.click();
+
+          const overviewExec = await waitFor(() =>
+            document.querySelector('[data-testid="executive-summary-dashboard"]'),
+          );
+          if (!overviewExec) return { error: 'Overview executive dashboard did not mount' };
+
+          const overviewText = overviewExec.textContent || '';
+          const overviewHasStack = overviewText.includes('Elementor Pro') && overviewText.includes('WooCommerce');
+          const overviewHasTriad = Boolean(document.querySelector('[data-testid="triad-health-index"]'));
+          const overviewHasD1ToD4 =
+            Boolean(document.querySelector('[data-testid="coverage-dimension-d1"]')) &&
+            Boolean(document.querySelector('[data-testid="coverage-dimension-d2"]')) &&
+            Boolean(document.querySelector('[data-testid="coverage-dimension-d3"]')) &&
+            Boolean(document.querySelector('[data-testid="coverage-dimension-d4"]'));
+
+          // Navigate to Audit & Scans and open Scan 1
+          document.getElementById('nav-item-scans')?.click();
+          const inspectButtons = await waitFor(() => {
+            const btns = Array.from(document.querySelectorAll('.auditor-site-item__actions button'))
+              .filter(b => b.textContent?.includes('Inspect Findings'));
+            return btns.length >= 2 ? btns : null;
+          });
+          if (!inspectButtons) return { error: 'Scan history Inspect buttons not found' };
+
+          inspectButtons[0].click();
+          const explorer = await waitFor(() => document.querySelector('[data-testid="findings-explorer"]'));
+          if (!explorer) return { error: 'FindingsExplorer did not mount for Scan 1' };
+
+          // Verify 7 SVG charts rendered
+          const chartTestIds = [
+            'chart-severity-distribution',
+            'chart-category-breakdown',
+            'chart-coverage-dimensions',
+            'chart-lab-vitals',
+            'chart-asset-breakdown',
+            'chart-bottleneck-summary',
+            'chart-top-affected-pages',
+          ];
+          const all7ChartsPresent = chartTestIds.every(id => {
+            const el = document.querySelector('[data-testid="' + id + '"]');
+            return Boolean(el && el.querySelector('svg'));
+          });
+
+          // Verify zero inline styles inside new Batch 7.4.4 components
+          const batch744Selectors = [
+            '[data-testid="executive-summary-dashboard"]',
+            '[data-testid="coverage-dimensions-panel"]',
+            '[data-testid="audit-charts-suite"]',
+            '[data-testid="performance-vitals-card"]',
+            '[data-testid="findings-explorer"]',
+            '.auditor-header',
+          ];
+          const inlineStyleCountInBatch744 = batch744Selectors.reduce((acc, sel) => {
+            const rootEl = document.querySelector(sel);
+            if (!rootEl) return acc;
+            return acc + rootEl.querySelectorAll('[style]').length + (rootEl.hasAttribute('style') ? 1 : 0);
+          }, 0);
+
+          // Search for .gui-overflow-box
+          const searchInput = document.querySelector('[data-testid="findings-search-input"]');
+          const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+          valueSetter.call(searchInput, '.gui-overflow-box');
+          searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+          searchInput.dispatchEvent(new Event('change', { bubbles: true }));
+          await sleep(60);
+
+          const filteredCardCount = document.querySelectorAll('[data-testid^="finding-card-"]').length;
+
+          // Expand the overflow finding and verify screenshot img + modal
+          const expandBtn = document.querySelector('[data-testid^="finding-toggle-"]');
+          expandBtn?.click();
+          const thumbImg = await waitFor(() => {
+            const img = document.querySelector('.auditor-screenshot-thumb');
+            return img && img.complete && img.naturalWidth > 0 ? img : null;
+          });
+          const screenshotThumbLoaded = Boolean(thumbImg);
+
+          const openModalBtn = document.querySelector('[data-testid^="open-screenshot-"]');
+          openModalBtn?.click();
+          await sleep(50);
+          const modalOpened = Boolean(document.querySelector('[data-testid="screenshot-preview-modal"] img'));
+          document.querySelector('[data-testid="close-screenshot-modal"]')?.click();
+          await sleep(40);
+
+          // Reset filters
+          document.querySelector('[data-testid="findings-reset-filters"]')?.click();
+          await sleep(50);
+          const restoredCardCount = document.querySelectorAll('[data-testid^="finding-card-"]').length;
+
+          // Switch to Simple Mode -> verify raw evidence hidden; Technical Mode -> verify exposed
+          document.querySelector('[data-testid="mode-toggle-simple"]')?.click();
+          await sleep(50);
+          // Expand first card in simple mode
+          const firstToggle = document.querySelector('[data-testid^="finding-toggle-"]');
+          if (firstToggle?.getAttribute('aria-expanded') !== 'true') {
+            firstToggle?.click();
+            await sleep(40);
+          }
+          const simpleHidesRawEvidence = !document.querySelector('[data-testid^="technical-raw-evidence-"]');
+          const simpleCardCount = document.querySelectorAll('[data-testid^="finding-card-"]').length;
+
+          document.querySelector('[data-testid="mode-toggle-technical"]')?.click();
+          await sleep(50);
+          const technicalShowsRawEvidence = Boolean(document.querySelector('[data-testid^="technical-raw-evidence-"]'));
+          const technicalCardCount = document.querySelectorAll('[data-testid^="finding-card-"]').length;
+
+          document.querySelector('[data-testid="mode-toggle-dual"]')?.click();
+          await sleep(50);
+
+          // Switch to Arabic RTL
+          document.querySelector('[data-testid="locale-toggle-ar"]')?.click();
+          await sleep(80);
+          const shellDirAr = document.querySelector('.auditor-shell')?.getAttribute('dir');
+          const shellLangAr = document.querySelector('.auditor-shell')?.getAttribute('lang');
+          const arabicHeadingsPresent =
+            (document.body.textContent || '').includes('الملخص التنفيذي') &&
+            (document.body.textContent || '').includes('توزيع درجات الخطورة') &&
+            (document.body.textContent || '').includes('الملاحظات وإرشادات المعالجة العملية');
+
+          // Switch back to English LTR
+          document.querySelector('[data-testid="locale-toggle-en"]')?.click();
+          await sleep(80);
+          const shellDirEn = document.querySelector('.auditor-shell')?.getAttribute('dir');
+
+          // Switch to Scan 2 (historical scan) and verify stale Scan 1 data does not appear
+          const scan2InspectBtn = Array.from(document.querySelectorAll('.auditor-site-item__actions button'))
+            .filter(b => b.textContent?.includes('Inspect Findings'))[1];
+          scan2InspectBtn?.click();
+          const scan2Text = await waitFor(() => {
+            const txt = document.querySelector('[data-testid="findings-explorer"]')?.textContent || '';
+            return txt.includes('HIS_ONLY_FINDING') ? txt : null;
+          });
+          const staleScan1Isolated =
+            Boolean(scan2Text) &&
+            !scan2Text.includes('SEC_HEADER_CSP_MISSING') &&
+            (document.querySelector('[data-testid="executive-summary-dashboard"]')?.textContent || '').includes('Insufficient Evidence');
+
+          return {
+            overviewHasStack,
+            overviewHasTriad,
+            overviewHasD1ToD4,
+            all7ChartsPresent,
+            inlineStyleCountInBatch744,
+            filteredCardCount,
+            screenshotThumbLoaded,
+            modalOpened,
+            restoredCardCount,
+            simpleHidesRawEvidence,
+            simpleCardCount,
+            technicalShowsRawEvidence,
+            technicalCardCount,
+            shellDirAr,
+            shellLangAr,
+            arabicHeadingsPresent,
+            shellDirEn,
+            staleScan1Isolated,
+          };
+        })()
+      \`);
+    }
+
     default:
       throw new Error(\`Unknown scenario: \${scenario}\`);
   }

@@ -3,12 +3,15 @@ import { Card } from '../common/Card.js';
 import { Badge } from '../common/Badge.js';
 import { Alert } from '../common/Alert.js';
 import { SecureReportPreview } from '../reports/SecureReportPreview.js';
+import { useAuditUi } from '../../context/AuditUiContext.js';
 import { useReports } from '../../hooks/useReports.js';
 import { useProjects } from '../../hooks/useProjects.js';
 import type { ViewId } from '../../types/navigation.js';
 import type {
   ReportDTO,
   ReportFormat,
+  ReportLocale,
+  ReportViewMode,
   ReportContentDTO,
   ScanRunDTO,
   SiteDTO,
@@ -26,6 +29,7 @@ function getElectronAPI(): ElectronAPI | undefined {
 }
 
 export const ReportsView: React.FC<ReportsViewProps> = ({ initialScanRunId, onNavigate }) => {
+  const { locale: uiLocale, viewMode: uiViewMode, tDesktop } = useAuditUi();
   const { reports, loading, error, createReport, deleteReport, getReportContent, clearError } =
     useReports();
 
@@ -40,6 +44,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialScanRunId, onNa
   const [scanRunId, setScanRunId] = useState<string>(initialScanRunId ?? '');
   const [reportTitle, setReportTitle] = useState<string>('');
   const [reportFormat, setReportFormat] = useState<ReportFormat>('html');
+  const [reportLocale, setReportLocale] = useState<ReportLocale>(uiLocale);
+  const [reportViewMode, setReportViewMode] = useState<ReportViewMode>(uiViewMode);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Content preview state
@@ -50,6 +56,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialScanRunId, onNa
   const scanRunIdField = useId();
   const titleField = useId();
   const formatField = useId();
+  const localeField = useId();
+  const viewModeField = useId();
+
+  useEffect(() => {
+    setReportLocale(uiLocale);
+  }, [uiLocale]);
+
+  useEffect(() => {
+    setReportViewMode(uiViewMode);
+  }, [uiViewMode]);
 
   // Load completed scans and sites for dropdown selection
   const loadScanOptions = useCallback(async () => {
@@ -142,6 +158,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialScanRunId, onNa
       scanRunId: scanRunId.trim(),
       title,
       format: reportFormat,
+      locale: reportLocale,
+      viewMode: reportViewMode,
     });
 
     if (result) {
@@ -384,6 +402,41 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialScanRunId, onNa
                     <option value="html">Standalone HTML Report (.html)</option>
                     <option value="json">Structured JSON Export (.json)</option>
                     <option value="csv">Tabular CSV Export (.csv)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="auditor-grid-2">
+                <div className="auditor-form-group">
+                  <label htmlFor={localeField} className="auditor-label">
+                    {tDesktop('reportLanguageLabel')}
+                  </label>
+                  <select
+                    id={localeField}
+                    className="auditor-select"
+                    value={reportLocale}
+                    onChange={e => setReportLocale(e.target.value as ReportLocale)}
+                    disabled={loading}
+                  >
+                    <option value="en">English (LTR)</option>
+                    <option value="ar">العربية (RTL)</option>
+                  </select>
+                </div>
+
+                <div className="auditor-form-group">
+                  <label htmlFor={viewModeField} className="auditor-label">
+                    {tDesktop('reportAudienceModeLabel')}
+                  </label>
+                  <select
+                    id={viewModeField}
+                    className="auditor-select"
+                    value={reportViewMode}
+                    onChange={e => setReportViewMode(e.target.value as ReportViewMode)}
+                    disabled={loading}
+                  >
+                    <option value="dual">{tDesktop('viewModeDualShort')}</option>
+                    <option value="simple">{tDesktop('viewModeSimpleShort')}</option>
+                    <option value="technical">{tDesktop('viewModeTechnicalShort')}</option>
                   </select>
                 </div>
               </div>

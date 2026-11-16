@@ -989,3 +989,50 @@
   border-radius: var(--auditor-radius-sm);
   border: 1px solid var(--auditor-border-subtle);
 }
+
+/* ==========================================================================
+   Header Segmented Controls (Language EN/AR & Audience Simple/Technical/Dual)
+   ========================================================================== */
+.auditor-segmented-control {
+  display: inline-flex;
+  align-items: center;
+  background-color: var(--auditor-bg-surface-subtle);
+  border: 1px solid var(--auditor-border-default);
+  border-radius: var(--auditor-radius-md);
+  padding: 2px;
+  gap: 2px;
+}
+
+.auditor-segmented-btn {
+  background: transparent;
+  border: none;
+  border-radius: var(--auditor-radius-sm);
+  color: var(--auditor-text-secondary);
+  font-size: 11px;
+  font-weight: var(--auditor-font-weight-medium);
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all var(--auditor-transition-fast);
+  white-space: nowrap;
+}
+
+.auditor-segmented-btn:hover {
+  color: var(--auditor-text-primary);
+  background-color: var(--auditor-bg-surface-hover);
+}
+
+.auditor-segmented-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--auditor-focus-ring);
+}
+
+.auditor-segmented-btn--active {
+  background-color: var(--auditor-accent-primary);
+  color: #ffffff;
+  font-weight: var(--auditor-font-weight-semibold);
+}
+
+.auditor-segmented-btn--active:hover {
+  background-color: var(--auditor-accent-hover);
+  color: #ffffff;
+}

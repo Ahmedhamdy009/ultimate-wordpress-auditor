@@ -828,4 +828,12 @@ export const DESKTOP_DASHBOARD_LABELS_I18N = {
   viewModeTechnicalShort: { en: 'Technical', ar: 'تقني' },
   viewModeDualShort: { en: 'Dual', ar: 'مزدوج' },
   backToDashboardLabel: { en: 'Close Inspection', ar: 'إغلاق الفحص' },
+  navOverview: { en: 'Overview', ar: 'نظرة عامة' },
+  navScans: { en: 'Audit & Scans', ar: 'الفحوصات والتدقيق' },
+  navProjects: { en: 'Projects & Sites', ar: 'المشاريع والمواقع' },
+  navReports: { en: 'Reports & Exports', ar: 'التقارير والتصدير' },
+  navTargetValidator: { en: 'Target Validator', ar: 'فاحص النطاق' },
+  navSystemDiagnostics: { en: 'System Diagnostics', ar: 'تشخيص النظام' },
+  reportLanguageLabel: { en: 'Report Language', ar: 'لغة التقرير' },
+  reportAudienceModeLabel: { en: 'Report View Mode', ar: 'وضع عرض التقرير' },
 } as const satisfies Record<string, BilingualText>;

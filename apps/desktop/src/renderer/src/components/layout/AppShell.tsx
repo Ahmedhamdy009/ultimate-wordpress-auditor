@@ -3,6 +3,7 @@ import { Header } from './Header.js';
 import { Sidebar } from './Sidebar.js';
 import { Viewport } from './Viewport.js';
 import { StatusBar } from './StatusBar.js';
+import { useAuditUi } from '../../context/AuditUiContext.js';
 import type { ViewId } from '../../types/navigation.js';
 import type { AppSystemInfoResponse } from '@auditor/shared';
 
@@ -25,8 +26,10 @@ export const AppShell: React.FC<AppShellProps> = ({
   latencyMs,
   children,
 }) => {
+  const { locale, direction } = useAuditUi();
+
   return (
-    <div className="auditor-shell">
+    <div className="auditor-shell" dir={direction} lang={locale}>
       <Header connected={connected} latencyMs={latencyMs} activeViewTitle={activeViewTitle} />
       <div className="auditor-workspace">
         <Sidebar activeView={activeView} onSelectView={onSelectView} />

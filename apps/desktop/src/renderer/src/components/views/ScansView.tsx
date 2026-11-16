@@ -545,6 +545,8 @@ export const ScansView: React.FC<ScansViewProps> = ({
         scanRunId: reportGeneratingScanId,
         title: reportTitle.trim() || `Audit Report — ${new Date().toLocaleDateString()}`,
         format: reportFormat,
+        locale,
+        viewMode,
       });
 
       if (res.success) {

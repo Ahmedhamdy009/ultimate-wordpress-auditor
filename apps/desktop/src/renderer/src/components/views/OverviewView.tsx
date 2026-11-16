@@ -1,12 +1,22 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Card } from '../common/Card.js';
 import { Badge } from '../common/Badge.js';
 import { Alert } from '../common/Alert.js';
+import { ExecutiveSummaryCard } from '../dashboard/ExecutiveSummaryCard.js';
+import { CoverageDimensionsPanel } from '../dashboard/CoverageDimensionsPanel.js';
 import { useHeartbeat } from '../../context/HeartbeatContext.js';
+import { useAuditUi } from '../../context/AuditUiContext.js';
 import { useProjects } from '../../hooks/useProjects.js';
 import { useScans } from '../../hooks/useScans.js';
+import { adaptScanRunForViewModel } from '../../utils/reportViewModelAdapter.js';
 import type { ViewId } from '../../types/navigation.js';
-import type { AppSystemInfoResponse, SiteDTO, ProjectDTO, ScanRunDTO } from '@auditor/shared';
+import type {
+  AppSystemInfoResponse,
+  FindingDTO,
+  SiteDTO,
+  ProjectDTO,
+  ScanRunDTO,
+} from '@auditor/shared';
 import type { ElectronAPI } from '../../../../common/ipc/contracts.js';
 
 export interface OverviewViewProps {
@@ -15,6 +25,7 @@ export interface OverviewViewProps {
   readonly initialProjects?: readonly ProjectDTO[];
   readonly initialSites?: readonly SiteDTO[];
   readonly initialScans?: readonly ScanRunDTO[];
+  readonly initialSelectedScanFindings?: readonly FindingDTO[];
 }
 
 function getElectronAPI(): ElectronAPI | undefined {
@@ -38,8 +49,10 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   initialProjects,
   initialSites,
   initialScans,
+  initialSelectedScanFindings,
 }) => {
   const { connected, latencyMs } = useHeartbeat();
+  const { locale, viewMode, direction, tDesktop } = useAuditUi();
   const {
     projects: fetchedProjects,
     loading: projectsLoading,
@@ -174,6 +187,118 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   }, [projects, sites, scans]);
 
   const recentScans = useMemo(() => scans.slice(0, 5), [scans]);
+
+  // Selected scan for Executive Health Overview (defaults to latest completed, or latest scan)
+  const defaultOverviewScanId = useMemo(() => {
+    const completed = scans.find(s => s.status === 'completed');
+    return completed?.id ?? scans[0]?.id ?? '';
+  }, [scans]);
+
+  const [selectedOverviewScanId, setSelectedOverviewScanId] = useState<string>('');
+  const effectiveOverviewScanId =
+    selectedOverviewScanId && scans.some(s => s.id === selectedOverviewScanId)
+      ? selectedOverviewScanId
+      : defaultOverviewScanId;
+
+  const selectedOverviewScan = useMemo(
+    () => scans.find(s => s.id === effectiveOverviewScanId) ?? null,
+    [scans, effectiveOverviewScanId],
+  );
+
+  const [overviewFindings, setOverviewFindings] = useState<readonly FindingDTO[]>(
+    initialSelectedScanFindings ?? [],
+  );
+  const [overviewFindingsScanId, setOverviewFindingsScanId] = useState<string | null>(
+    initialSelectedScanFindings !== undefined && effectiveOverviewScanId
+      ? effectiveOverviewScanId
+      : null,
+  );
+  const [overviewTotalFindings, setOverviewTotalFindings] = useState<number>(
+    initialSelectedScanFindings?.length ?? 0,
+  );
+  const [overviewFindingsLoading, setOverviewFindingsLoading] = useState<boolean>(false);
+  const overviewFindingsReqRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (initialSelectedScanFindings !== undefined) {
+      setOverviewFindings(initialSelectedScanFindings);
+      setOverviewFindingsScanId(effectiveOverviewScanId || null);
+      setOverviewTotalFindings(initialSelectedScanFindings.length);
+      return;
+    }
+
+    if (!effectiveOverviewScanId) {
+      setOverviewFindings([]);
+      setOverviewFindingsScanId(null);
+      setOverviewTotalFindings(0);
+      return;
+    }
+
+    const api = getElectronAPI();
+    if (!api || typeof api.listFindings !== 'function') {
+      setOverviewFindings([]);
+      setOverviewFindingsScanId(effectiveOverviewScanId);
+      setOverviewTotalFindings(0);
+      return;
+    }
+
+    const reqId = ++overviewFindingsReqRef.current;
+    setOverviewFindings([]);
+    setOverviewFindingsScanId(null);
+    setOverviewFindingsLoading(true);
+
+    void api
+      .listFindings({ scanRunId: effectiveOverviewScanId, limit: 1000, offset: 0 })
+      .then(res => {
+        if (reqId !== overviewFindingsReqRef.current) return;
+        if (res.success && res.data) {
+          setOverviewFindings(res.data.items.filter(f => f.scanRunId === effectiveOverviewScanId));
+          setOverviewTotalFindings(res.data.total);
+          setOverviewFindingsScanId(effectiveOverviewScanId);
+        } else {
+          setOverviewFindings([]);
+          setOverviewFindingsScanId(effectiveOverviewScanId);
+          setOverviewTotalFindings(0);
+        }
+      })
+      .catch(() => {
+        if (reqId !== overviewFindingsReqRef.current) return;
+        setOverviewFindings([]);
+        setOverviewFindingsScanId(effectiveOverviewScanId);
+        setOverviewTotalFindings(0);
+      })
+      .finally(() => {
+        if (reqId === overviewFindingsReqRef.current) {
+          setOverviewFindingsLoading(false);
+        }
+      });
+  }, [effectiveOverviewScanId, initialSelectedScanFindings]);
+
+  const overviewViewModel = useMemo(() => {
+    if (!selectedOverviewScan) return null;
+    if (
+      overviewFindingsLoading ||
+      (overviewFindingsScanId !== null && overviewFindingsScanId !== selectedOverviewScan.id)
+    ) {
+      return null;
+    }
+    const site = siteMap.get(selectedOverviewScan.siteId) ?? null;
+    return adaptScanRunForViewModel({
+      scanRun: selectedOverviewScan,
+      site,
+      findings: overviewFindings,
+      locale,
+      viewMode,
+    });
+  }, [
+    selectedOverviewScan,
+    overviewFindingsLoading,
+    overviewFindingsScanId,
+    siteMap,
+    overviewFindings,
+    locale,
+    viewMode,
+  ]);
 
   return (
     <div className="auditor-overview-view" data-testid="overview-view">
@@ -421,6 +546,64 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               </dl>
             </Card>
           </div>
+
+          {/* Executive Health Triad & D1-D4 Coverage for Selected Scan */}
+          {selectedOverviewScan && (
+            <div className="auditor-inspection-stack" dir={direction} lang={locale}>
+              <Card
+                title={tDesktop('scanInspectionDashboard')}
+                subtitle={`${selectedOverviewScan.targetUrl} (${selectedOverviewScan.status.toUpperCase()})`}
+                headerAction={
+                  <div className="auditor-overview-scan-selector__control">
+                    <label htmlFor="overview-scan-select" className="auditor-label">
+                      {tDesktop('selectedScanLabel')}
+                    </label>
+                    <select
+                      id="overview-scan-select"
+                      className="auditor-select"
+                      value={effectiveOverviewScanId}
+                      onChange={e => setSelectedOverviewScanId(e.target.value)}
+                    >
+                      {scans.map(s => {
+                        const siteName = siteMap.get(s.siteId)?.name || s.targetUrl;
+                        return (
+                          <option key={s.id} value={s.id}>
+                            {siteName} — {s.status.toUpperCase()} (
+                            {new Date(s.createdAt).toLocaleDateString()})
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <button
+                      type="button"
+                      className="auditor-button auditor-button--primary auditor-button--sm"
+                      onClick={() => onNavigate('scans', selectedOverviewScan.id)}
+                    >
+                      Inspect
+                    </button>
+                  </div>
+                }
+              >
+                {overviewFindingsLoading || !overviewViewModel ? (
+                  <div className="auditor-empty-state">
+                    Loading scan telemetry and health index...
+                  </div>
+                ) : (
+                  <div className="auditor-inspection-stack">
+                    <ExecutiveSummaryCard
+                      viewModel={overviewViewModel}
+                      totalPersistedFindings={overviewTotalFindings}
+                      isTruncated={overviewTotalFindings > overviewFindings.length}
+                    />
+                    <CoverageDimensionsPanel
+                      viewModel={overviewViewModel}
+                      scanRun={selectedOverviewScan}
+                    />
+                  </div>
+                )}
+              </Card>
+            </div>
+          )}
 
           {/* Recent Scans Activity Table */}
           <Card

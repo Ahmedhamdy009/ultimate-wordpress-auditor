@@ -528,3 +528,304 @@ export function isSupportedReportLocale(locale: unknown): locale is ReportLocale
 export function isSupportedReportViewMode(mode: unknown): mode is ReportViewMode {
   return typeof mode === 'string' && (REPORT_VIEW_MODES as readonly string[]).includes(mode);
 }
+
+/**
+ * Shared Desktop Dashboard, Charts, Performance & Interactive Findings labels (EN / AR).
+ * Centralized in @auditor/shared so the React renderer never duplicates translation dictionaries.
+ */
+export const DESKTOP_DASHBOARD_LABELS_I18N = {
+  scanInspectionDashboard: {
+    en: 'Scan Inspection & Health Dashboard',
+    ar: 'لوحة فحص النتائج وصحة الموقع',
+  },
+  selectedScanLabel: {
+    en: 'Selected Scan',
+    ar: 'الفحص المحدد',
+  },
+  targetWebsiteLabel: {
+    en: 'Target Website',
+    ar: 'الموقع المستهدف',
+  },
+  scanDateLabel: {
+    en: 'Scan Date',
+    ar: 'تاريخ الفحص',
+  },
+  scanStatusLabel: {
+    en: 'Scan Status',
+    ar: 'حالة الفحص',
+  },
+  scanDurationLabel: {
+    en: 'Duration',
+    ar: 'مدة الفحص',
+  },
+  healthBandLabel: {
+    en: 'Health Band',
+    ar: 'تصنيف الحالة',
+  },
+  provisionalBadge: {
+    en: 'Provisional',
+    ar: 'تقييم مبدئي',
+  },
+  approximatedBadge: {
+    en: 'Approximated',
+    ar: 'تقديري',
+  },
+  unavailableValue: {
+    en: 'Unavailable',
+    ar: 'غير متاح',
+  },
+  measurementLimitationsHeading: {
+    en: 'Measurement Scope & Limitations',
+    ar: 'نطاق القياس والقيود',
+  },
+  telemetryReasonsHeading: {
+    en: 'Coverage & Telemetry Notes',
+    ar: 'ملاحظات التغطية والقياس',
+  },
+  executedChecksLabel: {
+    en: 'Executed',
+    ar: 'المنفَّذ',
+  },
+  eligibleChecksLabel: {
+    en: 'Eligible',
+    ar: 'المؤهَّل',
+  },
+  coverageRatioLabel: {
+    en: 'Coverage Ratio',
+    ar: 'نسبة التغطية',
+  },
+  dimensionWeightLabel: {
+    en: 'Weight',
+    ar: 'الوزن',
+  },
+  pagesUnitLabel: {
+    en: 'pages',
+    ar: 'صفحات',
+  },
+  modulesUnitLabel: {
+    en: 'modules',
+    ar: 'وحدات',
+  },
+  subchecksLabel: {
+    en: 'Sub-checks',
+    ar: 'الفحوص الفرعية',
+  },
+  historicalCompatibilityNotice: {
+    en: 'Historical scan record: missing telemetry counters are marked as approximated or unavailable rather than assumed successful.',
+    ar: 'سجل فحص تاريخي: العدادات غير المسجلة تُعرض كتقديرية أو غير متاحة ولا تُحتسب كناجحة تلقائياً.',
+  },
+  noScanSelectedTitle: {
+    en: 'Select a Scan to Inspect',
+    ar: 'اختر فحصاً لعرض تفاصيله',
+  },
+  noScanSelectedHint: {
+    en: 'Choose any scan run from the list to view its Health Triad, D1–D4 coverage, analytics charts, and actionable findings.',
+    ar: 'اختر أي عملية فحص من القائمة لعرض مؤشر الصحة وتغطية الأبعاد الأربعة والمخططات والتوصيات.',
+  },
+  noStackDetected: {
+    en: 'No CMS, page builder, or infrastructure stack markers were confirmed by scan evidence.',
+    ar: 'لم ترصد أدلة الفحص مؤشرات مؤكدة لنظام إدارة محتوى أو بنية تقنية محددة.',
+  },
+  wpPlatformLabel: {
+    en: 'WordPress CMS',
+    ar: 'نظام ووردبريس',
+  },
+  wpVersionLabel: {
+    en: 'Version',
+    ar: 'الإصدار',
+  },
+  wpConfidenceLabel: {
+    en: 'Detection Confidence',
+    ar: 'ثقة الاكتشاف',
+  },
+  themesLabel: {
+    en: 'Detected Themes',
+    ar: 'القوالب المكتشفة',
+  },
+  pluginsLabel: {
+    en: 'Detected Plugins',
+    ar: 'الإضافات المكتشفة',
+  },
+  elementorLabel: {
+    en: 'Elementor',
+    ar: 'إليمنتور',
+  },
+  elementorProLabel: {
+    en: 'Elementor Pro',
+    ar: 'إليمنتور برو',
+  },
+  wooCommerceLabel: {
+    en: 'WooCommerce',
+    ar: 'ووكومرس',
+  },
+  restApiLabel: {
+    en: 'WP REST API Exposed',
+    ar: 'واجهة REST API متاحة',
+  },
+  xmlRpcLabel: {
+    en: 'XML-RPC Endpoint Exposed',
+    ar: 'نقطة XML-RPC متاحة',
+  },
+  cdnCacheLabel: {
+    en: 'CDN / Caching Hints',
+    ar: 'مؤشرات CDN والتخزين المؤقت',
+  },
+  serverHintsLabel: {
+    en: 'Server Hints',
+    ar: 'مؤشرات الخادم',
+  },
+  languageLabel: {
+    en: 'Language',
+    ar: 'اللغة',
+  },
+  viewModeLabel: {
+    en: 'Audience Mode',
+    ar: 'وضع العرض',
+  },
+  rawFindingsCountLabel: {
+    en: 'Raw Findings',
+    ar: 'إجمالي الملاحظات',
+  },
+  consolidatedGroupsLabel: {
+    en: 'Actionable Groups',
+    ar: 'المجموعات الموحدة',
+  },
+  confirmedFindingsLabel: {
+    en: 'Confirmed',
+    ar: 'مؤكد',
+  },
+  firmFindingsLabel: {
+    en: 'Firm',
+    ar: 'قوي',
+  },
+  potentialFindingsLabel: {
+    en: 'Potential',
+    ar: 'محتمل',
+  },
+  // Chart & Performance labels
+  chartSeverityTitle: {
+    en: 'Severity Distribution',
+    ar: 'توزيع درجات الخطورة',
+  },
+  chartCategoryTitle: {
+    en: 'Category Breakdown',
+    ar: 'توزيع الملاحظات حسب الفئة',
+  },
+  chartCoverageTitle: {
+    en: 'D1–D4 Coverage Dimensions',
+    ar: 'أبعاد تغطية الفحص (D1–D4)',
+  },
+  chartLabVitalsTitle: {
+    en: 'Laboratory Performance Metrics',
+    ar: 'قياسات الأداء المعملية (Web Vitals)',
+  },
+  chartAssetTitle: {
+    en: 'Asset Breakdown',
+    ar: 'توزيع الأصول والموارد',
+  },
+  chartBottleneckTitle: {
+    en: 'Bottleneck Summary',
+    ar: 'ملخص اختناقات الأداء',
+  },
+  chartTopPagesTitle: {
+    en: 'Top Affected Pages',
+    ar: 'أكثر الصفحات تأثراً',
+  },
+  chartStatusMeasured: { en: 'Measured', ar: 'مقاس' },
+  chartStatusPartial: { en: 'Partial', ar: 'جزئي' },
+  chartStatusApproximated: { en: 'Approximated', ar: 'تقديري' },
+  chartStatusUnavailable: { en: 'Unavailable', ar: 'غير متاح' },
+  chartStatusExcluded: { en: 'Excluded', ar: 'مستبعد' },
+  chartNoDataUnavailable: {
+    en: 'Metric data unavailable or not executed in this scan.',
+    ar: 'بيانات هذا المخطط غير متاحة أو لم تُنفَّذ في هذا الفحص.',
+  },
+  chartExcludedNote: {
+    en: 'Excluded from chart metric (non-target system or lifecycle-resolved findings).',
+    ar: 'مستبعد من احتساب المخطط (ملاحظات نظامية أو محلولة).',
+  },
+  chartBytesUnavailableNote: {
+    en: 'Exact byte-by-type telemetry was not recorded; showing asset counts and flagged indicators only.',
+    ar: 'لم تُسجل أحجام البايتات حسب النوع؛ يتم عرض أعداد الأصول والمؤشرات المرصودة فقط.',
+  },
+  labVsFieldBadge: {
+    en: 'Lab Measurement Only — Not CrUX / Lighthouse',
+    ar: 'قياس معملي فقط — لا يمثل CrUX أو Lighthouse',
+  },
+  inpUnavailableInLab: {
+    en: 'Unsupported in passive lab audit (field-only metric)',
+    ar: 'غير متاح في الفحص المعملي السلبي (مقياس ميداني فقط)',
+  },
+  ratingGood: { en: 'Good', ar: 'جيد' },
+  ratingNeedsImprovement: { en: 'Needs Improvement', ar: 'يحتاج تحسين' },
+  ratingPoor: { en: 'Poor', ar: 'ضعيف' },
+  ratingUnavailable: { en: 'Unavailable', ar: 'غير متاح' },
+  ratingUnsupportedInLab: { en: 'Unsupported in Lab', ar: 'غير متاح معملياً' },
+  causalLabel: { en: 'Causal (Proven Cause)', ar: 'سببي (سبب مثبت)' },
+  correlationalLabel: { en: 'Correlational (Associated Factor)', ar: 'ارتباطي (عامل مصاحب)' },
+  observedVsBudgetLabel: { en: 'Observed vs Threshold', ar: 'المرصود مقابل الحد' },
+  lcpCappedNote: {
+    en: 'Capped at 5,000ms deadline ceiling',
+    ar: 'مقيد بسقف مهلة 5,000 مللي ثانية',
+  },
+  // Asset buckets
+  assetDocument: { en: 'HTML Documents', ar: 'مستندات HTML' },
+  assetScript: { en: 'JavaScript', ar: 'ملفات JavaScript' },
+  assetStylesheet: { en: 'Stylesheets (CSS)', ar: 'ملفات CSS' },
+  assetImage: { en: 'Images', ar: 'الصور' },
+  assetFont: { en: 'Fonts', ar: 'الخطوط' },
+  assetOther: { en: 'Other Resources', ar: 'موارد أخرى' },
+  assetFlaggedHeavy: { en: 'Flagged Heavy Assets', ar: 'أصول ثقيلة مرصودة' },
+  // Interactive Findings Explorer
+  searchFindingsPlaceholder: {
+    en: 'Search by title, rule ID, finding ID, URL, or selector...',
+    ar: 'ابحث بالعنوان أو معرف القاعدة أو معرف النتيجة أو الرابط أو المحدد...',
+  },
+  filterAll: { en: 'All', ar: 'الكل' },
+  filterSeverityLabel: { en: 'Severity', ar: 'الخطورة' },
+  filterCategoryLabel: { en: 'Category', ar: 'الفئة' },
+  filterClassificationLabel: { en: 'Classification', ar: 'التصنيف' },
+  filterConfirmedFirm: { en: 'Confirmed / Firm', ar: 'مؤكد / قوي' },
+  filterProvisional: { en: 'Provisional', ar: 'مبدئي' },
+  filterManualReview: { en: 'Needs Manual Review', ar: 'مراجعة يدوية' },
+  filterHasScreenshot: { en: 'With Visual Evidence', ar: 'تحتوي دليلاً بصرياً' },
+  sortByLabel: { en: 'Sort by', ar: 'ترتيب حسب' },
+  sortSeverityDesc: { en: 'Severity (Highest first)', ar: 'الخطورة (الأعلى أولاً)' },
+  sortSeverityAsc: { en: 'Severity (Lowest first)', ar: 'الخطورة (الأقل أولاً)' },
+  sortOccurrencesDesc: { en: 'Occurrences (Most first)', ar: 'التكرارات (الأكثر أولاً)' },
+  sortCategoryAsc: { en: 'Category (A–Z)', ar: 'الفئة (أبجدياً)' },
+  sortRuleIdAsc: { en: 'Rule ID (A–Z)', ar: 'معرف القاعدة' },
+  expandDetailsLabel: { en: 'Show Details & Guidance', ar: 'عرض التفاصيل والإرشادات' },
+  collapseDetailsLabel: { en: 'Hide Details', ar: 'إخفاء التفاصيل' },
+  findingIdLabel: { en: 'Original Finding IDs', ar: 'معرفات النتائج الأصلية' },
+  ruleIdLabel: { en: 'Rule ID', ar: 'معرف القاعدة' },
+  originalSeverityConfidenceLabel: {
+    en: 'Original Confidence & Status',
+    ar: 'الثقة والحالة الأصلية',
+  },
+  selectorsLabel: { en: 'DOM Selectors', ar: 'محددات العناصر (CSS)' },
+  resourcesLabel: { en: 'Affected Resources / Assets', ar: 'الموارد والأصول المتأثرة' },
+  headersLabel: { en: 'HTTP Headers', ar: 'ترويسات HTTP' },
+  schemaTypesLabel: { en: 'Schema Types', ar: 'أنواع البيانات المهيكلة' },
+  screenshotPreviewLabel: { en: 'Visual Evidence (Screenshot)', ar: 'الدليل البصري (لقطة الشاشة)' },
+  openScreenshotModalLabel: { en: 'Open Full Preview', ar: 'فتح المعاينة الكاملة' },
+  closeModalLabel: { en: 'Close Preview', ar: 'إغلاق المعاينة' },
+  screenshotUnavailableFallback: {
+    en: 'Screenshot preview unavailable on disk or omitted by safety bounds.',
+    ar: 'معاينة لقطة الشاشة غير متوفرة على القرص أو مستبعدة لحدود الأمان.',
+  },
+  paginationPrev: { en: 'Previous', ar: 'السابق' },
+  paginationNext: { en: 'Next', ar: 'التالي' },
+  paginationShowing: { en: 'Showing', ar: 'عرض' },
+  paginationOf: { en: 'of', ar: 'من' },
+  pageSizeLabel: { en: 'Per page', ar: 'لكل صفحة' },
+  noMatchingFindings: {
+    en: 'No findings match the current search and filter criteria.',
+    ar: 'لا توجد نتائج تطابق معايير البحث والتصفية الحالية.',
+  },
+  resetFiltersLabel: { en: 'Reset Filters', ar: 'إعادة ضبط المرشحات' },
+  viewModeSimpleShort: { en: 'Simple', ar: 'مبسط' },
+  viewModeTechnicalShort: { en: 'Technical', ar: 'تقني' },
+  viewModeDualShort: { en: 'Dual', ar: 'مزدوج' },
+  backToDashboardLabel: { en: 'Close Inspection', ar: 'إغلاق الفحص' },
+} as const satisfies Record<string, BilingualText>;

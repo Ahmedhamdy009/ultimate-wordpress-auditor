@@ -8,6 +8,7 @@ import { ReportsView } from './components/views/ReportsView.js';
 import { TargetValidatorView } from './components/views/TargetValidatorView.js';
 import { SystemDiagnosticsView } from './components/views/SystemDiagnosticsView.js';
 import { HeartbeatProvider } from './context/HeartbeatContext.js';
+import { AuditUiProvider } from './context/AuditUiContext.js';
 import { useSystemInfo } from './hooks/useSystemInfo.js';
 import { ACTIVE_NAV_ITEMS, type ViewId } from './types/navigation.js';
 
@@ -27,9 +28,9 @@ export const App: React.FC = () => {
   const activeViewTitle = activeItem ? activeItem.label : 'Dashboard';
 
   const handleNavigate = (view: ViewId, param?: string) => {
-    if (view === 'reports' && param) {
+    if ((view === 'reports' || view === 'scans') && param) {
       setSelectedScanRunId(param);
-    } else if (view !== 'reports') {
+    } else if (view !== 'reports' && view !== 'scans') {
       setSelectedScanRunId(undefined);
     }
     setActiveView(view);
@@ -40,7 +41,7 @@ export const App: React.FC = () => {
       case 'overview':
         return <OverviewView onNavigate={handleNavigate} systemInfo={systemInfo} />;
       case 'scans':
-        return <ScansView onNavigate={handleNavigate} />;
+        return <ScansView initialScanRunId={selectedScanRunId} onNavigate={handleNavigate} />;
       case 'projects':
         return <ProjectsView />;
       case 'reports':
@@ -62,15 +63,17 @@ export const App: React.FC = () => {
   };
 
   return (
-    <HeartbeatProvider enabled={true} intervalMs={10000}>
-      <AppShell
-        activeView={activeView}
-        activeViewTitle={activeViewTitle}
-        onSelectView={setActiveView}
-        systemInfo={systemInfo}
-      >
-        <ErrorBoundary fallbackTitle="View Rendering Failed">{renderActiveView()}</ErrorBoundary>
-      </AppShell>
-    </HeartbeatProvider>
+    <AuditUiProvider>
+      <HeartbeatProvider enabled={true} intervalMs={10000}>
+        <AppShell
+          activeView={activeView}
+          activeViewTitle={activeViewTitle}
+          onSelectView={view => handleNavigate(view)}
+          systemInfo={systemInfo}
+        >
+          <ErrorBoundary fallbackTitle="View Rendering Failed">{renderActiveView()}</ErrorBoundary>
+        </AppShell>
+      </HeartbeatProvider>
+    </AuditUiProvider>
   );
 };

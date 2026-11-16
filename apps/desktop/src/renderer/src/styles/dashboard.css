@@ -1,0 +1,360 @@
+/**
+ * Phase 7.4.4 — Desktop Dashboard, Charts, and Interactive Findings Styles
+ * Strictly CSP Compliant (style-src 'self' — zero inline style attributes)
+ * Supports Dark & Light themes and RTL/LTR logical layout properties.
+ */
+
+.auditor-exec-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--auditor-space-5);
+  margin-bottom: var(--auditor-space-5);
+}
+
+/* Health Triad Grid */
+.auditor-triad-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--auditor-space-4);
+  margin-bottom: var(--auditor-space-5);
+}
+
+.auditor-triad-tile {
+  background-color: var(--auditor-bg-surface-elevated);
+  border: 1px solid var(--auditor-border-subtle);
+  border-radius: var(--auditor-radius-md);
+  padding: var(--auditor-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--auditor-space-2);
+  border-top: 3px solid var(--auditor-border-default);
+}
+
+.auditor-triad-tile--success {
+  border-top-color: var(--auditor-success-border);
+}
+
+.auditor-triad-tile--warning {
+  border-top-color: var(--auditor-warning-border);
+}
+
+.auditor-triad-tile--danger {
+  border-top-color: var(--auditor-danger-border);
+}
+
+.auditor-triad-tile--info {
+  border-top-color: var(--auditor-info-border);
+}
+
+.auditor-triad-tile--neutral {
+  border-top-color: var(--auditor-neutral-border);
+}
+
+.auditor-triad-tile__label {
+  font-size: var(--auditor-font-size-xs);
+  font-weight: var(--auditor-font-weight-semibold);
+  color: var(--auditor-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.auditor-triad-tile__value {
+  font-size: 1.75rem;
+  font-weight: var(--auditor-font-weight-bold);
+  font-family: var(--auditor-font-mono);
+  color: var(--auditor-text-primary);
+  line-height: 1.15;
+}
+
+.auditor-triad-tile__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--auditor-space-2);
+}
+
+/* Executive Metadata Grid */
+.auditor-exec-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--auditor-space-4);
+  margin-bottom: var(--auditor-space-5);
+}
+
+.auditor-exec-meta-box {
+  background-color: var(--auditor-bg-surface-subtle);
+  border: 1px solid var(--auditor-border-subtle);
+  border-radius: var(--auditor-radius-md);
+  padding: var(--auditor-space-3) var(--auditor-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--auditor-space-2);
+}
+
+.auditor-exec-meta-box__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--auditor-space-3);
+  font-size: var(--auditor-font-size-xs);
+  border-bottom: 1px solid var(--auditor-border-subtle);
+  padding-bottom: var(--auditor-space-2);
+  flex-wrap: wrap;
+}
+
+.auditor-exec-meta-box__item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.auditor-exec-meta-box__label {
+  color: var(--auditor-text-secondary);
+  font-weight: var(--auditor-font-weight-medium);
+}
+
+.auditor-exec-meta-box__code {
+  font-family: var(--auditor-font-mono);
+  font-size: 11px;
+  color: var(--auditor-text-link);
+  word-break: break-all;
+}
+
+/* Detected Stack Panel */
+.auditor-stack-panel {
+  background-color: var(--auditor-bg-surface-subtle);
+  border: 1px solid var(--auditor-border-subtle);
+  border-radius: var(--auditor-radius-md);
+  padding: var(--auditor-space-3) var(--auditor-space-4);
+  margin-bottom: var(--auditor-space-4);
+}
+
+.auditor-stack-panel__title {
+  font-size: var(--auditor-font-size-xs);
+  font-weight: var(--auditor-font-weight-bold);
+  color: var(--auditor-text-primary);
+  margin-bottom: var(--auditor-space-2);
+}
+
+.auditor-stack-panel__empty {
+  font-size: var(--auditor-font-size-xs);
+  color: var(--auditor-text-muted);
+}
+
+.auditor-stack-panel__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--auditor-space-3);
+}
+
+.auditor-stack-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--auditor-space-2);
+  background-color: var(--auditor-bg-surface);
+  border: 1px solid var(--auditor-border-subtle);
+  border-radius: var(--auditor-radius-sm);
+  padding: var(--auditor-space-1) var(--auditor-space-2);
+  font-size: var(--auditor-font-size-xs);
+}
+
+.auditor-stack-chip__label {
+  color: var(--auditor-text-secondary);
+}
+
+.auditor-ltr-inline {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* Measurement Disclosures */
+.auditor-disclosures-panel {
+  margin-top: var(--auditor-space-2);
+}
+
+.auditor-disclosure-text {
+  margin: 0 0 var(--auditor-space-2) 0;
+  font-size: var(--auditor-font-size-xs);
+  line-height: 1.5;
+}
+
+.auditor-disclosure-text:last-child {
+  margin-bottom: 0;
+}
+
+.auditor-telemetry-reasons {
+  margin-top: var(--auditor-space-2);
+  padding-top: var(--auditor-space-2);
+  border-top: 1px solid var(--auditor-border-subtle);
+}
+
+.auditor-telemetry-reasons__title {
+  font-size: 11px;
+  font-weight: var(--auditor-font-weight-semibold);
+  margin-bottom: var(--auditor-space-1);
+}
+
+.auditor-telemetry-reasons__list {
+  margin: 0;
+  padding-inline-start: var(--auditor-space-4);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* D1-D4 Coverage Dimensions Grid */
+.auditor-dimensions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--auditor-space-4);
+}
+
+.auditor-dimension-card {
+  background-color: var(--auditor-bg-surface-elevated);
+  border: 1px solid var(--auditor-border-subtle);
+  border-inline-start: 4px solid var(--auditor-border-default);
+  border-radius: var(--auditor-radius-md);
+  padding: var(--auditor-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--auditor-space-3);
+}
+
+.auditor-dimension-card--exact {
+  border-inline-start-color: var(--auditor-success-border);
+}
+
+.auditor-dimension-card--approximated {
+  border-inline-start-color: var(--auditor-warning-border);
+}
+
+.auditor-dimension-card--unavailable {
+  border-inline-start-color: var(--auditor-danger-border);
+}
+
+.auditor-dimension-card--not_applicable {
+  border-inline-start-color: var(--auditor-neutral-border);
+}
+
+.auditor-dimension-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--auditor-space-2);
+}
+
+.auditor-dimension-card__title {
+  font-size: var(--auditor-font-size-sm);
+  font-weight: var(--auditor-font-weight-semibold);
+  color: var(--auditor-text-primary);
+}
+
+.auditor-dimension-card__metrics {
+  display: flex;
+  flex-direction: column;
+  gap: var(--auditor-space-1);
+}
+
+.auditor-dimension-metric {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--auditor-space-2);
+  font-size: var(--auditor-font-size-xs);
+}
+
+.auditor-dimension-metric__label {
+  color: var(--auditor-text-secondary);
+}
+
+.auditor-dimension-metric__val {
+  font-family: var(--auditor-font-mono);
+  color: var(--auditor-text-primary);
+}
+
+.auditor-dimension-bar {
+  width: 100%;
+  height: 10px;
+}
+
+.auditor-dimension-bar__svg {
+  display: block;
+  width: 100%;
+  height: 10px;
+}
+
+.auditor-svg-track {
+  fill: var(--auditor-bg-surface-subtle);
+}
+
+.auditor-svg-fill--exact {
+  fill: var(--auditor-success-border);
+}
+
+.auditor-svg-fill--approximated {
+  fill: var(--auditor-warning-border);
+}
+
+.auditor-svg-fill--unavailable {
+  fill: var(--auditor-danger-border);
+}
+
+.auditor-svg-fill--not_applicable {
+  fill: var(--auditor-neutral-border);
+}
+
+.auditor-dimension-submodules {
+  border-top: 1px solid var(--auditor-border-subtle);
+  padding-top: var(--auditor-space-2);
+}
+
+.auditor-dimension-submodules__title {
+  font-size: 11px;
+  font-weight: var(--auditor-font-weight-semibold);
+  color: var(--auditor-text-secondary);
+  margin-bottom: var(--auditor-space-1);
+}
+
+.auditor-dimension-submodules__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--auditor-space-2);
+}
+
+.auditor-submodule-pill {
+  font-size: 11px;
+  background-color: var(--auditor-bg-surface);
+  border: 1px solid var(--auditor-border-subtle);
+  border-radius: var(--auditor-radius-sm);
+  padding: 2px 6px;
+}
+
+.auditor-dimension-reasons {
+  margin: 0;
+  padding-inline-start: var(--auditor-space-4);
+  font-size: 11px;
+  color: var(--auditor-text-secondary);
+  line-height: 1.5;
+}
+
+/* Overview Selected Scan Selector Bar */
+.auditor-overview-scan-selector {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--auditor-space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--auditor-space-4);
+}
+
+.auditor-overview-scan-selector__control {
+  display: flex;
+  align-items: center;
+  gap: var(--auditor-space-2);
+  flex-wrap: wrap;
+}
+
+.auditor-inspection-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--auditor-space-5);
+  margin-bottom: var(--auditor-space-5);
+}

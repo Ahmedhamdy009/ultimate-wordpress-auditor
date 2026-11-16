@@ -23,6 +23,7 @@ export interface UseScansReturn {
   readonly activeScan: ScanRunDTO | null;
   readonly progress: ScanProgressDTO | null;
   readonly findings: readonly FindingDTO[];
+  readonly findingsScanId: string | null;
   readonly totalFindings: number;
   readonly selectedScanId: string | null;
   readonly loading: boolean;
@@ -60,6 +61,7 @@ export function useScans(options?: UseScansOptions): UseScansReturn {
   );
   const [progress, setProgress] = useState<ScanProgressDTO | null>(null);
   const [findings, setFindings] = useState<readonly FindingDTO[]>([]);
+  const [findingsScanId, setFindingsScanId] = useState<string | null>(null);
   const [totalFindings, setTotalFindings] = useState<number>(0);
   const [selectedScanId, setSelectedScanId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -101,7 +103,9 @@ export function useScans(options?: UseScansOptions): UseScansReturn {
   }, []);
 
   const clearFindings = useCallback(() => {
+    findingsRequestIdRef.current++;
     setSelectedScanId(null);
+    setFindingsScanId(null);
     setFindings([]);
     setTotalFindings(0);
     setFindingsError(null);
@@ -173,15 +177,22 @@ export function useScans(options?: UseScansOptions): UseScansReturn {
         if (!isMountedRef.current || currentId !== findingsRequestIdRef.current) return;
 
         if (res.success) {
-          setFindings(res.data.items);
+          setFindings(res.data.items.filter(item => item.scanRunId === scanId));
           setTotalFindings(res.data.total);
+          setFindingsScanId(scanId);
           setSelectedScanId(scanId);
           setFindingsError(null);
         } else {
+          setFindings([]);
+          setTotalFindings(0);
+          setFindingsScanId(null);
           setFindingsError(res.error);
         }
       } catch {
         if (isMountedRef.current && currentId === findingsRequestIdRef.current) {
+          setFindings([]);
+          setTotalFindings(0);
+          setFindingsScanId(null);
           setFindingsError({
             code: 'ERR_INTERNAL_ERROR',
             message: 'An unexpected transport error occurred while loading findings.',
@@ -202,6 +213,10 @@ export function useScans(options?: UseScansOptions): UseScansReturn {
         clearFindings();
         return;
       }
+      setFindings([]);
+      setTotalFindings(0);
+      setFindingsScanId(null);
+      setFindingsError(null);
       setSelectedScanId(scanId);
       await loadFindings(scanId);
     },
@@ -370,6 +385,7 @@ export function useScans(options?: UseScansOptions): UseScansReturn {
     activeScan,
     progress,
     findings,
+    findingsScanId,
     totalFindings,
     selectedScanId,
     loading,

@@ -3,9 +3,13 @@ import { Card } from '../common/Card.js';
 import { Badge } from '../common/Badge.js';
 import { Alert } from '../common/Alert.js';
 import { PerformanceVitalsView } from './PerformanceVitalsView.js';
+import { ExecutiveSummaryCard } from '../dashboard/ExecutiveSummaryCard.js';
+import { CoverageDimensionsPanel } from '../dashboard/CoverageDimensionsPanel.js';
+import { useAuditUi } from '../../context/AuditUiContext.js';
 import { useScans } from '../../hooks/useScans.js';
 import { useProjects } from '../../hooks/useProjects.js';
 import { useSites } from '../../hooks/useSites.js';
+import { adaptScanRunForViewModel } from '../../utils/reportViewModelAdapter.js';
 import type { ViewId } from '../../types/navigation.js';
 import {
   classifyFindingConfidenceBucket,
@@ -13,6 +17,7 @@ import {
   getFindingCategoryLabel,
   normalizeFindingCategoryId,
   normalizeFindingLifecycleStatus,
+  type FindingDTO,
   type ScanRunDTO,
   type ReportFormat,
   type CreateScanRunDTO,
@@ -23,6 +28,8 @@ export interface ScansViewProps {
   readonly onNavigate?: (view: ViewId) => void;
   readonly initialScans?: readonly ScanRunDTO[];
   readonly initialActiveScan?: ScanRunDTO | null;
+  readonly initialScanRunId?: string;
+  readonly initialSelectedScanFindings?: readonly FindingDTO[];
 }
 
 type ScanProfile = 'quick' | 'standard' | 'deep' | 'custom';
@@ -135,15 +142,19 @@ export const ScansView: React.FC<ScansViewProps> = ({
   onNavigate,
   initialScans,
   initialActiveScan,
+  initialScanRunId,
+  initialSelectedScanFindings,
 }) => {
+  const { locale, viewMode } = useAuditUi();
   // Hooks for scan, project, and site data
   const {
     scans,
     activeScan,
     progress,
-    findings,
-    totalFindings,
-    selectedScanId,
+    findings: hookFindings,
+    findingsScanId,
+    totalFindings: hookTotalFindings,
+    selectedScanId: hookSelectedScanId,
     loading: scansLoading,
     isScanning,
     findingsLoading,
@@ -160,6 +171,37 @@ export const ScansView: React.FC<ScansViewProps> = ({
     initialScans,
     initialActiveScan,
   });
+
+  useEffect(() => {
+    if (initialScanRunId && initialSelectedScanFindings === undefined) {
+      void selectScan(initialScanRunId);
+    }
+  }, [initialScanRunId, initialSelectedScanFindings, selectScan]);
+
+  const effectiveSelectedScanId =
+    hookSelectedScanId ??
+    (initialSelectedScanFindings !== undefined ? (initialScanRunId ?? null) : null);
+  const effectiveFindings =
+    hookSelectedScanId !== null
+      ? hookFindings
+      : initialSelectedScanFindings !== undefined
+        ? initialSelectedScanFindings
+        : hookFindings;
+  const effectiveTotalFindings =
+    hookSelectedScanId !== null
+      ? hookTotalFindings
+      : initialSelectedScanFindings !== undefined
+        ? initialSelectedScanFindings.length
+        : hookTotalFindings;
+  const effectiveFindingsScanId =
+    hookSelectedScanId !== null
+      ? findingsScanId
+      : initialSelectedScanFindings !== undefined
+        ? (initialScanRunId ?? null)
+        : findingsScanId;
+  const findings = effectiveFindings;
+  const totalFindings = effectiveTotalFindings;
+  const selectedScanId = effectiveSelectedScanId;
 
   const { projects } = useProjects();
 
@@ -365,6 +407,33 @@ export const ScansView: React.FC<ScansViewProps> = ({
   const inspectedScan = useMemo(() => {
     return scans.find(s => s.id === selectedScanId) ?? null;
   }, [scans, selectedScanId]);
+
+  const inspectedSite = useMemo(() => {
+    if (!inspectedScan) return null;
+    return sites.find(s => s.id === inspectedScan.siteId) ?? null;
+  }, [inspectedScan, sites]);
+
+  const inspectedViewModel = useMemo(() => {
+    if (!inspectedScan || findingsLoading) return null;
+    if (effectiveFindingsScanId !== null && effectiveFindingsScanId !== inspectedScan.id) {
+      return null;
+    }
+    return adaptScanRunForViewModel({
+      scanRun: inspectedScan,
+      site: inspectedSite,
+      findings,
+      locale,
+      viewMode,
+    });
+  }, [
+    inspectedScan,
+    inspectedSite,
+    findings,
+    findingsLoading,
+    effectiveFindingsScanId,
+    locale,
+    viewMode,
+  ]);
 
   // Handle launch scan
   const handleStartScan = async (e: React.FormEvent) => {
@@ -1377,6 +1446,18 @@ export const ScansView: React.FC<ScansViewProps> = ({
                     visual screenshots could not be evaluated. Install an approved Chromium browser
                     to unlock full browser-based audits.
                   </Alert>
+                </div>
+              )}
+
+              {/* Executive Overview & D1–D4 Coverage (Shared Reporting Engine) */}
+              {inspectedScan && inspectedViewModel && (
+                <div className="auditor-inspection-stack">
+                  <ExecutiveSummaryCard
+                    viewModel={inspectedViewModel}
+                    totalPersistedFindings={totalFindings}
+                    isTruncated={totalFindings > findings.length}
+                  />
+                  <CoverageDimensionsPanel viewModel={inspectedViewModel} scanRun={inspectedScan} />
                 </div>
               )}
 

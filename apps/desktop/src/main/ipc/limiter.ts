@@ -155,6 +155,11 @@ export const CHANNEL_LIMITS: Readonly<Record<IPCChannel, ChannelPolicyLimits>> =
     maxConcurrency: 2,
     maxPayloadBytes: 2048, // 2 KB
   }),
+  [IPC_CHANNELS.REPORT_GET_VISUAL_EVIDENCE]: Object.freeze({
+    maxRequestsPerSecond: 10,
+    maxConcurrency: 2,
+    maxPayloadBytes: 2048, // 2 KB
+  }),
 });
 
 export interface ConcurrencyLease {

@@ -35,11 +35,12 @@ describe('IPC Channels Specification', () => {
     expect(IPC_CHANNELS.REPORT_LIST).toBe('report:list');
     expect(IPC_CHANNELS.REPORT_DELETE).toBe('report:delete');
     expect(IPC_CHANNELS.REPORT_GET_CONTENT).toBe('report:get-content');
+    expect(IPC_CHANNELS.REPORT_GET_VISUAL_EVIDENCE).toBe('report:get-visual-evidence');
   });
 
-  it('provides an immutable frozen list of channels containing exactly 27 channels', () => {
+  it('provides an immutable frozen list of channels containing exactly 28 channels', () => {
     expect(Object.isFrozen(IPC_CHANNEL_LIST)).toBe(true);
-    expect(IPC_CHANNEL_LIST.length).toBe(27);
+    expect(IPC_CHANNEL_LIST.length).toBe(28);
     expect(IPC_CHANNEL_LIST).toContain('app:ping');
     expect(IPC_CHANNEL_LIST).toContain('project:create');
     expect(IPC_CHANNEL_LIST).toContain('site:create');

@@ -87,6 +87,8 @@ import {
   DeleteReportResponseDTOSchema,
   GetReportContentRequestSchema,
   ReportContentDTOSchema,
+  GetScanVisualEvidenceRequestSchema,
+  ScanVisualEvidenceResponseDTOSchema,
   ReportDTOSchema,
   ReportListResponseDTOSchema,
   type CreateReportRequest,
@@ -96,6 +98,8 @@ import {
   type DeleteReportResponseDTO,
   type GetReportContentRequest,
   type ReportContentDTO,
+  type GetScanVisualEvidenceRequest,
+  type ScanVisualEvidenceResponseDTO,
   type ReportDTO,
   type ReportListResponseDTO,
 } from '../schemas/report.js';
@@ -230,6 +234,10 @@ export const IPC_CONTRACTS = {
     requestSchema: GetReportContentRequestSchema,
     responseSchema: ReportContentDTOSchema,
   },
+  [IPC_CHANNELS.REPORT_GET_VISUAL_EVIDENCE]: {
+    requestSchema: GetScanVisualEvidenceRequestSchema,
+    responseSchema: ScanVisualEvidenceResponseDTOSchema,
+  },
 } as const;
 
 export type IPCContracts = typeof IPC_CONTRACTS;
@@ -288,7 +296,9 @@ export type IPCChannelRequest<C extends IPCChannel> = C extends typeof IPC_CHANN
                                                     ? DeleteReportRequest
                                                     : C extends typeof IPC_CHANNELS.REPORT_GET_CONTENT
                                                       ? GetReportContentRequest
-                                                      : never;
+                                                      : C extends typeof IPC_CHANNELS.REPORT_GET_VISUAL_EVIDENCE
+                                                        ? GetScanVisualEvidenceRequest
+                                                        : never;
 
 export type IPCChannelResponse<C extends IPCChannel> = C extends typeof IPC_CHANNELS.APP_PING
   ? AppPingResponse
@@ -344,7 +354,9 @@ export type IPCChannelResponse<C extends IPCChannel> = C extends typeof IPC_CHAN
                                                     ? DeleteReportResponseDTO
                                                     : C extends typeof IPC_CHANNELS.REPORT_GET_CONTENT
                                                       ? ReportContentDTO
-                                                      : never;
+                                                      : C extends typeof IPC_CHANNELS.REPORT_GET_VISUAL_EVIDENCE
+                                                        ? ScanVisualEvidenceResponseDTO
+                                                        : never;
 
 export function validateIPCRequest<C extends IPCChannel>(
   channel: C,

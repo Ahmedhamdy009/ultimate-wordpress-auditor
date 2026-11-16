@@ -11,6 +11,7 @@ import {
   type ReportListResponseDTO,
   type DeleteReportResponseDTO,
   type ReportContentDTO,
+  type ScanVisualEvidenceResponseDTO,
 } from '@auditor/shared';
 import type { IpcChannelHandler, SecureIpcDispatcher } from './dispatcher.js';
 import type { IScanRunService } from '../services/scan-run.service.js';
@@ -266,6 +267,20 @@ export function createReportGetContentHandler(
   };
 }
 
+export function createReportGetVisualEvidenceHandler(
+  service: IReportService,
+): IpcChannelHandler<typeof IPC_CHANNELS.REPORT_GET_VISUAL_EVIDENCE> {
+  return async (request, context): Promise<ScanVisualEvidenceResponseDTO> => {
+    if (context.signal.aborted) {
+      throw new IPCError(
+        'Request was aborted before handler execution',
+        IPC_ERROR_CODES.INTERNAL_ERROR,
+      );
+    }
+    return service.getScanVisualEvidence(request);
+  };
+}
+
 /**
  * Registers all Scan, Finding, and Report handlers with the SecureIpcDispatcher.
  */
@@ -303,5 +318,9 @@ export function registerScanHandlers(
   dispatcher.registerHandler(
     IPC_CHANNELS.REPORT_GET_CONTENT,
     createReportGetContentHandler(reportService),
+  );
+  dispatcher.registerHandler(
+    IPC_CHANNELS.REPORT_GET_VISUAL_EVIDENCE,
+    createReportGetVisualEvidenceHandler(reportService),
   );
 }

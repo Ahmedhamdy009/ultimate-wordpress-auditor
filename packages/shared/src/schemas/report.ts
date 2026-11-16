@@ -109,9 +109,38 @@ export const ReportContentDTOSchema = z.object({
 
 export type ReportContentDTO = z.infer<typeof ReportContentDTOSchema>;
 
+export const GetScanVisualEvidenceRequestSchema = z.object({
+  scanRunId: z.string().uuid('Invalid scan run ID format'),
+});
+
+export type GetScanVisualEvidenceRequest = z.input<typeof GetScanVisualEvidenceRequestSchema>;
+
+export const VisualEvidenceEntryDTOSchema = z.object({
+  fileName: z.string(),
+  byteLength: z.number().int().min(0),
+  embedded: z.boolean(),
+  mimeType: z.string().optional(),
+  dataUri: z.string().optional(),
+  omittedReason: z.string().optional(),
+  pageUrl: z.string().optional(),
+  viewport: z.string().optional(),
+  captureType: z.string().optional(),
+  status: z.string().optional(),
+});
+
+export type VisualEvidenceEntryDTO = z.infer<typeof VisualEvidenceEntryDTOSchema>;
+
+export const ScanVisualEvidenceResponseDTOSchema = z.object({
+  scanRunId: z.string().uuid('Invalid scan run ID format'),
+  entries: z.record(z.string(), VisualEvidenceEntryDTOSchema),
+});
+
+export type ScanVisualEvidenceResponseDTO = z.infer<typeof ScanVisualEvidenceResponseDTOSchema>;
+
 // Aliases
 export type CreateReportDTO = CreateReportRequest;
 export type GetReportDTO = GetReportRequest;
 export type ListReportsQueryDTO = ListReportsRequest;
 export type DeleteReportDTO = DeleteReportRequest;
 export type GetReportContentDTO = GetReportContentRequest;
+export type GetScanVisualEvidenceDTO = GetScanVisualEvidenceRequest;

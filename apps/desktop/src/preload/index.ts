@@ -53,6 +53,8 @@ import {
   type DeleteReportResponseDTO,
   type GetReportContentDTO,
   type ReportContentDTO,
+  type GetScanVisualEvidenceDTO,
+  type ScanVisualEvidenceResponseDTO,
 } from '@auditor/shared';
 import type { ElectronAPI } from '../common/ipc/contracts.js';
 
@@ -359,6 +361,12 @@ export function createElectronAPI(
       safeInvoke<DeleteReportResponseDTO>(invoker, IPC_CHANNELS.REPORT_DELETE, request),
     getReportContent: (request: GetReportContentDTO) =>
       safeInvoke<ReportContentDTO>(invoker, IPC_CHANNELS.REPORT_GET_CONTENT, request),
+    getScanVisualEvidence: (request: GetScanVisualEvidenceDTO) =>
+      safeInvoke<ScanVisualEvidenceResponseDTO>(
+        invoker,
+        IPC_CHANNELS.REPORT_GET_VISUAL_EVIDENCE,
+        request,
+      ),
   });
 }
 

@@ -42,6 +42,8 @@ import type {
   DeleteReportResponseDTO,
   GetReportContentDTO,
   ReportContentDTO,
+  GetScanVisualEvidenceDTO,
+  ScanVisualEvidenceResponseDTO,
 } from '@auditor/shared';
 
 /**
@@ -98,6 +100,9 @@ export interface ElectronAPI {
   ) => Promise<IPCResult<ReportListResponseDTO>>;
   readonly deleteReport: (request: DeleteReportDTO) => Promise<IPCResult<DeleteReportResponseDTO>>;
   readonly getReportContent: (request: GetReportContentDTO) => Promise<IPCResult<ReportContentDTO>>;
+  readonly getScanVisualEvidence: (
+    request: GetScanVisualEvidenceDTO,
+  ) => Promise<IPCResult<ScanVisualEvidenceResponseDTO>>;
 }
 
 /**

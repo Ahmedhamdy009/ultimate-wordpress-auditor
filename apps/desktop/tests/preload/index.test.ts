@@ -105,7 +105,7 @@ describe('Secure Preload Bridge (window.electronAPI)', () => {
   });
 
   describe('API Surface & Exposure Invariants', () => {
-    it('exposes exactly the 15 approved functions', () => {
+    it('exposes exactly the 28 approved functions', () => {
       const keys = Object.keys(api);
       const expectedMethods = [
         'ping',
@@ -135,9 +135,10 @@ describe('Secure Preload Bridge (window.electronAPI)', () => {
         'listReports',
         'deleteReport',
         'getReportContent',
+        'getScanVisualEvidence',
       ].sort();
       expect(keys.sort()).toEqual(expectedMethods);
-      expect(keys).toHaveLength(27);
+      expect(keys).toHaveLength(28);
 
       for (const key of keys) {
         expect(typeof (api as Record<string, unknown>)[key]).toBe('function');

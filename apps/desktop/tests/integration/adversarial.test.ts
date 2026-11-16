@@ -175,6 +175,7 @@ describe('Phase 1.2.4.3 — Security Boundary & Adversarial Runtime Suite', () =
         'getReportContent',
         'getScanProgress',
         'getScanRun',
+        'getScanVisualEvidence',
         'getSite',
         'getSystemInfo',
         'listFindings',

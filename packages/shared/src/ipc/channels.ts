@@ -41,6 +41,7 @@ export const IPC_CHANNELS = {
   REPORT_LIST: 'report:list',
   REPORT_DELETE: 'report:delete',
   REPORT_GET_CONTENT: 'report:get-content',
+  REPORT_GET_VISUAL_EVIDENCE: 'report:get-visual-evidence',
 } as const;
 
 export type IPCChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

@@ -1,4 +1,4 @@
-import React, { useState, useId, useMemo, useEffect } from 'react';
+import React, { useState, useId, useMemo, useEffect, useRef } from 'react';
 import { Card } from '../common/Card.js';
 import { Badge } from '../common/Badge.js';
 import { Alert } from '../common/Alert.js';
@@ -6,6 +6,7 @@ import { PerformanceVitalsView } from './PerformanceVitalsView.js';
 import { ExecutiveSummaryCard } from '../dashboard/ExecutiveSummaryCard.js';
 import { CoverageDimensionsPanel } from '../dashboard/CoverageDimensionsPanel.js';
 import { AuditChartsGrid } from '../dashboard/AuditChartsGrid.js';
+import { FindingsExplorer } from '../dashboard/FindingsExplorer.js';
 import { useAuditUi } from '../../context/AuditUiContext.js';
 import { useScans } from '../../hooks/useScans.js';
 import { useProjects } from '../../hooks/useProjects.js';
@@ -14,14 +15,13 @@ import { adaptScanRunForViewModel } from '../../utils/reportViewModelAdapter.js'
 import type { ViewId } from '../../types/navigation.js';
 import {
   classifyFindingConfidenceBucket,
-  FINDING_CATEGORY_FILTER_ORDER,
-  getFindingCategoryLabel,
   normalizeFindingCategoryId,
   normalizeFindingLifecycleStatus,
   type FindingDTO,
   type ScanRunDTO,
   type ReportFormat,
   type CreateScanRunDTO,
+  type VisualEvidenceEntryDTO,
 } from '@auditor/shared';
 import type { ElectronAPI } from '../../../../common/ipc/contracts.js';
 
@@ -31,6 +31,7 @@ export interface ScansViewProps {
   readonly initialActiveScan?: ScanRunDTO | null;
   readonly initialScanRunId?: string;
   readonly initialSelectedScanFindings?: readonly FindingDTO[];
+  readonly initialVisualEvidence?: Readonly<Record<string, VisualEvidenceEntryDTO>>;
 }
 
 type ScanProfile = 'quick' | 'standard' | 'deep' | 'custom';
@@ -64,20 +65,6 @@ function getStatusBadgeVariant(
     case 'crawling':
     case 'analyzing':
     case 'persisting':
-      return 'info';
-    default:
-      return 'neutral';
-  }
-}
-
-function getSeverityBadgeVariant(severity: string): 'danger' | 'warning' | 'info' | 'neutral' {
-  switch (severity) {
-    case 'critical':
-    case 'high':
-      return 'danger';
-    case 'medium':
-      return 'warning';
-    case 'low':
       return 'info';
     default:
       return 'neutral';
@@ -145,6 +132,7 @@ export const ScansView: React.FC<ScansViewProps> = ({
   initialActiveScan,
   initialScanRunId,
   initialSelectedScanFindings,
+  initialVisualEvidence,
 }) => {
   const { locale, viewMode } = useAuditUi();
   // Hooks for scan, project, and site data
@@ -325,8 +313,13 @@ export const ScansView: React.FC<ScansViewProps> = ({
   // Scan History Filters
   const [historyStatusFilter, setHistoryStatusFilter] = useState<string>('all');
   const [historySiteFilter, setHistorySiteFilter] = useState<string>('all');
-  const [findingsSeverityFilter, setFindingsSeverityFilter] = useState<string>('all');
-  const [findingsCategoryFilter, setFindingsCategoryFilter] = useState<string>('all');
+
+  // Visual Evidence state for currently inspected scan (strictly scanRunId-guarded)
+  const [visualEvidence, setVisualEvidence] = useState<
+    Readonly<Record<string, VisualEvidenceEntryDTO>>
+  >(initialVisualEvidence ?? {});
+  const [visualEvidenceLoading, setVisualEvidenceLoading] = useState<boolean>(false);
+  const visualEvidenceReqRef = useRef<number>(0);
 
   // Report generation state
   const [reportGeneratingScanId, setReportGeneratingScanId] = useState<string | null>(null);
@@ -369,45 +362,57 @@ export const ScansView: React.FC<ScansViewProps> = ({
     });
   }, [scans, historyStatusFilter, historySiteFilter]);
 
-  const findingCategoryCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const f of findings) {
-      const canonical = normalizeFindingCategoryId(f);
-      counts[canonical] = (counts[canonical] ?? 0) + 1;
-    }
-    return counts;
-  }, [findings]);
-
-  const findingConfidenceSummary = useMemo(() => {
-    let confirmed = 0;
-    let firm = 0;
-    let potential = 0;
-    for (const f of findings) {
-      const bucket = classifyFindingConfidenceBucket(f.confidence);
-      if (bucket === 'confirmed') confirmed++;
-      else if (bucket === 'firm') firm++;
-      else potential++;
-    }
-    return { confirmed, firm, potential };
-  }, [findings]);
-
-  // Filtered findings
-  const filteredFindings = useMemo(() => {
-    return findings.filter(f => {
-      if (findingsSeverityFilter !== 'all' && f.severity !== findingsSeverityFilter) {
-        return false;
-      }
-      if (findingsCategoryFilter !== 'all') {
-        return normalizeFindingCategoryId(f) === findingsCategoryFilter;
-      }
-      return true;
-    });
-  }, [findings, findingsSeverityFilter, findingsCategoryFilter]);
-
   // Selected scan for inspector
   const inspectedScan = useMemo(() => {
     return scans.find(s => s.id === selectedScanId) ?? null;
   }, [scans, selectedScanId]);
+
+  useEffect(() => {
+    if (initialVisualEvidence !== undefined) {
+      setVisualEvidence(initialVisualEvidence);
+      setVisualEvidenceLoading(false);
+      return;
+    }
+
+    if (!selectedScanId) {
+      visualEvidenceReqRef.current++;
+      setVisualEvidence({});
+      setVisualEvidenceLoading(false);
+      return;
+    }
+
+    const api = getElectronAPI();
+    if (!api || typeof api.getScanVisualEvidence !== 'function') {
+      setVisualEvidence({});
+      setVisualEvidenceLoading(false);
+      return;
+    }
+
+    const reqId = ++visualEvidenceReqRef.current;
+    setVisualEvidence({});
+    setVisualEvidenceLoading(true);
+
+    void api
+      .getScanVisualEvidence({ scanRunId: selectedScanId })
+      .then(res => {
+        if (reqId !== visualEvidenceReqRef.current) return;
+        if (res.success && res.data && res.data.scanRunId === selectedScanId) {
+          setVisualEvidence(res.data.entries);
+        } else {
+          setVisualEvidence({});
+        }
+      })
+      .catch(() => {
+        if (reqId === visualEvidenceReqRef.current) {
+          setVisualEvidence({});
+        }
+      })
+      .finally(() => {
+        if (reqId === visualEvidenceReqRef.current) {
+          setVisualEvidenceLoading(false);
+        }
+      });
+  }, [selectedScanId, initialVisualEvidence]);
 
   const inspectedSite = useMemo(() => {
     if (!inspectedScan) return null;
@@ -1466,350 +1471,13 @@ export const ScansView: React.FC<ScansViewProps> = ({
               {/* Laboratory Performance Diagnostics & Web Vitals */}
               <PerformanceVitalsView scanRun={inspectedScan} findings={findings} />
 
-              {/* Severity Filter Tabs */}
-              <div className="auditor-filter-bar">
-                <div className="auditor-filter-tabs">
-                  <button
-                    type="button"
-                    className={`auditor-filter-tab ${findingsSeverityFilter === 'all' ? 'auditor-filter-tab--active' : ''}`}
-                    onClick={() => setFindingsSeverityFilter('all')}
-                  >
-                    All ({findings.length})
-                  </button>
-                  <button
-                    type="button"
-                    className={`auditor-filter-tab ${findingsSeverityFilter === 'critical' ? 'auditor-filter-tab--active' : ''}`}
-                    onClick={() => setFindingsSeverityFilter('critical')}
-                  >
-                    Critical ({findings.filter(f => f.severity === 'critical').length})
-                  </button>
-                  <button
-                    type="button"
-                    className={`auditor-filter-tab ${findingsSeverityFilter === 'high' ? 'auditor-filter-tab--active' : ''}`}
-                    onClick={() => setFindingsSeverityFilter('high')}
-                  >
-                    High ({findings.filter(f => f.severity === 'high').length})
-                  </button>
-                  <button
-                    type="button"
-                    className={`auditor-filter-tab ${findingsSeverityFilter === 'medium' ? 'auditor-filter-tab--active' : ''}`}
-                    onClick={() => setFindingsSeverityFilter('medium')}
-                  >
-                    Medium ({findings.filter(f => f.severity === 'medium').length})
-                  </button>
-                  <button
-                    type="button"
-                    className={`auditor-filter-tab ${findingsSeverityFilter === 'low' ? 'auditor-filter-tab--active' : ''}`}
-                    onClick={() => setFindingsSeverityFilter('low')}
-                  >
-                    Low ({findings.filter(f => f.severity === 'low').length})
-                  </button>
-                  <button
-                    type="button"
-                    className={`auditor-filter-tab ${findingsSeverityFilter === 'info' ? 'auditor-filter-tab--active' : ''}`}
-                    onClick={() => setFindingsSeverityFilter('info')}
-                  >
-                    Info (
-                    {
-                      findings.filter(f => f.severity === 'info' || f.severity === 'informational')
-                        .length
-                    }
-                    )
-                  </button>
-                </div>
-              </div>
-
-              {/* Category Filter Tabs */}
-              <div className="auditor-filter-bar" style={{ marginTop: '8px' }}>
-                <span className="auditor-filter-bar__label">Category:</span>
-                <div className="auditor-filter-tabs">
-                  <button
-                    type="button"
-                    className={`auditor-filter-tab ${findingsCategoryFilter === 'all' ? 'auditor-filter-tab--active' : ''}`}
-                    onClick={() => setFindingsCategoryFilter('all')}
-                  >
-                    All ({findings.length})
-                  </button>
-                  {FINDING_CATEGORY_FILTER_ORDER.map(catDef => (
-                    <button
-                      key={catDef.id}
-                      type="button"
-                      className={`auditor-filter-tab ${findingsCategoryFilter === catDef.id ? 'auditor-filter-tab--active' : ''}`}
-                      onClick={() => setFindingsCategoryFilter(catDef.id)}
-                      title={catDef.description}
-                    >
-                      {catDef.label} ({findingCategoryCounts[catDef.id] ?? 0})
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Confidence / Verification Summary Bar */}
-              <div
-                className="auditor-filter-bar"
-                style={{ marginTop: '8px', alignItems: 'center', gap: '8px' }}
-              >
-                <span className="auditor-filter-bar__label">Verification:</span>
-                <div className="auditor-badge-group">
-                  <Badge variant="success" size="sm">
-                    {findingConfidenceSummary.confirmed} Confirmed
-                  </Badge>
-                  <Badge variant="info" size="sm">
-                    {findingConfidenceSummary.firm} Firm
-                  </Badge>
-                  <Badge variant="neutral" size="sm">
-                    {findingConfidenceSummary.potential} Potential
-                  </Badge>
-                </div>
-              </div>
-
-              {/* Findings List */}
-              {filteredFindings.length === 0 ? (
-                <div className="auditor-empty-state">
-                  No findings match the selected filters for this scan run.
-                </div>
-              ) : (
-                filteredFindings.map(finding => {
-                  const ev =
-                    typeof finding.evidence === 'object' && finding.evidence !== null
-                      ? (finding.evidence as Record<string, unknown>)
-                      : null;
-                  const screenshot =
-                    ev?.screenshot && typeof ev.screenshot === 'object'
-                      ? (ev.screenshot as Record<string, unknown>)
-                      : null;
-                  const selectorNotice =
-                    typeof ev?.selectorNotice === 'string' ? ev.selectorNotice : null;
-                  const occurrenceCount =
-                    typeof ev?.occurrenceCount === 'number' && ev.occurrenceCount > 1
-                      ? ev.occurrenceCount
-                      : null;
-
-                  const confidenceBadge = getFindingConfidenceBadgeProps(finding.confidence);
-                  const statusBadge = getFindingStatusBadgeProps(
-                    finding.status,
-                    finding.confidence,
-                  );
-                  const categoryLabel = getFindingCategoryLabel(finding);
-
-                  return (
-                    <div key={finding.id} className="auditor-finding-card">
-                      <div className="auditor-finding-card__header">
-                        <div className="auditor-finding-card__title">{finding.title}</div>
-                        <div className="auditor-finding-card__badges">
-                          <Badge variant={getSeverityBadgeVariant(finding.severity)} size="sm">
-                            {finding.severity.toUpperCase()}
-                          </Badge>
-                          <Badge variant="neutral" size="sm">
-                            {categoryLabel}
-                          </Badge>
-                          <Badge variant="neutral" size="sm">
-                            {finding.ruleId}
-                          </Badge>
-                          {finding.status === 'needs_manual_review' ||
-                          finding.ruleId.startsWith('a11y-review-') ? (
-                            <Badge variant="warning" size="sm">
-                              Manual Review Required — Incomplete Check
-                            </Badge>
-                          ) : (
-                            <Badge variant={confidenceBadge.variant} size="sm">
-                              {confidenceBadge.label}
-                            </Badge>
-                          )}
-                          <Badge variant={statusBadge.variant} size="sm">
-                            {statusBadge.label}
-                          </Badge>
-                          {ev?.causality === 'causal' && (
-                            <Badge variant="success" size="sm">
-                              Causal (Proven Cause)
-                            </Badge>
-                          )}
-                          {ev?.causality === 'correlational' && (
-                            <Badge variant="neutral" size="sm">
-                              Correlational (Associated Indicator)
-                            </Badge>
-                          )}
-                          {typeof ev?.classification === 'string' && (
-                            <Badge variant="neutral" size="sm">
-                              {String(ev.classification)}
-                            </Badge>
-                          )}
-                          {occurrenceCount && (
-                            <Badge variant="info" size="sm">
-                              {occurrenceCount}x Occurrences
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="auditor-finding-card__desc">{finding.description}</div>
-
-                      <div className="auditor-finding-card__section">
-                        <div className="auditor-finding-card__section-title">Affected URL</div>
-                        <code className="auditor-url-truncate" title={finding.targetUrl}>
-                          {finding.targetUrl}
-                        </code>
-                      </div>
-
-                      {screenshot && (
-                        <div className="auditor-finding-card__section">
-                          <div className="auditor-finding-card__section-title">
-                            Visual Evidence (Screenshot)
-                          </div>
-                          <div
-                            style={{
-                              padding: '8px 12px',
-                              backgroundColor: 'rgba(56, 189, 248, 0.1)',
-                              borderLeft: '3px solid var(--auditor-accent-primary)',
-                              borderRadius: '4px',
-                              fontSize: '12px',
-                            }}
-                          >
-                            &#128247; <strong>Screenshot:</strong>{' '}
-                            {String(screenshot.fileName ?? '')} ({String(screenshot.width ?? 0)}x
-                            {String(screenshot.height ?? 0)}px &bull; Viewport:{' '}
-                            {String(screenshot.viewportProfile ?? 'standard')} &bull;{' '}
-                            {Math.round(Number(screenshot.fileSizeBytes ?? 0) / 1024)} KB)
-                          </div>
-                        </div>
-                      )}
-
-                      {selectorNotice && (
-                        <div className="auditor-finding-card__section">
-                          <div
-                            style={{
-                              padding: '6px 10px',
-                              backgroundColor: 'var(--auditor-bg-surface-subtle)',
-                              borderLeft: '3px solid var(--auditor-border-subtle)',
-                              borderRadius: '4px',
-                              fontSize: '11px',
-                              fontFamily: 'monospace',
-                              color: 'var(--auditor-text-muted)',
-                            }}
-                          >
-                            &#128274; {selectorNotice}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Performance Metric Comparison */}
-                      {((ev?.observedValue !== undefined && ev?.thresholdValue !== undefined) ||
-                        (typeof ev?.observedValueMs === 'number' &&
-                          typeof ev?.thresholdMs === 'number')) && (
-                        <div className="auditor-finding-card__section">
-                          <div className="auditor-perf-comparison-box">
-                            <strong>Observed Metric:</strong>{' '}
-                            {ev?.observedValue !== undefined
-                              ? `${String(ev.observedValue)}${ev?.unit ? ` ${String(ev.unit)}` : ''}`
-                              : `${String(ev?.observedValueMs)} ms`}{' '}
-                            &bull; <strong>Budget/Threshold:</strong>{' '}
-                            {ev?.thresholdValue !== undefined
-                              ? `${String(ev.thresholdValue)}${ev?.unit ? ` ${String(ev.unit)}` : ''}`
-                              : `${String(ev?.thresholdMs)} ms`}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Inference Rationale */}
-                      {typeof ev?.inferenceRationale === 'string' && (
-                        <div className="auditor-finding-card__section">
-                          <div
-                            style={{
-                              fontSize: '12px',
-                              color: 'var(--auditor-text-secondary)',
-                              padding: '6px 10px',
-                              backgroundColor: 'var(--auditor-bg-surface-subtle)',
-                              borderLeft: '3px solid var(--auditor-accent-primary)',
-                              borderRadius: '4px',
-                            }}
-                          >
-                            <strong>Inference Rationale:</strong> {ev.inferenceRationale}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Measurement Limitations Notice */}
-                      {typeof (ev?.limitationsNotice ?? ev?.limitationNotice) === 'string' && (
-                        <div className="auditor-finding-card__section">
-                          <div className="auditor-perf-limitations-box">
-                            &#9888; <strong>Measurement Limitations:</strong>{' '}
-                            {String(ev?.limitationsNotice ?? ev?.limitationNotice)}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Affected Resources List */}
-                      {(() => {
-                        const resList = Array.isArray(ev?.resources)
-                          ? ev?.resources
-                          : Array.isArray(ev?.renderBlockingResources)
-                            ? ev?.renderBlockingResources
-                            : Array.isArray(ev?.uncompressedAssets)
-                              ? ev?.uncompressedAssets
-                              : Array.isArray(ev?.oversizedImages)
-                                ? ev?.oversizedImages
-                                : null;
-                        if (!resList || resList.length === 0) return null;
-                        return (
-                          <div className="auditor-finding-card__section">
-                            <div className="auditor-perf-affected-resources">
-                              <div className="auditor-finding-card__section-title">
-                                Affected Resources ({resList.length}
-                                {resList.length > 8 ? ', showing top 8' : ''})
-                              </div>
-                              <ul className="auditor-perf-affected-list">
-                                {resList.slice(0, 8).map((r: unknown, rIdx: number) => {
-                                  if (typeof r === 'object' && r !== null) {
-                                    const resObj = r as Record<string, unknown>;
-                                    const u = String(
-                                      resObj.url || resObj.currentSrc || resObj.targetUrl || '',
-                                    );
-                                    const size =
-                                      typeof resObj.transferSizeBytes === 'number'
-                                        ? `(${Math.round(resObj.transferSizeBytes / 1024)} KB)`
-                                        : '';
-                                    return (
-                                      <li key={rIdx}>
-                                        <code>{u}</code> {size}
-                                      </li>
-                                    );
-                                  }
-                                  return (
-                                    <li key={rIdx}>
-                                      <code>{String(r)}</code>
-                                    </li>
-                                  );
-                                })}
-                              </ul>
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      {finding.evidence && (
-                        <div className="auditor-finding-card__section">
-                          <div className="auditor-finding-card__section-title">Evidence</div>
-                          <div className="auditor-finding-card__code">
-                            {typeof finding.evidence === 'string'
-                              ? finding.evidence
-                              : JSON.stringify(finding.evidence, null, 2)}
-                          </div>
-                        </div>
-                      )}
-
-                      {finding.remediation && (
-                        <div className="auditor-finding-card__section">
-                          <div className="auditor-finding-card__section-title">
-                            Recommended Remediation
-                          </div>
-                          <div style={{ color: 'var(--auditor-text-secondary)', fontSize: '12px' }}>
-                            {finding.remediation}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
+              {/* Interactive Findings & Actionable Recommendations Explorer */}
+              {inspectedViewModel && (
+                <FindingsExplorer
+                  viewModel={inspectedViewModel}
+                  visualEvidence={visualEvidence}
+                  visualEvidenceLoading={visualEvidenceLoading}
+                />
               )}
             </div>
           )}

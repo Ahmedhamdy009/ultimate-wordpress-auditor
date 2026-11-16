@@ -218,6 +218,7 @@ describe('Phase 1.2.4.2 — Live Electron Runtime Integration Suite', () => {
         'getReportContent',
         'getScanProgress',
         'getScanRun',
+        'getScanVisualEvidence',
         'getSite',
         'getSystemInfo',
         'listFindings',

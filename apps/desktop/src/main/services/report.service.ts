@@ -9,6 +9,8 @@ import {
   type DeleteReportResponseDTO,
   type GetReportContentRequest,
   type ReportContentDTO,
+  type GetScanVisualEvidenceRequest,
+  type ScanVisualEvidenceResponseDTO,
   type ReportDTO,
   type ReportListResponseDTO,
 } from '@auditor/shared';
@@ -21,6 +23,7 @@ import {
   generateHtmlReport,
   generateJsonReport,
   generateCsvReport,
+  resolveReportVisualEvidence,
   sanitizeReportFilename,
   saveReportToFile,
   readReportFile,
@@ -42,6 +45,7 @@ export interface IReportService {
   listReports(request?: ListReportsRequest): ReportListResponseDTO;
   deleteReport(request: DeleteReportRequest): DeleteReportResponseDTO;
   getReportContent(request: GetReportContentRequest): ReportContentDTO;
+  getScanVisualEvidence(request: GetScanVisualEvidenceRequest): ScanVisualEvidenceResponseDTO;
   reconcileStorage(): ReportReconciliationResult;
 }
 
@@ -276,6 +280,37 @@ export class ReportService implements IReportService {
       format: report.format,
       content,
       storagePath: report.storagePath,
+    };
+  }
+
+  /**
+   * Safely resolves bounded screenshot evidence data URIs for a persisted scan run,
+   * strictly confined to the screenshots directory with symlink and traversal protection.
+   */
+  public getScanVisualEvidence(
+    request: GetScanVisualEvidenceRequest,
+  ): ScanVisualEvidenceResponseDTO {
+    const run = this.scanRunRepo.getById(request.scanRunId);
+    if (!run) {
+      throw new IPCError(
+        `Associated scan run '${request.scanRunId}' not found`,
+        IPC_ERROR_CODES.SCAN_RUN_NOT_FOUND,
+      );
+    }
+
+    const findings = this.findingRepo ? this.findingRepo.getAllByScanRunId(request.scanRunId) : [];
+    const pageScreenshots = Array.isArray(run.summary?.pageScreenshots)
+      ? (run.summary.pageScreenshots as unknown as readonly Record<string, unknown>[])
+      : undefined;
+
+    const entries = resolveReportVisualEvidence(findings, {
+      screenshotsDir: this.screenshotsDir,
+      pageScreenshots,
+    });
+
+    return {
+      scanRunId: run.id,
+      entries,
     };
   }
 }

@@ -160,7 +160,7 @@ describe('ScanOrchestrator Security & Regression Boundaries', () => {
         siteId,
         targetUrl: 'http://169.254.169.254/latest/meta-data/',
       });
-    }).toThrowError(new RegExp(SCAN_ORCHESTRATOR_ERROR_CODES.ERR_INVALID_ENTRY_URL));
+    }).toThrowError(new RegExp(SCAN_ORCHESTRATOR_ERROR_CODES.ERR_SSRF_PROHIBITED_TARGET));
   });
 
   it('strictly strips and ignores any caller-supplied pinnedIpOverride or testHooks in createScan config', () => {

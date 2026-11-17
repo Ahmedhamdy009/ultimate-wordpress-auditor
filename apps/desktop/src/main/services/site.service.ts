@@ -12,6 +12,7 @@ import {
 } from '@auditor/shared';
 import type { SiteRepository } from '../db/repositories/site.repository.js';
 import type { ProjectRepository } from '../db/repositories/project.repository.js';
+import { validateTargetUrlSync } from '../scanner/validator/target-validator.js';
 
 export interface ISiteService {
   createSite(request: CreateSiteRequest): SiteDTO;
@@ -30,25 +31,12 @@ export interface ISiteService {
  * - Discards hash fragments and query parameters for base URLs.
  * - Normalizes empty pathname to '/'.
  */
-export function normalizeSiteBaseUrl(rawUrl: string): string {
-  const trimmed = rawUrl.trim();
-  if (trimmed.length === 0) {
-    throw new IPCError('Site base URL cannot be empty', IPC_ERROR_CODES.INVALID_TARGET_URL);
-  }
-
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch {
-    throw new IPCError(`Invalid URL format: '${trimmed}'`, IPC_ERROR_CODES.INVALID_TARGET_URL);
-  }
-
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new IPCError(
-      `Unsupported protocol '${parsed.protocol}'. Only http: and https: are permitted.`,
-      IPC_ERROR_CODES.INVALID_TARGET_URL,
-    );
-  }
+export function normalizeSiteBaseUrl(
+  rawUrl: string,
+  options?: { allowPrivateLoopback?: boolean },
+): string {
+  const { parsedUrl } = validateTargetUrlSync(rawUrl, options);
+  const parsed = new URL(parsedUrl.toString());
 
   // Remove default port numbers
   if (

@@ -26,6 +26,8 @@ import {
   isTerminalScanRunStatus,
   normalizeFindingCategoryId,
   normalizeFindingLifecycleStatus,
+  IPCError,
+  IPC_ERROR_CODES,
 } from '@auditor/shared';
 import { DatabaseConnection } from '../../db/connection.js';
 import { ScanRunRepository } from '../../db/repositories/scan-run.repository.js';
@@ -56,6 +58,7 @@ import {
   redactUrl,
 } from '../../browser/index.js';
 import { PerformanceAuditor } from '../performance/index.js';
+import { validateTargetUrlSync } from '../validator/target-validator.js';
 import type {
   BrowserAuditExecutionResult,
   IScanOrchestrator,
@@ -209,6 +212,26 @@ export class ScanOrchestrator implements IScanOrchestrator {
       parsedRequest.targetUrl && parsedRequest.targetUrl.trim() !== ''
         ? parsedRequest.targetUrl.trim()
         : site.baseUrl;
+
+    // Strict pre-flight target validation before creating any scan run record
+    try {
+      validateTargetUrlSync(rawTargetUrl, {
+        allowPrivateLoopback: Boolean(this.options.testHooks?.pinnedIpOverride),
+      });
+    } catch (valErr: unknown) {
+      if (valErr instanceof IPCError && valErr.code === IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET) {
+        throw new ScanOrchestratorError(
+          SCAN_ORCHESTRATOR_ERROR_CODES.ERR_SSRF_PROHIBITED_TARGET,
+          valErr.message,
+          { siteId: site.id },
+        );
+      }
+      throw new ScanOrchestratorError(
+        SCAN_ORCHESTRATOR_ERROR_CODES.ERR_INVALID_ENTRY_URL,
+        valErr instanceof Error ? valErr.message : `Invalid target URL: ${rawTargetUrl}`,
+        { siteId: site.id },
+      );
+    }
 
     const normalizedTarget = normalizeCrawlUrl(rawTargetUrl);
     if (!normalizedTarget) {

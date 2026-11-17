@@ -17,18 +17,30 @@ import type { IpcChannelHandler, SecureIpcDispatcher } from './dispatcher.js';
 import type { IScanRunService } from '../services/scan-run.service.js';
 import type { IFindingService } from '../services/finding.service.js';
 import type { IReportService } from '../services/report.service.js';
+import type { ISiteService } from '../services/site.service.js';
 import type { IScanOrchestrator } from '../scanner/orchestrator/types.js';
 import {
   SCAN_ORCHESTRATOR_ERROR_CODES,
   ScanOrchestratorError,
 } from '../scanner/orchestrator/errors.js';
+import {
+  validateTargetUrlSync,
+  type ValidateTargetOptions,
+} from '../scanner/validator/target-validator.js';
 
 // --- Scan Run Handler Factories ---
+
+export interface ScanCreateHandlerOptions {
+  readonly validateTarget?: (url: string, options?: ValidateTargetOptions) => Promise<unknown>;
+  readonly siteService?: ISiteService;
+}
 
 export function createScanCreateHandler(
   service: IScanRunService,
   orchestrator?: IScanOrchestrator,
+  options?: ScanCreateHandlerOptions,
 ): IpcChannelHandler<typeof IPC_CHANNELS.SCAN_CREATE> {
+  const customValidator = options?.validateTarget;
   return async (request, context): Promise<ScanRunDTO> => {
     if (context.signal.aborted) {
       throw new IPCError(
@@ -36,6 +48,16 @@ export function createScanCreateHandler(
         IPC_ERROR_CODES.INTERNAL_ERROR,
       );
     }
+
+    // Pre-flight target validation before creating any scan record or launching scanner
+    if (customValidator) {
+      await customValidator(request.targetUrl ?? '', { signal: context.signal });
+    }
+
+    if (request.targetUrl && request.targetUrl.trim() !== '') {
+      validateTargetUrlSync(request.targetUrl.trim());
+    }
+
     if (orchestrator) {
       try {
         const run = orchestrator.createScan(request);
@@ -57,6 +79,12 @@ export function createScanCreateHandler(
             err.code === SCAN_ORCHESTRATOR_ERROR_CODES.ERR_SITE_SCAN_IN_PROGRESS
           ) {
             throw new IPCError(err.message, IPC_ERROR_CODES.SCAN_RUN_ACTIVE);
+          }
+          if (err.code === SCAN_ORCHESTRATOR_ERROR_CODES.ERR_SSRF_PROHIBITED_TARGET) {
+            throw new IPCError(err.message, IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET);
+          }
+          if (err.code === SCAN_ORCHESTRATOR_ERROR_CODES.ERR_DNS_RESOLUTION_FAILED) {
+            throw new IPCError(err.message, IPC_ERROR_CODES.DNS_RESOLUTION_FAILED);
           }
           if (err.code === SCAN_ORCHESTRATOR_ERROR_CODES.ERR_INVALID_ENTRY_URL) {
             throw new IPCError(err.message, IPC_ERROR_CODES.INVALID_TARGET_URL);
@@ -290,11 +318,12 @@ export function registerScanHandlers(
   findingService: IFindingService,
   reportService: IReportService,
   orchestrator?: IScanOrchestrator,
+  options?: ScanCreateHandlerOptions,
 ): void {
   // Scan Runs
   dispatcher.registerHandler(
     IPC_CHANNELS.SCAN_CREATE,
-    createScanCreateHandler(scanService, orchestrator),
+    createScanCreateHandler(scanService, orchestrator, options),
   );
   dispatcher.registerHandler(IPC_CHANNELS.SCAN_GET, createScanGetHandler(scanService));
   dispatcher.registerHandler(IPC_CHANNELS.SCAN_LIST, createScanListHandler(scanService));

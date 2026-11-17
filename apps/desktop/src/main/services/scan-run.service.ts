@@ -14,6 +14,7 @@ import {
 import type { ScanRunRepository } from '../db/repositories/scan-run.repository.js';
 import type { SiteRepository } from '../db/repositories/site.repository.js';
 import { redactUrl } from '../browser/redactor.js';
+import { validateTargetUrlSync } from '../scanner/validator/target-validator.js';
 
 export interface IScanRunService {
   createScanRun(request: CreateScanRunRequest): ScanRunDTO;
@@ -55,6 +56,9 @@ export class ScanRunService implements IScanRunService {
       request.targetUrl && request.targetUrl.trim() !== ''
         ? request.targetUrl.trim()
         : site.baseUrl;
+
+    // Strict synchronous pre-flight target validation before creating any scan record
+    validateTargetUrlSync(targetUrl);
 
     try {
       return this.scanRunRepo.create({

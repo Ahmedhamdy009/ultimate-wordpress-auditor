@@ -10,6 +10,7 @@ export interface ResolveDnsOptions {
     hostname: string,
     options: { all: true; verbatim: true },
   ) => Promise<Array<{ address: string; family: number }>>;
+  readonly allowPrivateLoopback?: boolean;
 }
 
 /**
@@ -35,9 +36,9 @@ export async function resolveAndValidateDns(
 
   // If the hostname is already an IP address literal, validate it directly
   const directIpValidation = isIpAllowedForScan(trimmedHost);
-  if (directIpValidation.allowed) {
-    const family = directIpValidation.family ?? 4;
-    const cleanIp = directIpValidation.ip;
+  if (directIpValidation.allowed || options?.allowPrivateLoopback) {
+    const family = directIpValidation.family ?? (trimmedHost.includes(':') ? 6 : 4);
+    const cleanIp = directIpValidation.ip ?? trimmedHost;
     return {
       hostname: trimmedHost,
       pinnedIp: cleanIp,
@@ -72,9 +73,52 @@ export async function resolveAndValidateDns(
     options?.lookupFn ?? (dns.promises.lookup as NonNullable<ResolveDnsOptions['lookupFn']>);
 
   let addresses: Array<{ address: string; family: number }>;
+  let timer: NodeJS.Timeout | undefined;
+  let abortListener: (() => void) | undefined;
   try {
-    addresses = await lookupFn(trimmedHost, { all: true, verbatim: true });
+    const promises: Promise<Array<{ address: string; family: number }>>[] = [
+      lookupFn(trimmedHost, { all: true, verbatim: true }),
+    ];
+
+    if (options?.timeoutMs && options.timeoutMs > 0) {
+      const timeoutMs = options.timeoutMs;
+      promises.push(
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            reject(
+              new ScannerClientError(
+                SCANNER_CLIENT_ERROR_CODES.ERR_DNS_RESOLUTION_FAILED,
+                `DNS lookup timed out after ${timeoutMs}ms for hostname "${trimmedHost}".`,
+                { hostname: trimmedHost, causeCode: 'ETIMEDOUT' },
+              ),
+            );
+          }, timeoutMs);
+        }),
+      );
+    }
+
+    if (options?.signal) {
+      const signal = options.signal;
+      promises.push(
+        new Promise<never>((_, reject) => {
+          abortListener = () => {
+            reject(
+              new ScannerClientError(
+                SCANNER_CLIENT_ERROR_CODES.ERR_REQUEST_ABORTED,
+                'DNS resolution was aborted by caller signal.',
+              ),
+            );
+          };
+          signal.addEventListener('abort', abortListener, { once: true });
+        }),
+      );
+    }
+
+    addresses = await Promise.race(promises);
   } catch (err: unknown) {
+    if (err instanceof ScannerClientError) {
+      throw err;
+    }
     if (options?.signal?.aborted) {
       throw new ScannerClientError(
         SCANNER_CLIENT_ERROR_CODES.ERR_REQUEST_ABORTED,
@@ -87,6 +131,13 @@ export async function resolveAndValidateDns(
       `DNS lookup failed for hostname "${trimmedHost}": ${sysErr.message || String(err)}`,
       { hostname: trimmedHost, causeCode: sysErr.code },
     );
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+    if (abortListener && options?.signal) {
+      options.signal.removeEventListener('abort', abortListener);
+    }
   }
 
   if (!addresses || addresses.length === 0) {
@@ -102,7 +153,7 @@ export async function resolveAndValidateDns(
   // Validate EVERY resolved address against IANA special registries & SSRF rules
   for (const entry of addresses) {
     const validation = isIpAllowedForScan(entry.address);
-    if (!validation.allowed) {
+    if (!validation.allowed && !options?.allowPrivateLoopback) {
       throw new ScannerClientError(
         SCANNER_CLIENT_ERROR_CODES.ERR_SSRF_PROHIBITED_IP,
         `Hostname "${trimmedHost}" resolved to prohibited address "${entry.address}": ${validation.reason}`,

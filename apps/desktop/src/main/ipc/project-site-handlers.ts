@@ -11,6 +11,10 @@ import {
 import type { IpcChannelHandler, SecureIpcDispatcher } from './dispatcher.js';
 import type { IProjectService } from '../services/project.service.js';
 import type { ISiteService } from '../services/site.service.js';
+import {
+  validateTargetUrlSync,
+  type ValidateTargetOptions,
+} from '../scanner/validator/target-validator.js';
 
 // --- Project Handler Factories ---
 
@@ -100,9 +104,18 @@ export function createProjectRestoreHandler(
 
 // --- Site Handler Factories ---
 
+export interface SiteHandlerOptions {
+  readonly validateTarget?: (
+    url: string,
+    options?: ValidateTargetOptions,
+  ) => Promise<unknown> | unknown;
+}
+
 export function createSiteCreateHandler(
   service: ISiteService,
+  options?: SiteHandlerOptions,
 ): IpcChannelHandler<typeof IPC_CHANNELS.SITE_CREATE> {
+  const customValidator = options?.validateTarget;
   return async (request, context): Promise<SiteDTO> => {
     if (context.signal.aborted) {
       throw new IPCError(
@@ -110,6 +123,10 @@ export function createSiteCreateHandler(
         IPC_ERROR_CODES.INTERNAL_ERROR,
       );
     }
+    if (customValidator) {
+      await customValidator(request.baseUrl, { signal: context.signal });
+    }
+    validateTargetUrlSync(request.baseUrl);
     return service.createSite(request);
   };
 }
@@ -144,13 +161,21 @@ export function createSiteListHandler(
 
 export function createSiteUpdateHandler(
   service: ISiteService,
+  options?: SiteHandlerOptions,
 ): IpcChannelHandler<typeof IPC_CHANNELS.SITE_UPDATE> {
+  const customValidator = options?.validateTarget;
   return async (request, context): Promise<SiteDTO> => {
     if (context.signal.aborted) {
       throw new IPCError(
         'Request was aborted before handler execution',
         IPC_ERROR_CODES.INTERNAL_ERROR,
       );
+    }
+    if (request.baseUrl !== undefined) {
+      if (customValidator) {
+        await customValidator(request.baseUrl, { signal: context.signal });
+      }
+      validateTargetUrlSync(request.baseUrl);
     }
     return service.updateSite(request);
   };

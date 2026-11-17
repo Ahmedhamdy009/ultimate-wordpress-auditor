@@ -381,6 +381,7 @@ export function registerCoreIpcHandlers(
       deps.findingService,
       deps.reportService,
       deps.orchestrator,
+      deps.siteService ? { siteService: deps.siteService } : undefined,
     );
   }
 }

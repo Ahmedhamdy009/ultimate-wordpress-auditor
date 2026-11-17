@@ -30,6 +30,8 @@ describe('IPC Errors Specification & Hardened Serialization', () => {
     expect(IPC_ERROR_CODES.INTERNAL_ERROR).toBe('ERR_INTERNAL_ERROR');
     expect(IPC_ERROR_CODES.PATH_TRAVERSAL).toBe('ERR_PATH_TRAVERSAL');
     expect(IPC_ERROR_CODES.TMP_JUNCTION_ESCAPE).toBe('ERR_TMP_JUNCTION_ESCAPE');
+    expect(IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET).toBe('ERR_SSRF_PROHIBITED_TARGET');
+    expect(IPC_ERROR_CODES.DNS_RESOLUTION_FAILED).toBe('ERR_DNS_RESOLUTION_FAILED');
   });
 
   it('instantiates specialized error subclasses with correct hierarchy and code defaults', () => {

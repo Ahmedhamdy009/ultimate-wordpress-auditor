@@ -10,3 +10,4 @@ export * from './crawler/index.js';
 export * from './analyzers/index.js';
 export * from './orchestrator/index.js';
 export * from './performance/index.js';
+export * from './validator/index.js';

@@ -47,6 +47,8 @@ export const IPC_ERROR_CODES = {
   FINDING_NOT_FOUND: 'ERR_FINDING_NOT_FOUND',
   REPORT_NOT_FOUND: 'ERR_REPORT_NOT_FOUND',
   EVIDENCE_TOO_LARGE: 'ERR_EVIDENCE_TOO_LARGE',
+  SSRF_PROHIBITED_TARGET: 'ERR_SSRF_PROHIBITED_TARGET',
+  DNS_RESOLUTION_FAILED: 'ERR_DNS_RESOLUTION_FAILED',
 } as const;
 
 export type IPCErrorCode = (typeof IPC_ERROR_CODES)[keyof typeof IPC_ERROR_CODES];
@@ -98,6 +100,9 @@ export const SAFE_IPC_ERROR_MESSAGES: Readonly<Record<IPCErrorCode, string>> = O
   [IPC_ERROR_CODES.FINDING_NOT_FOUND]: 'Requested finding was not found',
   [IPC_ERROR_CODES.REPORT_NOT_FOUND]: 'Requested report was not found',
   [IPC_ERROR_CODES.EVIDENCE_TOO_LARGE]: 'Finding evidence exceeds maximum allowed size (64KB)',
+  [IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET]:
+    'Target destination or resolved address is prohibited by security policy',
+  [IPC_ERROR_CODES.DNS_RESOLUTION_FAILED]: 'DNS resolution failed for the target hostname',
 });
 
 export function isAllowedIPCCode(code: unknown): code is IPCErrorCode {

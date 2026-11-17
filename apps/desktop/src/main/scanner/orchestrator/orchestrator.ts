@@ -45,6 +45,7 @@ import {
   type BrowserManagerOptions,
   VisualAuditor,
   type VisualAuditorOptions,
+  VisualAuditorTimeoutError,
   AccessibilityAuditor,
   type AccessibilityAuditorOptions,
   RuntimeResourceAuditor,
@@ -1594,9 +1595,13 @@ export class ScanOrchestrator implements IScanOrchestrator {
               screenshotOptions: {
                 maxScreenshotsPerAudit: captureScreenshots ? 20 : 0,
               },
+              deadlineAt: context.deadlineAt,
             });
 
-            const visualReport = await visualAuditor.auditUrl(pageUrl);
+            const visualReport = await visualAuditor.auditUrl(pageUrl, {
+              deadlineAt: context.deadlineAt,
+              signal: context.abortController.signal,
+            });
             findings.push(...visualReport.findings);
             viewportsCompleted += visualReport.viewportResults.length;
             screenshotsCaptured += visualReport.totalScreenshots;
@@ -1740,6 +1745,75 @@ export class ScanOrchestrator implements IScanOrchestrator {
             } catch {
               // ignore
             }
+          }
+
+          const isVaTimeout =
+            pageErr instanceof VisualAuditorTimeoutError ||
+            (pageErr instanceof Error &&
+              (pageErr as { code?: string }).code === 'ERR_SCAN_TIMEOUT' &&
+              pageErr.name === 'VisualAuditorTimeoutError');
+
+          if (isVaTimeout) {
+            const vaErr = pageErr as VisualAuditorTimeoutError;
+            if (vaErr.partialReport) {
+              findings.push(...vaErr.partialReport.findings);
+              viewportsCompleted += vaErr.partialReport.viewportResults.length;
+              screenshotsCaptured += vaErr.partialReport.totalScreenshots;
+              const allPageScreenshots = vaErr.partialReport.viewportResults.flatMap(
+                vr => vr.screenshots,
+              );
+              for (const s of allPageScreenshots) {
+                const viewportCategory = resolveViewportCategory(s.viewport);
+                const relativePath = s.relativePath;
+                const fileName = relativePath ? path.basename(relativePath) : `${s.id}.${s.format}`;
+                const redactedTargetUrl = redactUrl(s.targetUrl);
+
+                const record: PageScreenshotRecord = {
+                  id: s.id,
+                  pageUrl: redactedTargetUrl,
+                  viewportId: s.viewport.id,
+                  viewportName: s.viewport.name,
+                  viewportCategory,
+                  width: s.width,
+                  height: s.height,
+                  captureType: s.captureType,
+                  relativePath: s.relativePath,
+                  fileName,
+                  fileSizeBytes: s.fileSizeBytes,
+                  format: s.format,
+                  status: 'captured',
+                  findingIds: s.findingId ? [s.findingId] : [],
+                };
+
+                const existingIdx = pageScreenshots.findIndex(
+                  existing =>
+                    existing.id === s.id ||
+                    (existing.pageUrl === redactedTargetUrl &&
+                      existing.viewportId === s.viewport.id &&
+                      existing.captureType === s.captureType),
+                );
+
+                if (existingIdx >= 0) {
+                  pageScreenshots[existingIdx] = record;
+                } else {
+                  pageScreenshots.push(record);
+                }
+              }
+              context.pageScreenshots = [...pageScreenshots];
+            }
+
+            try {
+              if (findings.length > 0) {
+                this.persistFindingsCheckpoint(context, findings, modules);
+              }
+            } catch {
+              // Bounded safe flush failure must not mask original abort error
+            }
+
+            throw new ScanOrchestratorError(
+              SCAN_ORCHESTRATOR_ERROR_CODES.ERR_SCAN_TIMEOUT,
+              pageErr instanceof Error ? pageErr.message : String(pageErr),
+            );
           }
 
           if (

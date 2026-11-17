@@ -12,7 +12,11 @@ import { SCAN_ORCHESTRATOR_ERROR_CODES } from '../../../src/main/scanner/orchest
 import type { SafeHttpClientTestHooks } from '../../../src/main/scanner/client/types.js';
 import type { BoundedCrawler } from '../../../src/main/scanner/crawler/crawler.js';
 import type { BrowserManager, ManagedPage } from '../../../src/main/browser/browser-manager.js';
-import type { VisualAuditor, VisualAuditReport } from '../../../src/main/browser/visual-types.js';
+import {
+  type VisualAuditor,
+  type VisualAuditReport,
+  VisualAuditorTimeoutError,
+} from '../../../src/main/browser/visual-types.js';
 import type {
   AccessibilityAuditor,
   AccessibilityAuditReport,
@@ -797,5 +801,158 @@ describe('ScanOrchestrator Production Timeout Remediation & Invariant Suite', ()
     expect(evidence.screenshot?.fileName).toBe('shot-desktop-primary.png');
 
     a11yOrchestrator.dispose();
+  });
+
+  it('12. terminates scan with ERR_SCAN_TIMEOUT and preserves partial visual findings/screenshots when VisualAuditor throws VisualAuditorTimeoutError', async () => {
+    const mockManagedPage: ManagedPage = {
+      page: {
+        setViewportSize: async () => {},
+        evaluate: async () => ({}),
+        goto: async () => {},
+        close: async () => {},
+        isClosed: () => false,
+        on: () => {},
+        off: () => {},
+        once: () => {},
+      } as unknown as ManagedPage['page'],
+      release: async () => {},
+    };
+
+    const mockBrowserManager: BrowserManager = {
+      launch: async () => {},
+      close: async () => {},
+      acquirePage: async () => mockManagedPage,
+    } as unknown as BrowserManager;
+
+    const mockBrowserManagerFactory = () => mockBrowserManager;
+
+    const mockVisualAuditor = {
+      auditUrl: async (pageUrl: string) => {
+        throw new VisualAuditorTimeoutError(
+          'Scan deadline exceeded during visual audit navigation',
+          {
+            targetUrl: pageUrl,
+            remainingBudgetMs: -100,
+            deadlineAt: Date.now() - 100,
+            partialReport: {
+              targetUrl: pageUrl,
+              profilesEvaluated: 1,
+              totalFindings: 1,
+              findings: [
+                {
+                  targetUrl: pageUrl,
+                  ruleId: 'RESP_OVERFLOW',
+                  title: 'Horizontal Overflow',
+                  description: 'Content overflows screen width',
+                  category: 'Responsive',
+                  severity: 'medium',
+                  impact: 'low',
+                  likelihood: 'low',
+                  effort: 'low',
+                  confidence: 'high',
+                  evidence: {},
+                },
+              ],
+              viewportResults: [
+                {
+                  viewport: {
+                    id: 'small-mobile',
+                    name: 'Small Mobile',
+                    width: 320,
+                    height: 568,
+                    deviceScaleFactor: 2,
+                    isMobile: true,
+                    hasTouch: true,
+                  },
+                  targetUrl: pageUrl,
+                  responsiveMetrics: {} as never,
+                  layoutStabilityMetrics: {} as never,
+                  layoutShiftEvents: [],
+                  overflowingElements: [],
+                  screenshots: [
+                    {
+                      id: 'shot-partial-timeout',
+                      targetUrl: pageUrl,
+                      viewport: {
+                        id: 'small-mobile',
+                        name: 'Small Mobile',
+                        width: 320,
+                        height: 568,
+                        deviceScaleFactor: 2,
+                        isMobile: true,
+                        hasTouch: true,
+                      },
+                      captureType: 'viewport',
+                      format: 'png',
+                      fileSizeBytes: 2048,
+                      relativePath: 'shot-partial-timeout.png',
+                      capturedAt: new Date().toISOString(),
+                    },
+                  ],
+                  findings: [],
+                  durationMs: 50,
+                },
+              ],
+              totalScreenshots: 1,
+              totalScreenshotStorageBytes: 2048,
+              startedAt: Date.now() - 100,
+              completedAt: Date.now(),
+              durationMs: 100,
+              limitsReached: {
+                profilesLimit: false,
+                elementsLimit: false,
+                shiftEventsLimit: false,
+                screenshotCountLimit: false,
+                screenshotStorageLimit: false,
+              },
+            },
+          },
+        );
+      },
+    } as unknown as VisualAuditor;
+
+    const timeoutOrchestrator = new ScanOrchestrator(connection, {
+      testHooks,
+      clientOptions: { allowPrivateLoopback: true },
+      browserManagerFactory: mockBrowserManagerFactory,
+      accessibilityAuditorFactory: () =>
+        ({
+          auditPage: async () => ({
+            targetUrl: `http://remediation.local:${serverPort}/`,
+            findings: [],
+          }),
+        }) as unknown as AccessibilityAuditor,
+      visualAuditorFactory: () => mockVisualAuditor,
+    });
+
+    const result = await timeoutOrchestrator.startScan({
+      siteId,
+      scanType: 'full',
+      config: {
+        maxPages: 1,
+        enableBrowserAudit: true,
+        auditModules: {
+          responsiveLayout: true,
+          screenshots: true,
+        },
+      },
+    });
+
+    expect(result.status).toBe('failed');
+    expect(result.error).not.toBeNull();
+    expect(result.error?.code).toBe(SCAN_ORCHESTRATOR_ERROR_CODES.ERR_SCAN_TIMEOUT);
+
+    // Verify partial findings were persisted
+    const persistedFindings = findingRepo.getAllByScanRunId(result.id);
+    expect(persistedFindings.some(f => f.ruleId === 'RESP_OVERFLOW')).toBe(true);
+
+    // Verify partial screenshots were saved in error details
+    const details = result.error?.details as
+      { pageScreenshots?: Array<{ id: string }> } | undefined;
+    expect(details?.pageScreenshots).toBeDefined();
+    expect(details?.pageScreenshots?.length).toBeGreaterThanOrEqual(1);
+    expect(details?.pageScreenshots?.some(s => s.id === 'shot-partial-timeout')).toBe(true);
+
+    timeoutOrchestrator.dispose();
   });
 });

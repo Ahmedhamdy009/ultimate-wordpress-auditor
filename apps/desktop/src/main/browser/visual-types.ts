@@ -196,6 +196,57 @@ export interface VisualAuditorOptions {
   readonly layoutShiftOptions?: LayoutShiftCollectorOptions;
   readonly scanRunId?: string;
   readonly signal?: AbortSignal;
+  /**
+   * Absolute timestamp in milliseconds (epoch) by which all navigation and auditing must complete.
+   * VisualAuditor clamps internal page navigation timeouts to never exceed this deadline.
+   */
+  readonly deadlineAt?: number;
+  /**
+   * Maximum duration in milliseconds allowed for a single page navigation (defaults to 30,000ms).
+   */
+  readonly navigationTimeoutMs?: number;
+  /**
+   * Clock function returning the current epoch milliseconds (defaults to Date.now).
+   */
+  readonly clock?: () => number;
+}
+
+/**
+ * Per-URL Execution Options for VisualAuditor.auditUrl()
+ */
+export interface VisualAuditUrlOptions {
+  readonly deadlineAt?: number;
+  readonly navigationTimeoutMs?: number;
+  readonly signal?: AbortSignal;
+}
+
+/**
+ * Error raised when VisualAuditor aborts or times out due to the scan deadline being reached or exceeded.
+ */
+export class VisualAuditorTimeoutError extends Error {
+  public readonly code: string = 'ERR_SCAN_TIMEOUT';
+  public readonly targetUrl: string;
+  public readonly remainingBudgetMs: number;
+  public readonly deadlineAt: number;
+  public readonly partialReport?: VisualAuditReport;
+
+  constructor(
+    message: string,
+    context: {
+      targetUrl: string;
+      remainingBudgetMs: number;
+      deadlineAt: number;
+      partialReport?: VisualAuditReport;
+    },
+  ) {
+    super(`[ERR_SCAN_TIMEOUT] ${message}`);
+    this.name = 'VisualAuditorTimeoutError';
+    this.targetUrl = context.targetUrl;
+    this.remainingBudgetMs = context.remainingBudgetMs;
+    this.deadlineAt = context.deadlineAt;
+    this.partialReport = context.partialReport;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
 }
 
 /**

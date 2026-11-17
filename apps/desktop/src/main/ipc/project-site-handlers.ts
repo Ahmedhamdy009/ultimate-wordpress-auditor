@@ -13,6 +13,7 @@ import type { IProjectService } from '../services/project.service.js';
 import type { ISiteService } from '../services/site.service.js';
 import {
   validateTargetUrlSync,
+  validateTargetUrlAsync,
   type ValidateTargetOptions,
 } from '../scanner/validator/target-validator.js';
 
@@ -109,13 +110,28 @@ export interface SiteHandlerOptions {
     url: string,
     options?: ValidateTargetOptions,
   ) => Promise<unknown> | unknown;
+  readonly lookupFn?: (
+    hostname: string,
+    options: { all: true; verbatim: true },
+  ) => Promise<Array<{ address: string; family: number }>>;
+  readonly timeoutMs?: number;
+  readonly allowPrivateLoopback?: boolean;
 }
 
 export function createSiteCreateHandler(
   service: ISiteService,
   options?: SiteHandlerOptions,
 ): IpcChannelHandler<typeof IPC_CHANNELS.SITE_CREATE> {
-  const customValidator = options?.validateTarget;
+  const validator =
+    options?.validateTarget ??
+    ((url: string, opts?: ValidateTargetOptions) =>
+      validateTargetUrlAsync(url, {
+        signal: opts?.signal,
+        lookupFn: options?.lookupFn,
+        timeoutMs: options?.timeoutMs,
+        allowPrivateLoopback: options?.allowPrivateLoopback,
+      }));
+
   return async (request, context): Promise<SiteDTO> => {
     if (context.signal.aborted) {
       throw new IPCError(
@@ -123,10 +139,14 @@ export function createSiteCreateHandler(
         IPC_ERROR_CODES.INTERNAL_ERROR,
       );
     }
-    if (customValidator) {
-      await customValidator(request.baseUrl, { signal: context.signal });
-    }
-    validateTargetUrlSync(request.baseUrl);
+    // Verify parent project existence and active status before target validation
+    service.assertParentProjectCreatable?.(request.projectId);
+
+    // Strict pre-flight target validation: synchronous URL checks + awaited authoritative DNS resolution BEFORE persistence
+    validateTargetUrlSync(request.baseUrl, {
+      allowPrivateLoopback: options?.allowPrivateLoopback,
+    });
+    await validator(request.baseUrl, { signal: context.signal });
     return service.createSite(request);
   };
 }
@@ -163,7 +183,16 @@ export function createSiteUpdateHandler(
   service: ISiteService,
   options?: SiteHandlerOptions,
 ): IpcChannelHandler<typeof IPC_CHANNELS.SITE_UPDATE> {
-  const customValidator = options?.validateTarget;
+  const validator =
+    options?.validateTarget ??
+    ((url: string, opts?: ValidateTargetOptions) =>
+      validateTargetUrlAsync(url, {
+        signal: opts?.signal,
+        lookupFn: options?.lookupFn,
+        timeoutMs: options?.timeoutMs,
+        allowPrivateLoopback: options?.allowPrivateLoopback,
+      }));
+
   return async (request, context): Promise<SiteDTO> => {
     if (context.signal.aborted) {
       throw new IPCError(
@@ -172,10 +201,10 @@ export function createSiteUpdateHandler(
       );
     }
     if (request.baseUrl !== undefined) {
-      if (customValidator) {
-        await customValidator(request.baseUrl, { signal: context.signal });
-      }
-      validateTargetUrlSync(request.baseUrl);
+      validateTargetUrlSync(request.baseUrl, {
+        allowPrivateLoopback: options?.allowPrivateLoopback,
+      });
+      await validator(request.baseUrl, { signal: context.signal });
     }
     return service.updateSite(request);
   };
@@ -212,6 +241,7 @@ export function createSiteRestoreHandler(
 export interface DatabaseIpcHandlersDependencies {
   readonly projectService: IProjectService;
   readonly siteService: ISiteService;
+  readonly siteOptions?: SiteHandlerOptions;
 }
 
 /**
@@ -248,10 +278,16 @@ export function registerDatabaseIpcHandlers(
   );
 
   // Site Handlers
-  dispatcher.registerHandler(IPC_CHANNELS.SITE_CREATE, createSiteCreateHandler(deps.siteService));
+  dispatcher.registerHandler(
+    IPC_CHANNELS.SITE_CREATE,
+    createSiteCreateHandler(deps.siteService, deps.siteOptions),
+  );
   dispatcher.registerHandler(IPC_CHANNELS.SITE_GET, createSiteGetHandler(deps.siteService));
   dispatcher.registerHandler(IPC_CHANNELS.SITE_LIST, createSiteListHandler(deps.siteService));
-  dispatcher.registerHandler(IPC_CHANNELS.SITE_UPDATE, createSiteUpdateHandler(deps.siteService));
+  dispatcher.registerHandler(
+    IPC_CHANNELS.SITE_UPDATE,
+    createSiteUpdateHandler(deps.siteService, deps.siteOptions),
+  );
   dispatcher.registerHandler(IPC_CHANNELS.SITE_ARCHIVE, createSiteArchiveHandler(deps.siteService));
   dispatcher.registerHandler(IPC_CHANNELS.SITE_RESTORE, createSiteRestoreHandler(deps.siteService));
 }

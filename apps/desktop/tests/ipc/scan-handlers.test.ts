@@ -173,7 +173,9 @@ describe('Scan, Finding & Report IPC Handlers', () => {
     });
     siteId = site.id;
 
-    registerScanHandlers(dispatcher, scanRunService, findingService, reportService);
+    registerScanHandlers(dispatcher, scanRunService, findingService, reportService, undefined, {
+      lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
+    });
   });
 
   afterEach(() => {
@@ -372,6 +374,9 @@ describe('Scan, Finding & Report IPC Handlers', () => {
       findingService,
       reportService,
       orchestrator,
+      {
+        lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
+      },
     );
 
     const createFn = isolatedIpcMain.handlers.get(IPC_CHANNELS.SCAN_CREATE)!;

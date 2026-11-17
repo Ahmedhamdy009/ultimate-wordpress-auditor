@@ -205,12 +205,12 @@ describe('DEF-005: VisualAuditor Navigation Deadline & Timeout Remediation Suite
   });
 
   it('5. deadline expiring during navigation is rethrown as VisualAuditorTimeoutError with partial report', async () => {
-    // Tight deadline: 1,400ms from now.
-    // Clamped navigation timeout: Math.min(10_000, Math.max(1_000, 1400 - 500 = 900 -> 1000ms floor)).
-    // Page /hang stalls for 1,000ms.
-    // Upon navigation timeout at ~1,000ms, remaining time is <= 400ms (<= reserve of 500ms).
+    // Tight deadline: 1,800ms from now.
+    // Clamped navigation timeout: Math.min(10_000, 1800 - 500 = 1300ms >= 1000ms floor).
+    // Page /hang stalls for 1,300ms.
+    // Upon navigation timeout at ~1,300ms, remaining time is <= 500ms (<= reserve of 500ms).
     // This triggers VisualAuditorTimeoutError.
-    const deadlineAt = Date.now() + 1_400;
+    const deadlineAt = Date.now() + 1_800;
 
     const auditor = new VisualAuditor(manager, {
       profiles: [desktop],
@@ -401,5 +401,31 @@ describe('DEF-005: VisualAuditor Navigation Deadline & Timeout Remediation Suite
     expect(navTimeout).toBe(9_500);
     // Never exceeds deadlineAt - clockNow
     expect(clockNow + navTimeout).toBeLessThan(deadlineAt);
+  });
+
+  it('13. remaining budget insufficient for minimum navigation plus reserve throws VisualAuditorTimeoutError immediately without acquiring page', async () => {
+    const mockTime = 10_000;
+    const clock = () => mockTime;
+    // 1,200ms remaining is less than MIN_VISUAL_NAVIGATION_TIMEOUT_MS (1000) + VISUAL_FINALIZATION_RESERVE_MS (500) = 1500ms
+    const deadlineAt = 11_200;
+
+    const auditor = new VisualAuditor(manager, {
+      profiles: [desktop],
+      captureScreenshots: false,
+      deadlineAt,
+      clock,
+    });
+
+    const url = `http://audit-target.test:${fixturePort}/fast.html`;
+    await expect(auditor.auditUrl(url)).rejects.toThrow(VisualAuditorTimeoutError);
+
+    try {
+      await auditor.auditUrl(url);
+    } catch (err) {
+      expect(err).toBeInstanceOf(VisualAuditorTimeoutError);
+      const vaErr = err as VisualAuditorTimeoutError;
+      expect(vaErr.code).toBe('ERR_SCAN_TIMEOUT');
+      expect(vaErr.remainingBudgetMs).toBe(1_200);
+    }
   });
 });

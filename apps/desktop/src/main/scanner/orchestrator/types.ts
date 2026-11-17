@@ -12,6 +12,7 @@ import type {
   ScanStage,
   CreateFindingRequest,
   PageScreenshotRecord,
+  SiteDTO,
 } from '@auditor/shared';
 import type { CrawlConfig, CrawlResult } from '../crawler/types.js';
 import type { BoundedCrawler } from '../crawler/crawler.js';
@@ -157,6 +158,11 @@ export interface ScanExecutionResult {
 }
 
 export interface IScanOrchestrator {
+  /**
+   * Retrieves registered site by ID from underlying repository.
+   */
+  getSiteById(siteId: string): SiteDTO | null;
+
   /**
    * Pre-flight checks and creates a new scan run in pending status in the database.
    */

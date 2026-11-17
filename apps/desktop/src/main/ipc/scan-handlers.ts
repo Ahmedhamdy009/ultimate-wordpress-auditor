@@ -25,6 +25,7 @@ import {
 } from '../scanner/orchestrator/errors.js';
 import {
   validateTargetUrlSync,
+  validateTargetUrlAsync,
   type ValidateTargetOptions,
 } from '../scanner/validator/target-validator.js';
 
@@ -33,6 +34,12 @@ import {
 export interface ScanCreateHandlerOptions {
   readonly validateTarget?: (url: string, options?: ValidateTargetOptions) => Promise<unknown>;
   readonly siteService?: ISiteService;
+  readonly lookupFn?: (
+    hostname: string,
+    options: { all: true; verbatim: true },
+  ) => Promise<Array<{ address: string; family: number }>>;
+  readonly timeoutMs?: number;
+  readonly allowPrivateLoopback?: boolean;
 }
 
 export function createScanCreateHandler(
@@ -40,7 +47,30 @@ export function createScanCreateHandler(
   orchestrator?: IScanOrchestrator,
   options?: ScanCreateHandlerOptions,
 ): IpcChannelHandler<typeof IPC_CHANNELS.SCAN_CREATE> {
-  const customValidator = options?.validateTarget;
+  const effectiveLookupFn =
+    options?.lookupFn ??
+    (
+      orchestrator as unknown as {
+        options?: { testHooks?: { lookupFn?: ScanCreateHandlerOptions['lookupFn'] } };
+      }
+    )?.options?.testHooks?.lookupFn;
+  const effectiveAllowPrivateLoopback =
+    options?.allowPrivateLoopback ??
+    Boolean(
+      (orchestrator as unknown as { options?: { testHooks?: { pinnedIpOverride?: string } } })
+        ?.options?.testHooks?.pinnedIpOverride,
+    );
+
+  const validator =
+    options?.validateTarget ??
+    ((url: string, opts?: ValidateTargetOptions) =>
+      validateTargetUrlAsync(url, {
+        signal: opts?.signal,
+        lookupFn: effectiveLookupFn,
+        timeoutMs: options?.timeoutMs,
+        allowPrivateLoopback: effectiveAllowPrivateLoopback,
+      }));
+
   return async (request, context): Promise<ScanRunDTO> => {
     if (context.signal.aborted) {
       throw new IPCError(
@@ -49,13 +79,64 @@ export function createScanCreateHandler(
       );
     }
 
-    // Pre-flight target validation before creating any scan record or launching scanner
-    if (customValidator) {
-      await customValidator(request.targetUrl ?? '', { signal: context.signal });
+    // Determine target URL for pre-flight validation
+    let targetUrl = request.targetUrl?.trim();
+    let site: { id: string; baseUrl: string; isArchived?: boolean; name?: string } | undefined;
+
+    if (options?.siteService) {
+      try {
+        site = options.siteService.getSiteById({ id: request.siteId });
+      } catch (err) {
+        if (err instanceof IPCError && err.code === IPC_ERROR_CODES.SITE_NOT_FOUND) {
+          throw err;
+        }
+      }
+    } else if (
+      service &&
+      'getSiteById' in service &&
+      typeof (service as unknown as { getSiteById: (id: string) => unknown }).getSiteById ===
+        'function'
+    ) {
+      site =
+        ((service as unknown as { getSiteById: (id: string) => unknown }).getSiteById(
+          request.siteId,
+        ) as typeof site) ?? undefined;
+    } else if (
+      orchestrator &&
+      'getSiteById' in orchestrator &&
+      typeof (orchestrator as unknown as { getSiteById: (id: string) => unknown }).getSiteById ===
+        'function'
+    ) {
+      site =
+        ((orchestrator as unknown as { getSiteById: (id: string) => unknown }).getSiteById(
+          request.siteId,
+        ) as typeof site) ?? undefined;
     }
 
-    if (request.targetUrl && request.targetUrl.trim() !== '') {
-      validateTargetUrlSync(request.targetUrl.trim());
+    if (!targetUrl) {
+      if (site) {
+        targetUrl = site.baseUrl;
+      }
+    }
+
+    // Pre-flight synchronous validation + strict DNS resolution strictly awaited BEFORE creating any scan record
+    if (targetUrl) {
+      validateTargetUrlSync(targetUrl, {
+        allowPrivateLoopback: effectiveAllowPrivateLoopback,
+      });
+
+      if (site && request.targetUrl?.trim()) {
+        const siteOrigin = new URL(site.baseUrl).origin.toLowerCase();
+        const targetOrigin = new URL(targetUrl).origin.toLowerCase();
+        if (siteOrigin !== targetOrigin) {
+          throw new IPCError(
+            `Scan target URL origin '${targetOrigin}' does not match registered site origin '${siteOrigin}'`,
+            IPC_ERROR_CODES.INVALID_TARGET_URL,
+          );
+        }
+      }
+
+      await validator(targetUrl, { signal: context.signal });
     }
 
     if (orchestrator) {

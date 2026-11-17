@@ -197,9 +197,9 @@ export class VisualAuditor {
             if (effectiveDeadlineAt !== undefined) {
               const remainingBudgetForNav =
                 effectiveDeadlineAt - clock() - VISUAL_FINALIZATION_RESERVE_MS;
-              if (remainingBudgetForNav <= 0) {
+              if (remainingBudgetForNav < MIN_VISUAL_NAVIGATION_TIMEOUT_MS) {
                 throw new VisualAuditorTimeoutError(
-                  `Scan deadline exceeded before navigation to ${targetUrl} for profile ${profile.name}`,
+                  `Scan deadline exceeded before navigation to ${targetUrl} for profile ${profile.name} (insufficient budget: ${effectiveDeadlineAt - clock()}ms remaining, requires at least ${MIN_VISUAL_NAVIGATION_TIMEOUT_MS + VISUAL_FINALIZATION_RESERVE_MS}ms)`,
                   {
                     targetUrl,
                     remainingBudgetMs: effectiveDeadlineAt - clock(),
@@ -216,10 +216,7 @@ export class VisualAuditor {
                   },
                 );
               }
-              navTimeout = Math.min(
-                effectiveNavTimeout,
-                Math.max(MIN_VISUAL_NAVIGATION_TIMEOUT_MS, Math.floor(remainingBudgetForNav)),
-              );
+              navTimeout = Math.min(effectiveNavTimeout, Math.floor(remainingBudgetForNav));
             }
 
             currentManagedPage = await this.browserManager.acquirePage({

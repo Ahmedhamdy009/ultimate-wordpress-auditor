@@ -13,6 +13,7 @@ import {
   type ScanProgressDTO,
   type ScanRunDTO,
   type ScanRunSummaryDTO,
+  type SiteDTO,
   type AuditModulesConfig,
   type CreateFindingRequest,
   type PageScreenshotRecord,
@@ -150,6 +151,13 @@ export class ScanOrchestrator implements IScanOrchestrator {
       testHooks: options?.testHooks,
       clientOptions: options?.clientOptions ?? {},
     };
+  }
+
+  /**
+   * Retrieves registered site by ID.
+   */
+  public getSiteById(siteId: string): SiteDTO | null {
+    return this.siteRepo.getById(siteId);
   }
 
   /**

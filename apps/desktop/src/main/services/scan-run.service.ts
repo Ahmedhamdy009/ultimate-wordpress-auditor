@@ -8,6 +8,7 @@ import {
   type UpdateScanRunStatusRequest,
   type ScanRunDTO,
   type ScanRunListResponseDTO,
+  type SiteDTO,
   isValidScanRunTransition,
   isTerminalScanRunStatus,
 } from '@auditor/shared';
@@ -22,6 +23,7 @@ export interface IScanRunService {
   listScanRuns(request?: ListScanRunsRequest): ScanRunListResponseDTO;
   cancelScanRun(request: CancelScanRunRequest): ScanRunDTO;
   updateScanRunStatus(request: UpdateScanRunStatusRequest): ScanRunDTO;
+  getSiteById?(siteId: string): SiteDTO | null;
 }
 
 export class ScanRunService implements IScanRunService {
@@ -31,6 +33,10 @@ export class ScanRunService implements IScanRunService {
   constructor(scanRunRepo: ScanRunRepository, siteRepo: SiteRepository) {
     this.scanRunRepo = scanRunRepo;
     this.siteRepo = siteRepo;
+  }
+
+  public getSiteById(siteId: string): SiteDTO | null {
+    return this.siteRepo.getById(siteId);
   }
 
   /**

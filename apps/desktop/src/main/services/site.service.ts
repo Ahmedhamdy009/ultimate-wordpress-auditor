@@ -21,6 +21,7 @@ export interface ISiteService {
   updateSite(request: UpdateSiteRequest): SiteDTO;
   archiveSite(request: ArchiveSiteRequest): SiteDTO;
   restoreSite(request: RestoreSiteRequest): SiteDTO;
+  assertParentProjectCreatable?(projectId: string): void;
 }
 
 /**
@@ -69,6 +70,23 @@ export class SiteService implements ISiteService {
   constructor(siteRepository: SiteRepository, projectRepository: ProjectRepository) {
     this.siteRepository = siteRepository;
     this.projectRepository = projectRepository;
+  }
+
+  public assertParentProjectCreatable(projectId: string): void {
+    const project = this.projectRepository.getById(projectId);
+    if (!project) {
+      throw new IPCError(
+        `Parent project with ID '${projectId}' not found`,
+        IPC_ERROR_CODES.PROJECT_NOT_FOUND,
+      );
+    }
+
+    if (project.isArchived) {
+      throw new IPCError(
+        `Cannot create site under archived project '${projectId}'`,
+        IPC_ERROR_CODES.PARENT_PROJECT_ARCHIVED,
+      );
+    }
   }
 
   /**

@@ -224,8 +224,15 @@ describe('Phase 3 — Batch 3.7: End-to-End Scan Integration Workflow', () => {
       ipcMain: mockIpcMain as unknown as typeof import('electron').ipcMain,
     });
 
-    registerDatabaseIpcHandlers(dispatcher, { projectService, siteService });
-    registerScanHandlers(dispatcher, scanRunService, findingService, reportService, orchestrator);
+    const mockPublicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
+    registerDatabaseIpcHandlers(dispatcher, {
+      projectService,
+      siteService,
+      siteOptions: { lookupFn: mockPublicLookup },
+    });
+    registerScanHandlers(dispatcher, scanRunService, findingService, reportService, orchestrator, {
+      lookupFn: mockPublicLookup,
+    });
 
     // 8. Register Trusted Web Contents & Preload Invoker
     const webContentsId = 910;

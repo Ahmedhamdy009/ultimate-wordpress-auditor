@@ -128,4 +128,33 @@ describe('VisualEvidenceGallery Component Tests', () => {
     expect(html).toContain('هاتف محمول');
     expect(html).toContain('جهاز لوحي');
   });
+
+  it('discloses when screenshot capture was disabled by scan configuration', () => {
+    const enHtml = renderComponentToHtml(
+      React.createElement(
+        AuditUiProvider,
+        { initialLocale: 'en', initialViewMode: 'dual' },
+        React.createElement(VisualEvidenceGallery, {
+          visualEvidence: {},
+          visualEvidenceLoading: false,
+          screenshotsDisabled: true,
+        }),
+      ),
+    );
+    expect(enHtml).toContain('captureScreenshots: false');
+
+    const arHtml = renderComponentToHtml(
+      React.createElement(
+        AuditUiProvider,
+        { initialLocale: 'ar', initialViewMode: 'dual' },
+        React.createElement(VisualEvidenceGallery, {
+          visualEvidence: {},
+          visualEvidenceLoading: false,
+          screenshotsDisabled: true,
+        }),
+      ),
+    );
+    expect(arHtml).toContain('captureScreenshots: false');
+    expect(arHtml).toContain('تعطيل التقاط لقطات الشاشة');
+  });
 });

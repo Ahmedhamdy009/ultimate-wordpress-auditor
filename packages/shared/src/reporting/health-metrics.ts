@@ -1137,8 +1137,12 @@ export function evaluateAuditCoverage(
   const browserPagesAudited = isValidCount(summary.browserPagesAudited)
     ? summary.browserPagesAudited
     : 0;
+  // Site-wide browser coverage denominator must account for all crawled HTML pages when
+  // pagesScannedCount is known, rather than masking uncapped crawl scope behind maxBrowserPages.
   const expectedBrowserPages =
-    browserCandidatesTotal > 0 ? browserCandidatesTotal : pagesScannedCount;
+    pagesScannedCount > 0
+      ? Math.max(browserCandidatesTotal, pagesScannedCount)
+      : browserCandidatesTotal;
   const hasSysBrowserUnavailable = resolvedEligibility.hasSysBrowserUnavailable;
 
   if (d3ModulesList.length > 0) {
@@ -1181,9 +1185,15 @@ export function evaluateAuditCoverage(
       const hasA11yFindings = findings.some(f => isAccessibilityFinding(f));
 
       if (isValidCount(summary.accessibilityCandidatesTotal)) {
-        expectedA11yPages = summary.accessibilityCandidatesTotal;
+        expectedA11yPages =
+          pagesScannedCount > 0
+            ? Math.max(summary.accessibilityCandidatesTotal, pagesScannedCount)
+            : summary.accessibilityCandidatesTotal;
       } else if (browserCandidatesTotal > 0) {
-        expectedA11yPages = browserCandidatesTotal;
+        expectedA11yPages =
+          pagesScannedCount > 0
+            ? Math.max(browserCandidatesTotal, pagesScannedCount)
+            : browserCandidatesTotal;
         candidateApproximated = true;
         d3Reasons.push('d3_historical_a11y_candidates_from_browser_candidates');
         pushReason('d3_historical_a11y_candidates_from_browser_candidates');
@@ -1237,6 +1247,13 @@ export function evaluateAuditCoverage(
     }
 
     r3 = clamp01(d3RatioSum / d3ModulesList.length);
+    if (
+      !hasSysBrowserUnavailable &&
+      browserPagesAudited > 0 &&
+      expectedBrowserPages > browserPagesAudited
+    ) {
+      d3Reasons.push('browser_coverage_partial_subset');
+    }
     if (hasSysBrowserUnavailable || (!d3AnyDenominator && r3 === 0)) {
       d3Status = 'unavailable';
     } else if (d3AnyApproximated) {
@@ -1334,7 +1351,11 @@ export function evaluateAuditCoverage(
           const hasExplicitProfiles = configuredProfiles.length > 0;
           const activeProfileCount = hasExplicitProfiles ? configuredProfiles.length : 8;
           modRatio = clamp01(viewportsCompleted / (expectedBrowserPages * activeProfileCount));
-          if (!hasExplicitProfiles && modRatio < 1) {
+          const allDefaultViewportsPerAuditedPage =
+            !hasExplicitProfiles &&
+            browserPagesAudited > 0 &&
+            viewportsCompleted === browserPagesAudited * activeProfileCount;
+          if (!hasExplicitProfiles && modRatio < 1 && !allDefaultViewportsPerAuditedPage) {
             modStatus = 'approximated';
             d4AnyApproximated = true;
             coverageApproximated = true;
@@ -1437,6 +1458,13 @@ export function evaluateAuditCoverage(
     }
 
     r4 = clamp01(d4RatioSum / d4ModulesList.length);
+    if (
+      !hasSysBrowserUnavailable &&
+      browserPagesAudited > 0 &&
+      expectedBrowserPages > browserPagesAudited
+    ) {
+      d4Reasons.push('browser_coverage_partial_subset');
+    }
     if (hasSysBrowserUnavailable || expectedBrowserPages === 0) {
       d4Status = 'unavailable';
     } else if (d4AnyApproximated) {

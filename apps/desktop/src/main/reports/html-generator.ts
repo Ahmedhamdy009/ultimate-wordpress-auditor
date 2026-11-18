@@ -819,6 +819,16 @@ export function generateHtmlReport(
   const chartsSectionHtml = renderAuditChartsSection(activeVm.charts, locale);
   const recommendationsHtml = renderRecommendationsSection(dualVm, activeVm);
 
+  const scanCfg = (model.scanRun.config ?? {}) as Record<string, unknown>;
+  const cfgAuditModules =
+    scanCfg.auditModules && typeof scanCfg.auditModules === 'object'
+      ? (scanCfg.auditModules as Record<string, unknown>)
+      : null;
+  const screenshotsDisabledByConfig =
+    scanCfg.captureScreenshots === false ||
+    cfgAuditModules?.screenshots === false ||
+    scanCfg.enableBrowserAudit === false;
+
   const visualEntries = model.visualEvidence ? Object.values(model.visualEvidence) : [];
   const visualGalleryHtml =
     visualEntries.length > 0
@@ -856,7 +866,24 @@ export function generateHtmlReport(
                .join('')}
            </div>
          </section>`
-      : '';
+      : `<section class="section-card" aria-label="${isArabic ? 'الأدلة البصرية ولقطات الشاشة' : 'Visual Evidence &amp; Screenshots'}">
+           <h2 class="section-title">${isArabic ? 'الأدلة البصرية ولقطات الشاشة' : 'Visual Evidence &amp; Captured Screenshots'} (0)</h2>
+           <div class="visual-evidence-fallback">
+             ${escapeHtml(
+               hasBrowserUnavailable
+                 ? isArabic
+                   ? 'لم تُلتقط أي لقطات شاشة لأن محرك المتصفح Chromium لم يكن متاحاً أثناء هذا الفحص.'
+                   : 'No screenshots were captured because the Chromium browser engine was unavailable during this scan.'
+                 : screenshotsDisabledByConfig
+                   ? isArabic
+                     ? 'لم تُلتقط أي لقطات شاشة لأن خيار التقاط لقطات الشاشة كان معطلاً في إعدادات هذا الفحص (captureScreenshots: false).'
+                     : 'No screenshots were captured because screenshot capture was disabled in the scan configuration (captureScreenshots: false).'
+                   : isArabic
+                     ? 'لم تُلتقط أو تُربط أي لقطات شاشة في هذا التقرير.'
+                     : 'No screenshots were captured or attached for this scan run.',
+             )}
+           </div>
+         </section>`;
 
   return `<!DOCTYPE html>
 ${htmlOpenTag}
@@ -934,14 +961,28 @@ ${htmlOpenTag}
 
       ${
         isPartialCoverage
-          ? `<div class="alert-banner alert-warning" role="alert">
-               <strong>&#9888; Notice: Audit Completed with Partial Browser Coverage</strong>
-               <p>This audit successfully crawled <strong>${model.summary.pagesScanned}</strong> pages, but evaluated <strong>${model.summary.browserPagesAudited ?? 0} of ${model.summary.browserCandidatesTotal ?? model.summary.browserPagesAudited ?? 0}</strong> browser candidate pages due to scan time constraints.</p>
+          ? (() => {
+              const skippedCount = model.summary.browserCandidatesSkipped ?? 0;
+              const auditedBrowserCount = model.summary.browserPagesAudited ?? 0;
+              const totalCandidates = model.summary.browserCandidatesTotal ?? auditedBrowserCount;
+              const staticOnlyPages = Math.max(0, model.summary.pagesScanned - auditedBrowserCount);
+              const partialIntroEn =
+                skippedCount > 0
+                  ? `This audit successfully crawled <strong>${model.summary.pagesScanned}</strong> pages, and evaluated <strong>${auditedBrowserCount} of ${totalCandidates}</strong> browser candidate pages (${skippedCount} skipped due to scan time budget).`
+                  : `This audit successfully crawled <strong>${model.summary.pagesScanned}</strong> pages, and ran browser audits on <strong>${auditedBrowserCount} of ${model.summary.pagesScanned}</strong> crawled pages (${staticOnlyPages} pages received static analysis only per browser sample limit).`;
+              const partialIntroAr =
+                skippedCount > 0
+                  ? `زحف هذا الفحص بنجاح إلى <strong>${model.summary.pagesScanned}</strong> صفحة، وفحص بالمتصفح <strong>${auditedBrowserCount} من أصل ${totalCandidates}</strong> صفحة مرشحة (تم تخطي ${skippedCount} صفحة بسبب ميزانية الوقت).`
+                  : `زحف هذا الفحص بنجاح إلى <strong>${model.summary.pagesScanned}</strong> صفحة، ونفذ فحص المتصفح على <strong>${auditedBrowserCount} من أصل ${model.summary.pagesScanned}</strong> صفحة (اقتصرت ${staticOnlyPages} صفحة على التحليل الثابت وفق حد صفحات المتصفح).`;
+              return `<div class="alert-banner alert-warning" role="alert">
+               <strong>&#9888; ${isArabic ? 'ملاحظة: اكتمل الفحص بتغطية متصفح جزئية' : 'Notice: Audit Completed with Partial Browser Coverage'}</strong>
+               <p>${isArabic ? partialIntroAr : partialIntroEn}</p>
                <ul>
-                 <li><strong>Crawl &amp; Static Analyzers:</strong> Completed across all ${model.summary.pagesScanned} discovered pages.</li>
-                 <li><strong>Browser &amp; Accessibility Engine:</strong> Partial coverage (${model.summary.browserPagesAudited ?? 0} audited${(model.summary.browserCandidatesSkipped ?? 0) > 0 ? `, ${model.summary.browserCandidatesSkipped} skipped due to time budget` : ''}).</li>
+                 <li><strong>${isArabic ? 'الزحف والمحللات الثابتة:' : 'Crawl &amp; Static Analyzers:'}</strong> ${isArabic ? `اكتمل على جميع الصفحات المكتشفة (${model.summary.pagesScanned} صفحة).` : `Completed across all ${model.summary.pagesScanned} discovered pages.`}</li>
+                 <li><strong>${isArabic ? 'محرك المتصفح وإمكانية الوصول:' : 'Browser &amp; Accessibility Engine:'}</strong> ${isArabic ? `تغطية جزئية (${auditedBrowserCount} من ${model.summary.pagesScanned} صفحة${skippedCount > 0 ? `، تم تخطي ${skippedCount} بسبب الميزانية الزمنية` : ''}).` : `Partial coverage (${auditedBrowserCount} audited${skippedCount > 0 ? `, ${skippedCount} skipped due to time budget` : staticOnlyPages > 0 ? `, ${staticOnlyPages} static-only` : ''}).`}</li>
                </ul>
-             </div>`
+             </div>`;
+            })()
           : ''
       }
 

@@ -147,6 +147,26 @@ describe('Report Security & Sanitization Utilities', () => {
       expect(redacted.headers[1].value).toBe('secret-session=123'); // value inside object where name is Set-Cookie
       expect(redacted.details.sub.apiKey).toBe('[REDACTED_SECRET]');
     });
+
+    it('preserves boolean configuration flags such as auditModules.cookies while still redacting cookie secrets', () => {
+      const configWithBooleanCookieFlag = {
+        auditModules: {
+          http: true,
+          cookies: true,
+          seo: false,
+        },
+        cookie: 'session=top-secret-value',
+      };
+
+      const redacted = redactSensitiveData(configWithBooleanCookieFlag) as {
+        auditModules: { http: boolean; cookies: boolean; seo: boolean };
+        cookie: string;
+      };
+      expect(redacted.auditModules.cookies).toBe(true);
+      expect(redacted.auditModules.http).toBe(true);
+      expect(redacted.auditModules.seo).toBe(false);
+      expect(redacted.cookie).toBe('[REDACTED_SECRET]');
+    });
   });
 
   describe('CSV Escaping & Formula Injection Protection (escapeCsvField)', () => {

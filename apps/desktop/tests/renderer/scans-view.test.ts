@@ -536,5 +536,39 @@ describe('Phase 3 — Batch 3.7: ScansView & useScans Suite', () => {
       expect(html).toContain('Causal (Proven Cause)');
       expect(html).toContain('SERVER_LATENCY');
     });
+
+    it('renders preset limits summary, CSV export option, and screenshot-disabled disclosure in ScansView', () => {
+      const scanWithDisabledScreenshots: ScanRunDTO = {
+        ...mockScanRun,
+        id: 'scan-disabled-screenshots',
+        status: 'completed',
+        config: {
+          maxPages: 10,
+          maxBrowserPages: 2,
+          enableBrowserAudit: true,
+          captureScreenshots: false,
+          auditModules: {
+            screenshots: false,
+            layoutStability: false,
+          },
+        },
+        summary: {
+          ...mockScanRun.summary!,
+          screenshotsCaptured: 0,
+        },
+      };
+
+      const html = renderComponentToHtml(
+        React.createElement(ScansView, {
+          initialScans: [scanWithDisabledScreenshots],
+          initialScanRunId: scanWithDisabledScreenshots.id,
+          initialSelectedScanFindings: [],
+          initialVisualEvidence: {},
+        }),
+      );
+
+      expect(html).toContain('data-testid="scan-preset-summary"');
+      expect(html).toContain('captureScreenshots: false');
+    });
   });
 });

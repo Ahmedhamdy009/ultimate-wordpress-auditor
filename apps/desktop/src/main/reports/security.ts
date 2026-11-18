@@ -93,7 +93,8 @@ export function redactSensitiveData(data: unknown): unknown {
   if (typeof data === 'object') {
     const cleaned: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(data as Record<string, unknown>)) {
-      if (SENSITIVE_KEY_REGEX.test(key)) {
+      // Never redact boolean configuration flags (e.g. scanRun.config.auditModules.cookies: true)
+      if (SENSITIVE_KEY_REGEX.test(key) && typeof val !== 'boolean') {
         cleaned[key] = '[REDACTED_SECRET]';
       } else {
         cleaned[key] = redactSensitiveData(val);

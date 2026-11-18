@@ -759,6 +759,9 @@ export const ScansView: React.FC<ScansViewProps> = ({
                   Custom
                 </button>
               </div>
+              <span className="auditor-help-text" data-testid="scan-preset-summary">
+                {`Limits: up to ${maxPages} crawled pages • ${enableBrowserAudit ? `${maxBrowserPages} browser pages` : 'Browser audit off'} • Screenshots: ${enableBrowserAudit && captureScreenshots ? 'On' : 'Off'} • Layout Stability (CLS): ${enableBrowserAudit && moduleLayoutStability ? 'On' : 'Off'}`}
+              </span>
             </div>
 
             {/* Crawl Limit Parameters */}
@@ -1349,6 +1352,7 @@ export const ScansView: React.FC<ScansViewProps> = ({
                 >
                   <option value="html">Standalone HTML Report</option>
                   <option value="json">Structured JSON Export</option>
+                  <option value="csv">Tabular CSV Export</option>
                 </select>
               </div>
             </div>
@@ -1478,6 +1482,13 @@ export const ScansView: React.FC<ScansViewProps> = ({
               <VisualEvidenceGallery
                 visualEvidence={visualEvidence}
                 visualEvidenceLoading={visualEvidenceLoading}
+                screenshotsDisabled={Boolean(
+                  inspectedScan &&
+                  (inspectedScan.config?.captureScreenshots === false ||
+                    inspectedScan.config?.enableBrowserAudit === false ||
+                    (inspectedScan.config?.auditModules as Record<string, unknown> | undefined)
+                      ?.screenshots === false),
+                )}
               />
 
               {/* Interactive Findings & Actionable Recommendations Explorer */}

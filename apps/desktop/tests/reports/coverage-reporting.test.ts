@@ -391,5 +391,113 @@ describe('Coverage Reporting & Truthful Status Suite (Assembler, HTML, JSON)', (
       expect(parsed.scanRun.browserCandidatesTotal).toBe(5);
       expect(parsed.scanRun.browserCandidatesSkipped).toBe(3);
     });
+
+    it('avoids blaming time constraints and discloses disabled screenshots when Quick profile caps browser pages without skipping', () => {
+      const quickSampleModel: ReportModel = {
+        reportId: 'rep-quick-sample',
+        title: 'Quick Sample Audit',
+        site: mockSite,
+        scanRun: {
+          id: 'scan-quick-sample',
+          siteId: mockSite.id,
+          scanType: 'full',
+          status: 'completed',
+          targetUrl: 'https://coverage.example.com/',
+          startedAt: '2026-11-18T20:23:45.000Z',
+          completedAt: '2026-11-18T20:24:20.000Z',
+          cancelledAt: null,
+          durationMs: 35000,
+          config: {
+            maxPages: 10,
+            maxBrowserPages: 2,
+            enableBrowserAudit: true,
+            captureScreenshots: false,
+            auditModules: {
+              http: true,
+              wordpress: true,
+              securityHeaders: true,
+              cookies: true,
+              seo: true,
+              runtimeErrors: true,
+              networkResources: true,
+              responsiveLayout: true,
+              layoutStability: false,
+              screenshots: false,
+              accessibility: true,
+            },
+          },
+          urlsCrawled: 10,
+          crawlFailedPages: 0,
+          pagesScanned: 10,
+          staticModulesExecuted: 5,
+          staticModulesTotal: 5,
+          browserPagesAudited: 2,
+          browserCandidatesTotal: 2,
+          browserCandidatesSkipped: 0,
+          runtimeAuditsCompleted: 2,
+          accessibilityCandidatesTotal: 2,
+          accessibilityAuditsCompleted: 2,
+          viewportsCompleted: 16,
+          layoutStabilityPagesCompleted: 0,
+          screenshotsCaptured: 0,
+          isPartialCoverage: true,
+          coverageStatus: 'partial',
+          browserCoverageStatus: 'partial',
+          staticCoverageStatus: 'full',
+          performanceMetrics: {
+            pages: [
+              {
+                labMetrics: { ttfbMs: 63, fcpMs: 1064, lcpMs: 1064, cls: null, tbtMs: 11 },
+                resourceSummary: { totalResources: 10 },
+              },
+              {
+                labMetrics: { ttfbMs: 59, fcpMs: 620, lcpMs: 620, cls: null, tbtMs: 0 },
+                resourceSummary: { totalResources: 10 },
+              },
+            ],
+          },
+        },
+        findings: [mockFinding],
+        summary: {
+          totalFindings: 1,
+          bySeverity: { critical: 0, high: 1, medium: 0, low: 0, info: 0 },
+          byCategory: { security: 1 },
+          confirmedCount: 1,
+          potentialCount: 0,
+          pagesScanned: 10,
+          pagesFailed: 0,
+          browserPagesAudited: 2,
+          browserCandidatesTotal: 2,
+          browserCandidatesSkipped: 0,
+          screenshotsCaptured: 0,
+          scanDurationMs: 35000,
+          scanStatus: 'completed',
+          isPartialAudit: false,
+          isPartialCoverage: true,
+          coverageStatus: 'partial',
+          browserCoverageStatus: 'partial',
+          staticCoverageStatus: 'full',
+          coverageWarning:
+            'Scan completed with partial browser coverage: 2/10 pages browser-audited (8 pages received static analysis only).',
+          generatedAt: '2026-11-18T20:25:00.000Z',
+        },
+        visualEvidence: {},
+        generatedAt: '2026-11-18T20:25:00.000Z',
+        version: '1.0.0',
+      };
+
+      const html = generateHtmlReport(quickSampleModel, { locale: 'en', viewMode: 'dual' });
+      expect(html).not.toContain('due to scan time constraints');
+      expect(html).toContain('2 of 10</strong> crawled pages');
+      expect(html).toContain('8 pages received static analysis only');
+      expect(html).toContain('captureScreenshots: false');
+      expect(html).toContain('60%');
+
+      const jsonParsed = JSON.parse(generateJsonReport(quickSampleModel, { locale: 'en', viewMode: 'dual' }));
+      expect(jsonParsed.scanRun.config.auditModules.cookies).toBe(true);
+      expect(jsonParsed.healthOverview.coveragePercent).toBe(60);
+      expect(jsonParsed.healthOverview.dimensions.find((d: { id: string }) => d.id === 'd3').percent).toBe(20);
+      expect(jsonParsed.healthOverview.dimensions.find((d: { id: string }) => d.id === 'd4').percent).toBe(20);
+    });
   });
 });

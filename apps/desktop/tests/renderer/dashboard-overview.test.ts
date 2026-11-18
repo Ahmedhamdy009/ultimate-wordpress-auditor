@@ -417,4 +417,96 @@ describe('Phase 7.4.4 Part A — Dashboard Data Integration & Executive Overview
     expect(scansHtml).toContain('data-testid="executive-summary-dashboard"');
     expect(scansHtml).toContain('data-testid="coverage-dimensions-panel"');
   });
+
+  it('displays accurate 2 / 10 pages on D3 and D4 (not 0 / 2 pages) when layoutStability is disabled in Quick profile', () => {
+    const quickScan: ScanRunDTO = {
+      ...FULL_SCAN,
+      id: 'scan-quick-disabled-cls',
+      config: {
+        maxPages: 10,
+        maxDepth: 2,
+        enableBrowserAudit: true,
+        maxBrowserPages: 2,
+        captureScreenshots: false,
+        auditModules: {
+          http: true,
+          wordpress: true,
+          securityHeaders: true,
+          cookies: true,
+          seo: true,
+          runtimeErrors: true,
+          networkResources: true,
+          responsiveLayout: true,
+          layoutStability: false,
+          screenshots: false,
+          accessibility: true,
+        },
+      },
+      summary: {
+        totalFindings: 1,
+        criticalCount: 0,
+        highCount: 1,
+        mediumCount: 0,
+        lowCount: 0,
+        infoCount: 0,
+        urlsCrawled: 10,
+        pagesScanned: 10,
+        crawlFailedPages: 0,
+        staticModulesExecuted: 5,
+        staticModulesTotal: 5,
+        staticPagesAnalyzed: 10,
+        browserPagesAudited: 2,
+        browserCandidatesTotal: 2,
+        browserCandidatesSkipped: 0,
+        runtimeAuditsCompleted: 2,
+        accessibilityCandidatesTotal: 2,
+        accessibilityAuditsCompleted: 2,
+        viewportsCompleted: 16,
+        layoutStabilityPagesCompleted: 0,
+        screenshotsCaptured: 0,
+        coverageStatus: 'partial',
+        isPartialCoverage: true,
+        performanceMetrics: {
+          pages: [
+            { labMetrics: { cls: null }, resourceSummary: { totalResources: 5 } },
+            { labMetrics: { cls: null }, resourceSummary: { totalResources: 5 } },
+          ],
+        },
+      },
+    };
+
+    const quickFindings: FindingDTO[] = [{ ...SAMPLE_FINDINGS[0], scanRunId: quickScan.id }];
+
+    const vm = adaptScanRunForViewModel({
+      scanRun: quickScan,
+      site: MOCK_SITE,
+      findings: quickFindings,
+      locale: 'en',
+      viewMode: 'dual',
+    });
+
+    expect(vm.healthOverview.coveragePercent).toBe(60);
+    const d3 = vm.healthOverview.dimensions.find(d => d.id === 'd3')!;
+    const d4 = vm.healthOverview.dimensions.find(d => d.id === 'd4')!;
+    expect(d3.percent).toBe(20);
+    expect(d4.percent).toBe(20);
+
+    const d3Counts = extractDimensionTelemetryCounts(quickScan, d3);
+    const d4Counts = extractDimensionTelemetryCounts(quickScan, d4);
+    expect(d3Counts.executed).toBe(2);
+    expect(d3Counts.eligible).toBe(10);
+    expect(d4Counts.executed).toBe(2);
+    expect(d4Counts.eligible).toBe(10);
+
+    const panelHtml = renderComponentToHtml(
+      React.createElement(
+        AuditUiProvider,
+        { initialLocale: 'en', initialViewMode: 'dual' },
+        React.createElement(CoverageDimensionsPanel, { viewModel: vm, scanRun: quickScan }),
+      ),
+    );
+    expect(panelHtml).toContain('Audit Coverage: 60% (Partial Coverage)');
+    expect(panelHtml).toContain('2 / 10 pages');
+    expect(panelHtml).not.toContain('0 / 2 pages');
+  });
 });

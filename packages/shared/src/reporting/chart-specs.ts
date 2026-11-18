@@ -581,7 +581,7 @@ export function buildCoverageDimensionsChart(
     status = 'unavailable';
   } else if (hasApprox) {
     status = 'approximated';
-  } else if (availableCount < applicableCount) {
+  } else if (availableCount < applicableCount || triad.coverage.isPartialCoverage) {
     status = 'partial';
   } else {
     status = 'measured';

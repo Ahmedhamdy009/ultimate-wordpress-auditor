@@ -731,5 +731,89 @@ describe('Health Index, D2–D4 Independence, Audit Confidence & Health Band Pre
       }
       expect(triad.healthBand.bandId).not.toBe('healthy');
     });
+
+    it('reflects partial browser sample (2/10 pages) honestly in D3, D4, auditCoverage, and confidence while excluding disabled modules', () => {
+      const triad = evaluateAuditHealthTriad({
+        scanType: 'full',
+        scanStatus: 'completed',
+        config: {
+          maxPages: 10,
+          maxBrowserPages: 2,
+          enableBrowserAudit: true,
+          captureScreenshots: false,
+          auditModules: {
+            http: true,
+            wordpress: true,
+            securityHeaders: true,
+            cookies: true,
+            seo: true,
+            runtimeErrors: true,
+            networkResources: true,
+            responsiveLayout: true,
+            layoutStability: false,
+            screenshots: false,
+            accessibility: true,
+          },
+        },
+        completedEngines: ['crawler', 'analyzers', 'browser'],
+        summary: {
+          urlsCrawled: 10,
+          pagesScanned: 10,
+          crawlFailedPages: 0,
+          nonHtmlPages: 0,
+          staticModulesExecuted: 5,
+          staticModulesTotal: 5,
+          staticPagesAnalyzed: 10,
+          browserCandidatesTotal: 2,
+          browserCandidatesSkipped: 0,
+          browserPagesAudited: 2,
+          runtimeAuditsCompleted: 2,
+          accessibilityCandidatesTotal: 2,
+          accessibilityAuditsCompleted: 2,
+          viewportsCompleted: 16,
+          layoutStabilityPagesCompleted: 0,
+          screenshotsCaptured: 0,
+          performanceMetrics: {
+            labMetrics: { ttfbMs: 63, fcpMs: 1064, lcpMs: 1064, cls: null, tbtMs: 11 },
+            resourceSummary: { totalResources: 10 },
+            pages: [
+              {
+                labMetrics: { ttfbMs: 63, fcpMs: 1064, lcpMs: 1064, cls: null, tbtMs: 11 },
+                resourceSummary: { totalResources: 10 },
+              },
+              {
+                labMetrics: { ttfbMs: 59, fcpMs: 620, lcpMs: 620, cls: null, tbtMs: 0 },
+                resourceSummary: { totalResources: 10 },
+              },
+            ],
+          },
+        },
+        findings: [],
+      });
+
+      const d1 = triad.coverage.dimensions.find(d => d.dimension === 'd1')!;
+      const d2 = triad.coverage.dimensions.find(d => d.dimension === 'd2')!;
+      const d3 = triad.coverage.dimensions.find(d => d.dimension === 'd3')!;
+      const d4 = triad.coverage.dimensions.find(d => d.dimension === 'd4')!;
+
+      expect(d1.percent).toBe(100);
+      expect(d2.percent).toBe(100);
+      expect(d3.percent).toBe(20);
+      expect(d3.status).toBe('exact');
+      expect(d3.reasonCodes).toContain('browser_coverage_partial_subset');
+      expect(d4.percent).toBe(20);
+      expect(d4.status).toBe('exact');
+      expect(d4.reasonCodes).toContain('browser_coverage_partial_subset');
+      expect(triad.coverage.applicableD4Modules).toEqual(['networkResources', 'responsiveLayout']);
+      expect(triad.coverage.coverageApproximated).toBe(false);
+      // Weighted: (20*1 + 30*1 + 25*0.2 + 25*0.2) / 100 = 60%
+      expect(triad.coverage.auditCoverage).toBe(60);
+      expect(triad.coverage.coverageStatus).toBe('partial');
+      expect(triad.coverage.isPartialCoverage).toBe(true);
+      // 40% missing coverage -> 16 pt coverage deduction -> 84 confidence, capped at moderate
+      expect(triad.confidence.deductions.coverageDeduction).toBe(16);
+      expect(triad.confidence.auditConfidence).toBe(84);
+      expect(triad.confidence.confidenceBand).toBe('moderate');
+    });
   });
 });

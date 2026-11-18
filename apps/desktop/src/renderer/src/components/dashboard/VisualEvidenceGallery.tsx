@@ -7,6 +7,7 @@ import { useAuditUi } from '../../context/AuditUiContext.js';
 export interface VisualEvidenceGalleryProps {
   readonly visualEvidence?: Readonly<Record<string, VisualEvidenceEntryDTO>>;
   readonly visualEvidenceLoading?: boolean;
+  readonly screenshotsDisabled?: boolean;
 }
 
 export type ViewportFilter = 'all' | 'desktop' | 'tablet' | 'mobile';
@@ -14,6 +15,7 @@ export type ViewportFilter = 'all' | 'desktop' | 'tablet' | 'mobile';
 export const VisualEvidenceGallery: React.FC<VisualEvidenceGalleryProps> = ({
   visualEvidence = {},
   visualEvidenceLoading = false,
+  screenshotsDisabled = false,
 }) => {
   const { locale, tDesktop } = useAuditUi();
   const isArabic = locale === 'ar';
@@ -52,7 +54,27 @@ export const VisualEvidenceGallery: React.FC<VisualEvidenceGalleryProps> = ({
   };
 
   if (!visualEvidenceLoading && allEntries.length === 0) {
-    return null;
+    if (!screenshotsDisabled) {
+      return null;
+    }
+    return (
+      <div data-testid="visual-evidence-gallery" className="auditor-visual-evidence-gallery">
+        <Card
+          title={isArabic ? 'الأدلة البصرية ولقطات الشاشة' : 'Visual Evidence & Page Screenshots'}
+          subtitle={
+            isArabic
+              ? 'تم تعطيل التقاط لقطات الشاشة في إعدادات هذا الفحص.'
+              : 'Screenshot capture was disabled in this scan configuration.'
+          }
+        >
+          <div className="auditor-empty-state">
+            {isArabic
+              ? 'لم تُلتقط أي لقطات شاشة (captureScreenshots: false). اختر وضع Standard أو Deep أو فعّل خيار Capture Screenshots في Custom لإرفاق الأدلة البصرية.'
+              : 'No screenshots were captured (captureScreenshots: false). Select Standard, Deep, or enable Capture Screenshots in Custom mode to collect visual evidence.'}
+          </div>
+        </Card>
+      </div>
+    );
   }
 
   const title = isArabic ? 'الأدلة البصرية ولقطات الشاشة' : 'Visual Evidence & Page Screenshots';

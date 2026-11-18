@@ -482,6 +482,10 @@ export const REASON_CODE_LABELS_I18N: Record<string, BilingualText> = {
     en: 'Standard viewport profile count assumed where explicit denominator was omitted.',
     ar: 'تم افتراض عدد شاشات العرض القياسي لعدم تسجيل المقام صراحة.',
   },
+  browser_coverage_partial_subset: {
+    en: 'Browser audit covered a sampled subset of crawled pages; remaining pages received static analysis only.',
+    ar: 'شمل فحص المتصفح عينة محددة من الصفحات المزحوفة فقط؛ واقتصرت بقية الصفحات على التحليل الثابت.',
+  },
   provisional_incomplete_scan: {
     en: 'Scan did not finish cleanly or omitted final confirmation.',
     ar: 'الفحص لم يكتمل بالكامل أو يفتقد تأكيد الاكتمال النهائي.',

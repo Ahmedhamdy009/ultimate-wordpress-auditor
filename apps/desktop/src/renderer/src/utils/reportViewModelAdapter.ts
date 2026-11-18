@@ -161,6 +161,11 @@ export function extractDimensionTelemetryCounts(
     };
   }
 
+  const maxDefinedCount = (...values: Array<number | null>): number | null => {
+    const valid = values.filter((v): v is number => v !== null);
+    return valid.length > 0 ? Math.max(...valid) : null;
+  };
+
   if (dimension.id === 'd3') {
     const a11yCompleted = readSafeCount(summary, 'accessibilityAuditsCompleted');
     const runtimeCompleted = readSafeCount(summary, 'runtimeAuditsCompleted');
@@ -169,15 +174,33 @@ export function extractDimensionTelemetryCounts(
     const browserCandidates = readSafeCount(summary, 'browserCandidatesTotal');
     const pagesScanned = readSafeCount(summary, 'pagesScanned');
 
+    if (dimension.status === 'not_applicable') {
+      return {
+        executed: null,
+        eligible: null,
+        unitKind: 'pages',
+        subModules,
+      };
+    }
+
     return {
       executed: a11yCompleted ?? runtimeCompleted ?? browserAudited,
-      eligible: a11yCandidates ?? browserCandidates ?? pagesScanned,
+      eligible: maxDefinedCount(a11yCandidates, browserCandidates, pagesScanned),
       unitKind: 'pages',
       subModules,
     };
   }
 
   // D4: Lab Performance, Responsive & Visual
+  if (dimension.status === 'not_applicable') {
+    return {
+      executed: null,
+      eligible: null,
+      unitKind: 'pages',
+      subModules,
+    };
+  }
+
   const clsCompleted = readSafeCount(summary, 'clsPagesCompleted');
   const layoutCompleted = readSafeCount(summary, 'layoutStabilityPagesCompleted');
   const browserAudited = readSafeCount(summary, 'browserPagesAudited');
@@ -185,9 +208,20 @@ export function extractDimensionTelemetryCounts(
   const browserCandidates = readSafeCount(summary, 'browserCandidatesTotal');
   const pagesScanned = readSafeCount(summary, 'pagesScanned');
 
+  // Only prioritize layout-stability completion counters when layoutStability is actually an
+  // active D4 module; otherwise layoutStabilityPagesCompleted=0 would mask executed browser pages.
+  const hasLayoutStabilityModule = dimension.raw.modules?.layoutStability !== undefined;
+  const executedD4 = hasLayoutStabilityModule
+    ? (clsCompleted ?? layoutCompleted ?? browserAudited)
+    : browserAudited;
+
   return {
-    executed: clsCompleted ?? layoutCompleted ?? browserAudited,
-    eligible: clsExpected ?? browserCandidates ?? pagesScanned,
+    executed: executedD4,
+    eligible: maxDefinedCount(
+      hasLayoutStabilityModule ? clsExpected : null,
+      browserCandidates,
+      pagesScanned,
+    ),
     unitKind: 'pages',
     subModules,
   };

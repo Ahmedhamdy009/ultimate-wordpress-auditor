@@ -302,4 +302,54 @@ describe('Chart Specifications & Evidence-Gated Stack Detection', () => {
       expect(withPro.isWooCommerce).toBe(true);
     });
   });
+
+  describe('Coverage Dimensions Chart Status on Partial Browser Sampling', () => {
+    it('marks coverageDimensions chart as partial when browser audit covers only a sampled subset of crawled pages', () => {
+      const suite = buildAuditChartSuite({
+        scanType: 'full',
+        scanStatus: 'completed',
+        config: {
+          enableBrowserAudit: true,
+          captureScreenshots: false,
+          auditModules: {
+            http: true,
+            wordpress: true,
+            securityHeaders: true,
+            cookies: true,
+            seo: true,
+            runtimeErrors: true,
+            networkResources: true,
+            responsiveLayout: true,
+            layoutStability: false,
+            screenshots: false,
+            accessibility: true,
+          },
+        },
+        summary: {
+          urlsCrawled: 10,
+          pagesScanned: 10,
+          crawlFailedPages: 0,
+          staticModulesExecuted: 5,
+          staticModulesTotal: 5,
+          browserCandidatesTotal: 2,
+          browserPagesAudited: 2,
+          runtimeAuditsCompleted: 2,
+          accessibilityCandidatesTotal: 2,
+          accessibilityAuditsCompleted: 2,
+          viewportsCompleted: 16,
+          layoutStabilityPagesCompleted: 0,
+          performanceMetrics: {
+            pages: [
+              { labMetrics: { cls: null }, resourceSummary: { totalResources: 5 } },
+              { labMetrics: { cls: null }, resourceSummary: { totalResources: 5 } },
+            ],
+          },
+        },
+        findings: [],
+      });
+
+      expect(suite.coverageDimensions.status).toBe('partial');
+      expect(suite.coverageDimensions.auditCoverage).toBe(60);
+    });
+  });
 });

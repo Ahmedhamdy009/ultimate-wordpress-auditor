@@ -2,7 +2,7 @@ import type { IncomingMessage } from 'node:http';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import zlib from 'node:zlib';
-import { validateHtmlContentType } from '@auditor/shared';
+import { validateAllowedContentType, validateHtmlContentType } from '@auditor/shared';
 import { SCANNER_CLIENT_ERROR_CODES } from './types.js';
 import { ScannerClientError } from './errors.js';
 
@@ -12,6 +12,7 @@ export interface ResponsePipelineLimits {
   readonly maxCompressionRatio?: number;
   readonly minCompressionRatioBytes?: number;
   readonly signal?: AbortSignal;
+  readonly allowedMediaEssences?: readonly string[];
 }
 
 export interface ProcessedResponseBody {
@@ -179,13 +180,16 @@ export async function executeSafeResponsePipeline(
 
   // 1. Content-Type Gatekeeper
   const contentType = res.headers['content-type'];
-  const ctCheck = validateHtmlContentType(contentType);
+  const ctCheck =
+    limits?.allowedMediaEssences && limits.allowedMediaEssences.length > 0
+      ? validateAllowedContentType(contentType, limits.allowedMediaEssences)
+      : validateHtmlContentType(contentType);
   if (!ctCheck.allowed) {
     res.destroy();
     throw new ScannerClientError(
       SCANNER_CLIENT_ERROR_CODES.ERR_NON_HTML_CONTENT_TYPE,
       `Non-HTML or invalid Content-Type: ${ctCheck.reason}`,
-      { contentType },
+      { contentType, statusCode: res.statusCode },
     );
   }
 

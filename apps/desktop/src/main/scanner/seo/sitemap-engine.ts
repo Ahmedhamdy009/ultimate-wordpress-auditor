@@ -7,7 +7,10 @@
 
 import { parseDocument, DomUtils } from 'htmlparser2';
 import { URL } from 'node:url';
+import { ALLOWED_SITEMAP_MEDIA_ESSENCES } from '@auditor/shared';
 import type { SafeHttpClient } from '../client/http-client.js';
+import { ScannerClientError } from '../client/errors.js';
+import { SCANNER_CLIENT_ERROR_CODES } from '../client/types.js';
 import type { CrawledPageResult } from '../crawler/types.js';
 import type { AnalyzerFinding } from '../analyzers/types.js';
 import type {
@@ -240,6 +243,12 @@ export class SitemapEngine {
         const response = await httpClient.request({
           url: currentSitemapUrl,
           method: 'GET',
+          headers: {
+            Accept: 'application/xml, text/xml;q=0.9, */*;q=0.8',
+          },
+          options: {
+            allowedMediaEssences: ALLOWED_SITEMAP_MEDIA_ESSENCES,
+          },
           signal,
         });
 
@@ -318,6 +327,34 @@ export class SitemapEngine {
           }
         }
       } catch (err: unknown) {
+        if (
+          err instanceof ScannerClientError &&
+          err.code === SCANNER_CLIENT_ERROR_CODES.ERR_NON_HTML_CONTENT_TYPE
+        ) {
+          const errStatus =
+            typeof (err.details as { statusCode?: unknown } | undefined)?.statusCode === 'number'
+              ? (err.details as { statusCode: number }).statusCode
+              : 0;
+          if (errStatus >= 400 && robotsSitemaps.includes(currentSitemapUrl)) {
+            findings.push({
+              ruleId: 'SEO_SITEMAP_HTTP_ERROR',
+              category: 'technical-seo',
+              title: `Sitemap Returned HTTP Error (${errStatus})`,
+              description: `The sitemap referenced in robots.txt at ${currentSitemapUrl} returned HTTP status ${errStatus}. Search engines will fail to process this sitemap.`,
+              severity: 'medium',
+              confidence: 'confirmed',
+              status: 'confirmed',
+              targetUrl: currentSitemapUrl,
+              evidence: { sitemapUrl: currentSitemapUrl, statusCode: errStatus },
+              remediation:
+                'Ensure the sitemap URL returns a valid HTTP 200 response with XML content.',
+              references: [
+                'https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap',
+              ],
+            });
+          }
+          continue;
+        }
         if (robotsSitemaps.includes(currentSitemapUrl)) {
           findings.push({
             ruleId: 'SEO_SITEMAP_UNREACHABLE',

@@ -20,7 +20,9 @@ import { executeSafeResponsePipeline } from './response-pipeline.js';
 import { handleResponseRedirect } from './redirect.js';
 import { shouldFallbackToGetRange, createHeadFallbackResponse } from './head-fallback.js';
 
-const DEFAULT_OPTIONS: Required<Omit<SafeHttpClientOptions, 'allowedHosts'>> = {
+const DEFAULT_OPTIONS: Required<
+  Omit<SafeHttpClientOptions, 'allowedHosts' | 'allowedMediaEssences'>
+> = {
   connectTimeoutMs: 5000,
   responseTimeoutMs: 10000,
   maxHeaderSize: 16384, // 16 KB
@@ -495,6 +497,7 @@ export class SafeHttpClient {
             maxCompressionRatio: options.maxCompressionRatio,
             minCompressionRatioBytes: options.minCompressionRatioBytes,
             signal,
+            allowedMediaEssences: options.allowedMediaEssences,
           });
 
           settleSuccess({

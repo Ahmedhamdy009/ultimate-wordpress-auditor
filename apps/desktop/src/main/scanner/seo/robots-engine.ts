@@ -5,7 +5,10 @@
  */
 
 import { URL } from 'node:url';
+import { ALLOWED_ROBOTS_MEDIA_ESSENCES } from '@auditor/shared';
 import type { SafeHttpClient } from '../client/http-client.js';
+import { ScannerClientError } from '../client/errors.js';
+import { SCANNER_CLIENT_ERROR_CODES } from '../client/types.js';
 import type { AnalyzerFinding } from '../analyzers/types.js';
 import type { RobotsAnalysisResult, RobotsRuleGroup, SeoCoverageReport } from './types.js';
 
@@ -254,6 +257,12 @@ export class RobotsEngine {
       const response = await httpClient.request({
         url: robotsUrl,
         method: 'GET',
+        headers: {
+          Accept: 'text/plain, text/*;q=0.9, */*;q=0.8',
+        },
+        options: {
+          allowedMediaEssences: ALLOWED_ROBOTS_MEDIA_ESSENCES,
+        },
         signal,
       });
 
@@ -262,13 +271,29 @@ export class RobotsEngine {
         responseText = response.text();
       }
     } catch (err: unknown) {
-      coverage = {
-        engine: 'robots',
-        executed: true,
-        status: 'partial',
-        itemsEvaluated: 0,
-        reason: `Failed to fetch robots.txt: ${err instanceof Error ? err.message : String(err)}`,
-      };
+      if (
+        err instanceof ScannerClientError &&
+        err.code === SCANNER_CLIENT_ERROR_CODES.ERR_NON_HTML_CONTENT_TYPE
+      ) {
+        const errStatus =
+          typeof (err.details as { statusCode?: unknown } | undefined)?.statusCode === 'number'
+            ? (err.details as { statusCode: number }).statusCode
+            : 404;
+        if (errStatus >= 400) {
+          statusCode = errStatus;
+        } else {
+          // Soft-404 HTML/non-text response on /robots.txt should not crash coverage
+          statusCode = 404;
+        }
+      } else {
+        coverage = {
+          engine: 'robots',
+          executed: true,
+          status: 'partial',
+          itemsEvaluated: 0,
+          reason: `Failed to fetch robots.txt: ${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
     }
 
     // 1. Missing or 404 robots.txt

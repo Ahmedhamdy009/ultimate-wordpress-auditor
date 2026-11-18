@@ -93,6 +93,12 @@ export interface SafeHttpClientOptions {
    * User-Agent request header value.
    */
   readonly userAgent?: string;
+
+  /**
+   * Explicit whitelist of acceptable response Content-Type essences (e.g. ['text/plain'] for robots.txt).
+   * When omitted, enforces strict HTML-only validation (text/html, application/xhtml+xml).
+   */
+  readonly allowedMediaEssences?: readonly string[];
 }
 
 /**

@@ -168,14 +168,23 @@ export function parseMediaType(headerValue?: string | null): ParsedMediaType | n
 export const ALLOWED_HTML_MEDIA_ESSENCES = Object.freeze(['text/html', 'application/xhtml+xml']);
 
 /**
- * Strictly validates whether an HTTP Content-Type header conforms to authorized HTML media types.
- * Enforces:
- * - Valid RFC 7231 syntax.
- * - Essence must be 'text/html' or 'application/xhtml+xml'.
- * - Missing, malformed, or non-HTML media types are rejected fail-closed.
- * - Zero response-body MIME sniffing.
+ * Whitelist of acceptable media essences for robots.txt (RFC 9309).
  */
-export function validateHtmlContentType(headerValue?: string | null): MediaTypeValidationResult {
+export const ALLOWED_ROBOTS_MEDIA_ESSENCES = Object.freeze(['text/plain']);
+
+/**
+ * Whitelist of acceptable media essences for XML Sitemaps (sitemaps.org protocol).
+ */
+export const ALLOWED_SITEMAP_MEDIA_ESSENCES = Object.freeze(['application/xml', 'text/xml']);
+
+/**
+ * Strictly validates whether an HTTP Content-Type header conforms to an explicit list of allowed media essences.
+ * Enforces valid RFC 7231 syntax and zero response-body MIME sniffing.
+ */
+export function validateAllowedContentType(
+  headerValue: string | null | undefined,
+  allowedEssences: readonly string[],
+): MediaTypeValidationResult {
   if (!headerValue || typeof headerValue !== 'string' || headerValue.trim().length === 0) {
     return {
       allowed: false,
@@ -192,10 +201,11 @@ export function validateHtmlContentType(headerValue?: string | null): MediaTypeV
     };
   }
 
-  if (!ALLOWED_HTML_MEDIA_ESSENCES.includes(parsed.essence)) {
+  const normalizedAllowed = allowedEssences.map(e => e.trim().toLowerCase());
+  if (!normalizedAllowed.includes(parsed.essence)) {
     return {
       allowed: false,
-      reason: `Non-HTML media type "${parsed.essence}". Only text/html and application/xhtml+xml are accepted for page auditing.`,
+      reason: `Disallowed media type "${parsed.essence}". Accepted media types: ${normalizedAllowed.join(', ')}.`,
       parsed,
     };
   }
@@ -204,4 +214,24 @@ export function validateHtmlContentType(headerValue?: string | null): MediaTypeV
     allowed: true,
     parsed,
   };
+}
+
+/**
+ * Strictly validates whether an HTTP Content-Type header conforms to authorized HTML media types.
+ * Enforces:
+ * - Valid RFC 7231 syntax.
+ * - Essence must be 'text/html' or 'application/xhtml+xml'.
+ * - Missing, malformed, or non-HTML media types are rejected fail-closed.
+ * - Zero response-body MIME sniffing.
+ */
+export function validateHtmlContentType(headerValue?: string | null): MediaTypeValidationResult {
+  const result = validateAllowedContentType(headerValue, ALLOWED_HTML_MEDIA_ESSENCES);
+  if (!result.allowed && result.parsed) {
+    return {
+      allowed: false,
+      reason: `Non-HTML media type "${result.parsed.essence}". Only text/html and application/xhtml+xml are accepted for page auditing.`,
+      parsed: result.parsed,
+    };
+  }
+  return result;
 }

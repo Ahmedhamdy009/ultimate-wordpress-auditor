@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { verifyAsarProvenance } from '../../../../scripts/build-provenance.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -20,6 +21,11 @@ describe('Batch 5.2 — Electron Builder & Windows Installer Packaging Verificat
     `Ultimate WordPress & Website Auditor Setup ${appVersion}.exe`,
   );
   const isPackaged = fs.existsSync(winUnpackedDir) && fs.existsSync(installerExePath);
+  const asarProvenance = fs.existsSync(asarPath)
+    ? verifyAsarProvenance(asarPath, { projectRoot, requireCommitMatch: true })
+    : null;
+  // Never falsely verify stale win-unpacked/installer artifacts merely because files exist on disk (DEF-007-C)
+  const hasVerifiedPackagedArtifact = Boolean(isPackaged && asarProvenance?.valid);
 
   describe('1. Electron Builder Configuration Validation', () => {
     it('verifies electron-builder.yml exists and defines correct application metadata', () => {
@@ -56,10 +62,12 @@ describe('Batch 5.2 — Electron Builder & Windows Installer Packaging Verificat
   });
 
   describe('2. Packaging Scripts & Package Metadata', () => {
-    it('verifies root package.json defines package and dist scripts with author metadata', () => {
+    it('verifies root package.json defines build provenance, package, and dist scripts with author metadata', () => {
       const rootPkgPath = path.join(projectRoot, 'package.json');
       const rootPkg = JSON.parse(fs.readFileSync(rootPkgPath, 'utf8'));
 
+      expect(rootPkg.scripts.build).toContain('node scripts/copy-build-assets.mjs');
+      expect(rootPkg.scripts.build).toContain('node scripts/build-provenance.mjs --write');
       expect(rootPkg.scripts.package).toBe('pnpm build && electron-builder --dir --x64');
       expect(rootPkg.scripts.dist).toBe('pnpm build && electron-builder --win --x64');
       expect(rootPkg.scripts['build:installer']).toBe('pnpm dist');
@@ -76,7 +84,7 @@ describe('Batch 5.2 — Electron Builder & Windows Installer Packaging Verificat
     });
   });
 
-  describe.skipIf(!isPackaged)('3. Unpacked Windows Package Structure', () => {
+  describe.skipIf(!hasVerifiedPackagedArtifact)('3. Unpacked Windows Package Structure', () => {
     it('verifies win-unpacked directory contains main executable and resources', () => {
       expect(fs.existsSync(winUnpackedDir)).toBe(true);
 
@@ -109,8 +117,8 @@ describe('Batch 5.2 — Electron Builder & Windows Installer Packaging Verificat
     });
   });
 
-  describe.skipIf(!isPackaged)('4. ASAR Archive Internal Integrity', () => {
-    it('verifies app.asar contains entry points, renderer bundle, and required dependencies without development junk', () => {
+  describe.skipIf(!hasVerifiedPackagedArtifact)('4. ASAR Archive Internal Integrity', () => {
+    it('verifies app.asar contains entry points, build provenance, renderer bundle, and required dependencies without development junk', () => {
       const asarLibPath = path.resolve(
         projectRoot,
         'node_modules/.pnpm/@electron+asar@3.4.1/node_modules/@electron/asar',
@@ -119,11 +127,13 @@ describe('Batch 5.2 — Electron Builder & Windows Installer Packaging Verificat
       const rawList: string[] = asar.listPackage(asarPath);
       const fileList = rawList.map(f => f.replace(/\\/g, '/'));
 
-      // 1. Entry points and bundles
+      // 1. Entry points, bundles, and verified provenance manifest
       expect(fileList).toContain('/package.json');
+      expect(fileList).toContain('/out/build-provenance.json');
       expect(fileList).toContain('/out/main/index.js');
       expect(fileList).toContain('/out/preload/index.cjs');
       expect(fileList).toContain('/out/renderer/index.html');
+      expect(asarProvenance?.valid).toBe(true);
 
       // 2. Production dependencies present in node_modules
       expect(fileList.some(f => f.startsWith('/node_modules/better-sqlite3/'))).toBe(true);
@@ -145,7 +155,7 @@ describe('Batch 5.2 — Electron Builder & Windows Installer Packaging Verificat
     });
   });
 
-  describe.skipIf(!isPackaged)('5. NSIS Standalone Installer Executable', () => {
+  describe.skipIf(!hasVerifiedPackagedArtifact)('5. NSIS Standalone Installer Executable', () => {
     it('verifies NSIS installer executable exists and is non-empty', () => {
       expect(fs.existsSync(installerExePath)).toBe(true);
       const stat = fs.statSync(installerExePath);

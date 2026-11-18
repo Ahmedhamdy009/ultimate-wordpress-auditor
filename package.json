@@ -18,7 +18,7 @@
     "test": "vitest run",
     "test:package-exports": "node scripts/test-package-exports.mjs",
     "db:cli": "node apps/desktop/out/main/cli.js",
-    "build": "pnpm --filter @auditor/shared build && tsc -p tsconfig.build.json && pnpm --filter @auditor/desktop build && node scripts/copy-build-assets.mjs",
+    "build": "pnpm --filter @auditor/shared build && tsc -p tsconfig.build.json && pnpm --filter @auditor/desktop build && node scripts/copy-build-assets.mjs && node scripts/build-provenance.mjs --write",
     "package": "pnpm build && electron-builder --dir --x64",
     "dist": "pnpm build && electron-builder --win --x64",
     "build:installer": "pnpm dist",

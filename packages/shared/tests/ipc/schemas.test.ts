@@ -169,6 +169,7 @@ describe('IPC Zod Schemas Validation', () => {
     it('accepts valid validate-target response', () => {
       const validRes = {
         valid: true,
+        status: 'valid',
         normalizedUrl: 'https://example.com',
         inScope: true,
       };
@@ -176,9 +177,20 @@ describe('IPC Zod Schemas Validation', () => {
 
       const invalidRes = {
         valid: false,
+        status: 'invalid',
+        errorCode: 'ERR_INVALID_TARGET_URL',
         error: 'Target URL contains embedded credentials which are forbidden',
       };
       expect(AuditValidateTargetResponseSchema.safeParse(invalidRes).success).toBe(true);
+
+      const indeterminateRes = {
+        valid: false,
+        status: 'indeterminate',
+        errorCode: 'ERR_DNS_RESOLUTION_FAILED',
+        inScope: false,
+        error: 'DNS resolution failed',
+      };
+      expect(AuditValidateTargetResponseSchema.safeParse(indeterminateRes).success).toBe(true);
     });
   });
 });

@@ -538,7 +538,27 @@ describe('Phase 1.2.5.1 — Typed React IPC Hooks', () => {
       });
 
       expect(harness.result.current.isValid).toBe(true);
+      expect(harness.result.current.validationStatus).toBe('valid');
       expect(harness.result.current.isInScope).toBe(true);
+
+      // 4. Indeterminate DNS failure preserves valid: false and indeterminate status
+      const indeterminateResponse: AuditValidateTargetResponse = {
+        valid: false,
+        status: 'indeterminate',
+        errorCode: 'ERR_DNS_RESOLUTION_FAILED',
+        inScope: false,
+        error: 'DNS lookup failed',
+      };
+      validateMock.mockResolvedValueOnce({ success: true, data: indeterminateResponse });
+
+      await harness.act(async () => {
+        await harness.result.current.validate('https://unreachable.invalid');
+      });
+
+      expect(harness.result.current.isValid).toBe(false);
+      expect(harness.result.current.validationStatus).toBe('indeterminate');
+      expect(harness.result.current.validationErrorCode).toBe('ERR_DNS_RESOLUTION_FAILED');
+      expect(harness.result.current.isInScope).toBe(false);
 
       await harness.unmount();
     });

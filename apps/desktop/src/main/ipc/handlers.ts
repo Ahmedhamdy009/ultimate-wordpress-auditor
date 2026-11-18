@@ -23,6 +23,10 @@ import type { IScanRunService } from '../services/scan-run.service.js';
 import type { IFindingService } from '../services/finding.service.js';
 import type { IReportService } from '../services/report.service.js';
 import type { IScanOrchestrator } from '../scanner/orchestrator/types.js';
+import {
+  validateTargetUrlSync,
+  validateTargetUrlAsync,
+} from '../scanner/validator/target-validator.js';
 import { registerDatabaseIpcHandlers } from './project-site-handlers.js';
 import { registerScanHandlers } from './scan-handlers.js';
 
@@ -250,9 +254,13 @@ export function createGetSystemInfoHandler(
  *   launches, zero shell execution, and zero remote WordPress access.
  * - Validates response against `AuditValidateTargetResponseSchema` before returning.
  */
-export function createValidateTargetHandler(): IpcChannelHandler<
-  typeof IPC_CHANNELS.AUDIT_VALIDATE_TARGET
-> {
+export interface ValidateTargetHandlerOptions {
+  readonly timeoutMs?: number;
+}
+
+export function createValidateTargetHandler(
+  handlerOptions?: ValidateTargetHandlerOptions,
+): IpcChannelHandler<typeof IPC_CHANNELS.AUDIT_VALIDATE_TARGET> {
   return async (request, context): Promise<AuditValidateTargetResponse> => {
     if (context.signal.aborted) {
       throw new IPCError(
@@ -269,33 +277,53 @@ export function createValidateTargetHandler(): IpcChannelHandler<
     const { targetUrl, allowedScope, options } = parsedRequest.data;
     const normalizedTargetUrl = targetUrl.trim();
 
-    // 1. Validate URL syntax, http/https protocol, and absence of embedded credentials
-    // using the authoritative shared Scope Guard.
-    const targetValidation = validateScanTarget(normalizedTargetUrl);
-    if (!targetValidation.valid) {
-      const invalidTargetResponse: AuditValidateTargetResponse = {
+    const buildInvalidResponse = (
+      error: string,
+      errorCode: string,
+    ): AuditValidateTargetResponse => {
+      const candidate: AuditValidateTargetResponse = {
         valid: false,
+        status: 'invalid',
         inScope: false,
-        error: targetValidation.reason ?? 'Invalid target URL.',
+        errorCode,
+        error,
       };
-
-      const parsedInvalid = AuditValidateTargetResponseSchema.safeParse(invalidTargetResponse);
-      if (!parsedInvalid.success) {
+      const parsed = AuditValidateTargetResponseSchema.safeParse(candidate);
+      if (!parsed.success) {
         throw new IPCError(
           'Failed to validate target rejection response',
           IPC_ERROR_CODES.INTERNAL_ERROR,
         );
       }
-      return parsedInvalid.data;
+      return parsed.data;
+    };
+
+    // 1. Validate URL syntax, http/https protocol, and absence of embedded credentials
+    // using the authoritative shared Scope Guard.
+    const targetValidation = validateScanTarget(normalizedTargetUrl);
+    if (!targetValidation.valid) {
+      return buildInvalidResponse(
+        targetValidation.reason ?? 'Invalid target URL.',
+        IPC_ERROR_CODES.INVALID_TARGET_URL,
+      );
     }
 
-    // 2. Evaluate URL port-policy validity (`valid`) and scope authorization (`inScope`)
+    // 2. Enforce the exact same synchronous SSRF & target safety checks as site:create and scan:create
+    // (localhost, *.localhost, loopback/private/link-local/metadata IP literals, alternate IP encodings).
+    try {
+      validateTargetUrlSync(normalizedTargetUrl);
+    } catch (err: unknown) {
+      const errorCode = err instanceof IPCError ? err.code : IPC_ERROR_CODES.INVALID_TARGET_URL;
+      const message = err instanceof Error ? err.message : 'Invalid target URL.';
+      return buildInvalidResponse(message, errorCode);
+    }
+
+    // 3. Evaluate URL port-policy validity and scope authorization
     // independently using the authoritative shared Scope Guard functions:
     // - `inScope` is true iff an explicit `allowedScope` was supplied and `isUrlInScope`
     //   confirms the target matches an allowed host and satisfies its port policy.
-    // - `valid` is true iff the target URL passes `validateScanTarget` AND satisfies the
-    //   applicable port policy (explicit port on a matching `allowedScope` entry, or
-    //   `allowAnyPort` / `allowedPorts` / standard HTTP(80)/HTTPS(443) ports on the target host).
+    // - port policy passes iff the target URL satisfies the explicit port on a matching
+    //   `allowedScope` entry, or `allowAnyPort` / `allowedPorts` / standard HTTP(80)/HTTPS(443) ports.
     const hasExplicitAllowedScope = allowedScope !== undefined;
 
     let inScope: boolean;
@@ -325,17 +353,66 @@ export function createValidateTargetHandler(): IpcChannelHandler<
       isPortPermitted = false;
     }
 
-    const candidateResponse: AuditValidateTargetResponse = isPortPermitted
-      ? {
-          valid: true,
-          normalizedUrl: normalizedTargetUrl,
-          inScope,
-        }
-      : {
+    if (!isPortPermitted) {
+      return buildInvalidResponse(
+        'Target URL is outside the permitted scope or port policy.',
+        'ERR_OUT_OF_PORT_POLICY',
+      );
+    }
+
+    // 4. Perform authoritative asynchronous DNS/SSRF validation aligned with site:create & scan:create.
+    // Never return valid: true if DNS fails, times out, or returns prohibited IPs.
+    let candidateResponse: AuditValidateTargetResponse;
+    try {
+      await validateTargetUrlAsync(normalizedTargetUrl, {
+        signal: context.signal,
+        timeoutMs: handlerOptions?.timeoutMs,
+      });
+      candidateResponse = {
+        valid: true,
+        status: 'valid',
+        normalizedUrl: normalizedTargetUrl,
+        inScope,
+      };
+    } catch (err: unknown) {
+      if (context.signal.aborted) {
+        throw err instanceof IPCError
+          ? err
+          : new IPCError(
+              'Request was aborted during target validation',
+              IPC_ERROR_CODES.INTERNAL_ERROR,
+            );
+      }
+
+      if (err instanceof IPCError && err.code === IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET) {
+        candidateResponse = {
           valid: false,
+          status: 'invalid',
           inScope: false,
-          error: 'Target URL is outside the permitted scope or port policy.',
+          errorCode: err.code,
+          error: err.message,
         };
+      } else if (err instanceof IPCError && err.code === IPC_ERROR_CODES.INVALID_TARGET_URL) {
+        candidateResponse = {
+          valid: false,
+          status: 'invalid',
+          inScope: false,
+          errorCode: err.code,
+          error: err.message,
+        };
+      } else {
+        candidateResponse = {
+          valid: false,
+          status: 'indeterminate',
+          inScope: false,
+          errorCode: err instanceof IPCError ? err.code : IPC_ERROR_CODES.DNS_RESOLUTION_FAILED,
+          error:
+            err instanceof Error
+              ? err.message
+              : 'Target DNS validation could not be completed; eligibility is indeterminate.',
+        };
+      }
+    }
 
     const parsedResponse = AuditValidateTargetResponseSchema.safeParse(candidateResponse);
     if (!parsedResponse.success) {

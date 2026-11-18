@@ -77,11 +77,35 @@ self.onmessage = () => {
   const mainMjsPath = path.join(targetDir, 'main.mjs');
   const mainMjsContent = `
 import { app, BrowserWindow, session, ipcMain, webFrameMain } from 'electron';
+import dns from 'node:dns';
 import net from 'node:net';
 import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
+
+// Isolated test-harness DNS responses for deterministic offline validation tests
+// without injecting any test hooks into the production out/main/index.js bundle.
+const originalHarnessLookup = dns.promises.lookup.bind(dns.promises);
+const syntheticPublicHosts = new Set([
+  'example.com',
+  'unauthorized-domain.com',
+]);
+dns.promises.lookup = async (hostname, options) => {
+  const host = String(hostname).toLowerCase();
+  if (syntheticPublicHosts.has(host) && options && options.all === true) {
+    return [{ address: '93.184.216.34', family: 4 }];
+  }
+  if (host === 'rebind-local.test' && options && options.all === true) {
+    return [{ address: '127.0.0.1', family: 4 }];
+  }
+  if (host === 'unresolvable-dns-test.invalid' && options && options.all === true) {
+    const err = new Error('getaddrinfo ENOTFOUND unresolvable-dns-test.invalid');
+    err.code = 'ENOTFOUND';
+    throw err;
+  }
+  return originalHarnessLookup(hostname, options);
+};
 
 // Boot the production desktop application
 import './out/main/index.js';

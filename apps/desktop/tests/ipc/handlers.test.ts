@@ -5,6 +5,7 @@ import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { IpcMainInvokeEvent } from 'electron';
+import { mockDnsLookup, type LocalFixtureNetworkHandle } from '../support/fixture-network.js';
 
 const { mockApp, mockDefaultSession, mockBrowserWindowConstructor, mockIpcMain } = vi.hoisted(
   () => {
@@ -549,6 +550,17 @@ describe('Phase 1.2.3.4 — Initial Main Process Handlers & IPC Integration', ()
   // 3. audit:validate-target Handler Tests
   // =========================================================================
   describe('C. audit:validate-target Handler', () => {
+    let defaultDnsMock: LocalFixtureNetworkHandle | null = null;
+
+    beforeEach(() => {
+      defaultDnsMock = mockDnsLookup(async () => [{ address: '93.184.216.34', family: 4 }]);
+    });
+
+    afterEach(() => {
+      defaultDnsMock?.restore();
+      defaultDnsMock = null;
+    });
+
     it('separates URL validity from scope authorization when allowedScope is omitted (valid: true, inScope: false)', async () => {
       const validateSpy = vi.spyOn(sharedScopeGuard, 'validateScanTarget');
       const isUrlInScopeSpy = vi.spyOn(sharedScopeGuard, 'isUrlInScope');
@@ -566,6 +578,7 @@ describe('Phase 1.2.3.4 — Initial Main Process Handlers & IPC Integration', ()
         success: true,
         data: {
           valid: true,
+          status: 'valid',
           normalizedUrl: 'https://example.com/wp-json/wp/v2',
           inScope: false,
         },
@@ -582,6 +595,7 @@ describe('Phase 1.2.3.4 — Initial Main Process Handlers & IPC Integration', ()
         success: true,
         data: {
           valid: true,
+          status: 'valid',
           normalizedUrl: 'http://example.com/wp-login.php',
           inScope: false,
         },
@@ -606,6 +620,7 @@ describe('Phase 1.2.3.4 — Initial Main Process Handlers & IPC Integration', ()
         success: true,
         data: {
           valid: true,
+          status: 'valid',
           normalizedUrl: 'https://example.com/wp-admin',
           inScope: false,
         },
@@ -621,6 +636,8 @@ describe('Phase 1.2.3.4 — Initial Main Process Handlers & IPC Integration', ()
         success: true,
         data: {
           valid: false,
+          status: 'invalid',
+          errorCode: 'ERR_OUT_OF_PORT_POLICY',
           inScope: false,
           error: 'Target URL is outside the permitted scope or port policy.',
         },
@@ -636,6 +653,7 @@ describe('Phase 1.2.3.4 — Initial Main Process Handlers & IPC Integration', ()
         success: true,
         data: {
           valid: true,
+          status: 'valid',
           normalizedUrl: 'https://example.com/wp-admin',
           inScope: false,
         },
@@ -651,6 +669,8 @@ describe('Phase 1.2.3.4 — Initial Main Process Handlers & IPC Integration', ()
         success: true,
         data: {
           valid: false,
+          status: 'invalid',
+          errorCode: 'ERR_OUT_OF_PORT_POLICY',
           inScope: false,
           error: 'Target URL is outside the permitted scope or port policy.',
         },
@@ -675,6 +695,7 @@ describe('Phase 1.2.3.4 — Initial Main Process Handlers & IPC Integration', ()
         expect(result.success).toBe(true);
         if (result.success) {
           expect(result.data.valid).toBe(false);
+          expect(result.data.status).toBe('invalid');
           expect(result.data.inScope).toBe(false);
           expect(typeof result.data.error).toBe('string');
           expect(result.data.error!.length).toBeGreaterThan(0);
@@ -695,6 +716,7 @@ describe('Phase 1.2.3.4 — Initial Main Process Handlers & IPC Integration', ()
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.valid).toBe(false);
+        expect(result.data.status).toBe('invalid');
         expect(result.data.inScope).toBe(false);
         expect(result.data.error).toContain('credentials');
         expect(result.data.normalizedUrl).toBeUndefined();
@@ -716,6 +738,7 @@ describe('Phase 1.2.3.4 — Initial Main Process Handlers & IPC Integration', ()
         success: true,
         data: {
           valid: true,
+          status: 'valid',
           normalizedUrl: 'https://Sub.Example.com/blog',
           inScope: true,
         },
@@ -731,6 +754,7 @@ describe('Phase 1.2.3.4 — Initial Main Process Handlers & IPC Integration', ()
         success: true,
         data: {
           valid: true,
+          status: 'valid',
           normalizedUrl: 'https://other-domain.org/wp-admin',
           inScope: false,
         },
@@ -750,6 +774,8 @@ describe('Phase 1.2.3.4 — Initial Main Process Handlers & IPC Integration', ()
         success: true,
         data: {
           valid: false,
+          status: 'invalid',
+          errorCode: 'ERR_OUT_OF_PORT_POLICY',
           inScope: false,
           error: 'Target URL is outside the permitted scope or port policy.',
         },
@@ -764,6 +790,8 @@ describe('Phase 1.2.3.4 — Initial Main Process Handlers & IPC Integration', ()
         success: true,
         data: {
           valid: false,
+          status: 'invalid',
+          errorCode: 'ERR_OUT_OF_PORT_POLICY',
           inScope: false,
           error: 'Target URL is outside the permitted scope or port policy.',
         },
@@ -781,6 +809,7 @@ describe('Phase 1.2.3.4 — Initial Main Process Handlers & IPC Integration', ()
         success: true,
         data: {
           valid: true,
+          status: 'valid',
           normalizedUrl: 'https://example.com:8443/wp-admin',
           inScope: true,
         },
@@ -798,41 +827,42 @@ describe('Phase 1.2.3.4 — Initial Main Process Handlers & IPC Integration', ()
         success: true,
         data: {
           valid: true,
+          status: 'valid',
           normalizedUrl: 'https://unauthorized.org:8443/wp-admin',
           inScope: false,
         },
       });
 
-      // 5. Matching allowedScope + options.allowAnyPort: true -> valid: true, inScope: true
-      const allowAnyPortRes = (await listener(event, {
+      // 5. SSRF Policy supersedes allowAnyPort / allowedScope: localhost MUST be rejected even with allowAnyPort: true
+      const ssrfLocalhostRes = (await listener(event, {
         targetUrl: 'http://localhost:9000/wordpress',
         allowedScope: ['localhost'],
         options: {
           allowAnyPort: true,
         },
       })) as IPCResult<AuditValidateTargetResponse>;
-      expect(allowAnyPortRes).toEqual({
-        success: true,
-        data: {
-          valid: true,
-          normalizedUrl: 'http://localhost:9000/wordpress',
-          inScope: true,
-        },
-      });
+      expect(ssrfLocalhostRes.success).toBe(true);
+      if (ssrfLocalhostRes.success) {
+        expect(ssrfLocalhostRes.data.valid).toBe(false);
+        expect(ssrfLocalhostRes.data.status).toBe('invalid');
+        expect(ssrfLocalhostRes.data.errorCode).toBe(IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET);
+        expect(ssrfLocalhostRes.data.inScope).toBe(false);
+      }
 
-      // 6. Nonmatching allowedScope + options.allowAnyPort: true -> valid: true, inScope: false
-      const allowAnyPortUnauthorizedHostRes = (await listener(event, {
-        targetUrl: 'http://other-host.local:9000/wordpress',
-        allowedScope: ['localhost'],
+      // 6. Nonmatching public host + options.allowAnyPort: true -> valid: true, inScope: false
+      const allowAnyPortUnauthorizedPublicHostRes = (await listener(event, {
+        targetUrl: 'http://other-public-host.example:9000/wordpress',
+        allowedScope: ['example.com'],
         options: {
           allowAnyPort: true,
         },
       })) as IPCResult<AuditValidateTargetResponse>;
-      expect(allowAnyPortUnauthorizedHostRes).toEqual({
+      expect(allowAnyPortUnauthorizedPublicHostRes).toEqual({
         success: true,
         data: {
           valid: true,
-          normalizedUrl: 'http://other-host.local:9000/wordpress',
+          status: 'valid',
+          normalizedUrl: 'http://other-public-host.example:9000/wordpress',
           inScope: false,
         },
       });
@@ -849,6 +879,7 @@ describe('Phase 1.2.3.4 — Initial Main Process Handlers & IPC Integration', ()
         success: true,
         data: {
           valid: true,
+          status: 'valid',
           normalizedUrl: 'http://example.com:8080/wp',
           inScope: true,
         },
@@ -866,10 +897,132 @@ describe('Phase 1.2.3.4 — Initial Main Process Handlers & IPC Integration', ()
         success: true,
         data: {
           valid: false,
+          status: 'invalid',
+          errorCode: 'ERR_OUT_OF_PORT_POLICY',
           inScope: false,
           error: 'Target URL is outside the permitted scope or port policy.',
         },
       });
+    });
+
+    it('rejects localhost, loopback, private IPs, metadata IPs, alternate IP encodings, and DNS rebinding even with allowAnyPort or allowedScope', async () => {
+      const { event } = createAuthorizedEvent();
+
+      const prohibitedLiterals = [
+        'http://localhost/',
+        'http://sub.localhost:8080/',
+        'http://127.0.0.1/',
+        'http://10.0.0.1/',
+        'http://172.16.0.1/',
+        'http://192.168.1.1/',
+        'http://169.254.169.254/latest/meta-data/',
+        'http://0.0.0.0/',
+        'http://2130706433/',
+        'http://0x7f.1/',
+        'http://0177.0.0.1/',
+        'http://[::1]/',
+        'http://[::ffff:127.0.0.1]/',
+        'http://[fe80::1]/',
+        'http://[fc00::1]/',
+      ];
+
+      for (const targetUrl of prohibitedLiterals) {
+        // Fresh dispatcher (torn down immediately) avoids tripping the 10 req/sec per-channel IPC rate limiter
+        const { dispatcher, ipcMain } = createDispatcherWithHandlers();
+        try {
+          const listener = ipcMain.handlers.get(IPC_CHANNELS.AUDIT_VALIDATE_TARGET)!;
+          const res = (await listener(event, {
+            targetUrl,
+            allowedScope: [targetUrl],
+            options: { allowAnyPort: true },
+          })) as IPCResult<AuditValidateTargetResponse>;
+
+          expect(res.success, `IPC envelope failed for ${targetUrl}`).toBe(true);
+          if (res.success) {
+            expect(res.data.valid, `${targetUrl} should not be valid`).toBe(false);
+            expect(res.data.status, `${targetUrl} should have status invalid`).toBe('invalid');
+            expect(res.data.errorCode).toBe(IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET);
+            expect(res.data.inScope).toBe(false);
+          }
+        } finally {
+          dispatcher.teardown();
+        }
+      }
+
+      // DNS resolving to private/mixed round-robin rebinding IP -> invalid + SSRF_PROHIBITED_TARGET
+      const rebindMock = mockDnsLookup(async () => [
+        { address: '93.184.216.34', family: 4 },
+        { address: '127.0.0.1', family: 4 },
+      ]);
+      const { dispatcher, ipcMain } = createDispatcherWithHandlers();
+      try {
+        const listener = ipcMain.handlers.get(IPC_CHANNELS.AUDIT_VALIDATE_TARGET)!;
+        const rebindRes = (await listener(event, {
+          targetUrl: 'https://rebind-attacker.test/',
+          allowedScope: ['rebind-attacker.test'],
+        })) as IPCResult<AuditValidateTargetResponse>;
+
+        expect(rebindRes.success).toBe(true);
+        if (rebindRes.success) {
+          expect(rebindRes.data.valid).toBe(false);
+          expect(rebindRes.data.status).toBe('invalid');
+          expect(rebindRes.data.errorCode).toBe(IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET);
+          expect(rebindRes.data.inScope).toBe(false);
+        }
+      } finally {
+        dispatcher.teardown();
+        rebindMock.restore();
+      }
+    });
+
+    it('returns explicit indeterminate status (never valid: true) when DNS resolution fails or returns empty', async () => {
+      const { ipcMain } = createDispatcherWithHandlers();
+      const { event } = createAuthorizedEvent();
+      const listener = ipcMain.handlers.get(IPC_CHANNELS.AUDIT_VALIDATE_TARGET)!;
+
+      // 1. NXDOMAIN / ENOTFOUND DNS failure
+      const enotfoundMock = mockDnsLookup(async hostname => {
+        const err = new Error(`getaddrinfo ENOTFOUND ${hostname}`) as NodeJS.ErrnoException;
+        err.code = 'ENOTFOUND';
+        throw err;
+      });
+      try {
+        const dnsErrRes = (await listener(event, {
+          targetUrl: 'https://nonexistent.invalid/wp',
+          allowedScope: ['nonexistent.invalid'],
+        })) as IPCResult<AuditValidateTargetResponse>;
+
+        expect(dnsErrRes.success).toBe(true);
+        if (dnsErrRes.success) {
+          expect(dnsErrRes.data.valid).toBe(false);
+          expect(dnsErrRes.data.status).toBe('indeterminate');
+          expect(dnsErrRes.data.errorCode).toBe(IPC_ERROR_CODES.DNS_RESOLUTION_FAILED);
+          expect(dnsErrRes.data.inScope).toBe(false);
+          expect(typeof dnsErrRes.data.error).toBe('string');
+          expect(dnsErrRes.data.error!.length).toBeGreaterThan(0);
+        }
+      } finally {
+        enotfoundMock.restore();
+      }
+
+      // 2. Empty DNS answer
+      const emptyMock = mockDnsLookup(async () => []);
+      try {
+        const emptyDnsRes = (await listener(event, {
+          targetUrl: 'https://empty-dns.example/',
+          allowedScope: ['empty-dns.example'],
+        })) as IPCResult<AuditValidateTargetResponse>;
+
+        expect(emptyDnsRes.success).toBe(true);
+        if (emptyDnsRes.success) {
+          expect(emptyDnsRes.data.valid).toBe(false);
+          expect(emptyDnsRes.data.status).toBe('indeterminate');
+          expect(emptyDnsRes.data.errorCode).toBe(IPC_ERROR_CODES.DNS_RESOLUTION_FAILED);
+          expect(emptyDnsRes.data.inScope).toBe(false);
+        }
+      } finally {
+        emptyMock.restore();
+      }
     });
 
     it('makes zero network requests during target validation', async () => {

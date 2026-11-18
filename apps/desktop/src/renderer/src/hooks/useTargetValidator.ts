@@ -16,9 +16,11 @@ export interface UseTargetValidatorReturn {
   readonly result: AuditValidateTargetResponse | null;
   readonly error: IPCSerializedError | null;
   readonly isValid: boolean | null;
+  readonly validationStatus: 'valid' | 'invalid' | 'indeterminate' | null;
   readonly isInScope: boolean | null;
   readonly normalizedUrl: string | null;
   readonly validationError: string | null;
+  readonly validationErrorCode: string | null;
   readonly validate: (
     targetUrl: string,
     allowedScope?: readonly string[],
@@ -206,14 +208,20 @@ export function useTargetValidator(
     [debounceMs, executeValidation],
   );
 
+  const validationStatus: UseTargetValidatorReturn['validationStatus'] = result
+    ? (result.status ?? (result.valid ? 'valid' : 'invalid'))
+    : null;
+
   return {
     validating,
     result,
     error,
     isValid: result?.valid ?? null,
+    validationStatus,
     isInScope: result?.inScope ?? null,
     normalizedUrl: result?.normalizedUrl ?? null,
     validationError: result?.error ?? null,
+    validationErrorCode: result?.errorCode ?? null,
     validate,
     reset,
   };

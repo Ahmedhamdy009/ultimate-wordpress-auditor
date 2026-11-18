@@ -15,6 +15,7 @@ export const TargetValidatorView: React.FC = () => {
     result,
     error,
     isValid,
+    validationStatus,
     isInScope,
     normalizedUrl,
     validationError,
@@ -194,12 +195,17 @@ export const TargetValidatorView: React.FC = () => {
         >
           {result ? (
             <div className="auditor-results-box">
-              {/* Syntax Validity Result */}
+              {/* Target Validation & SSRF Result */}
               <div className="auditor-result-status-row">
                 <span>RFC 3986 Syntax &amp; Port Validity:</span>
-                {isValid === true && <Badge variant="success">Valid Target Syntax</Badge>}
-                {isValid === false && (
+                {validationStatus === 'valid' && (
+                  <Badge variant="success">Valid Target Syntax</Badge>
+                )}
+                {validationStatus === 'invalid' && (
                   <Badge variant="danger">Invalid Syntax / Port Violation</Badge>
+                )}
+                {validationStatus === 'indeterminate' && (
+                  <Badge variant="warning">Validation Indeterminate (DNS Error)</Badge>
                 )}
                 {isValid === null && <Badge variant="neutral">Not Evaluated</Badge>}
               </div>
@@ -222,7 +228,14 @@ export const TargetValidatorView: React.FC = () => {
 
               {/* Failure Error Display */}
               {validationError && (
-                <Alert variant="danger" title="Validation Rejection Reason">
+                <Alert
+                  variant={validationStatus === 'indeterminate' ? 'warning' : 'danger'}
+                  title={
+                    validationStatus === 'indeterminate'
+                      ? 'Validation Indeterminate'
+                      : 'Validation Rejection Reason'
+                  }
+                >
                   {validationError}
                 </Alert>
               )}

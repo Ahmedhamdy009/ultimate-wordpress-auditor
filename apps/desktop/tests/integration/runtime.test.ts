@@ -50,9 +50,11 @@ interface ValidateTargetIpcResult {
   success: boolean;
   data?: {
     valid: boolean;
+    status?: 'valid' | 'invalid' | 'indeterminate';
     normalizedUrl?: string;
     inScope?: boolean;
     error?: string;
+    errorCode?: string;
   };
   error?: {
     code: string;
@@ -340,6 +342,59 @@ describe('Phase 1.2.4.2 — Live Electron Runtime Integration Suite', () => {
       expect(result.error).toBeDefined();
       expect(result.error?.code).toBe('ERR_PAYLOAD_VALIDATION_FAILED');
       expect(result.error?.message).toBe('Payload validation failed');
+    });
+
+    it('rejects localhost, loopback, DNS rebinding, and marks unresolved DNS as indeterminate via production IPC', async () => {
+      const localhostRes = await runner.executeScenario<ValidateTargetIpcResult>(
+        'EXECUTE_RENDERER_IPC',
+        {
+          method: 'validateTarget',
+          payload: { targetUrl: 'http://localhost:3000', allowedScope: ['localhost'] },
+        },
+      );
+      expect(localhostRes.success).toBe(true);
+      expect(localhostRes.data?.valid).toBe(false);
+      expect(localhostRes.data?.status).toBe('invalid');
+      expect(localhostRes.data?.errorCode).toBe('ERR_SSRF_PROHIBITED_TARGET');
+
+      const loopbackRes = await runner.executeScenario<ValidateTargetIpcResult>(
+        'EXECUTE_RENDERER_IPC',
+        {
+          method: 'validateTarget',
+          payload: { targetUrl: 'http://127.0.0.1:8080', allowedScope: ['127.0.0.1'] },
+        },
+      );
+      expect(loopbackRes.success).toBe(true);
+      expect(loopbackRes.data?.valid).toBe(false);
+      expect(loopbackRes.data?.status).toBe('invalid');
+      expect(loopbackRes.data?.errorCode).toBe('ERR_SSRF_PROHIBITED_TARGET');
+
+      const rebindRes = await runner.executeScenario<ValidateTargetIpcResult>(
+        'EXECUTE_RENDERER_IPC',
+        {
+          method: 'validateTarget',
+          payload: { targetUrl: 'https://rebind-local.test', allowedScope: ['rebind-local.test'] },
+        },
+      );
+      expect(rebindRes.success).toBe(true);
+      expect(rebindRes.data?.valid).toBe(false);
+      expect(rebindRes.data?.status).toBe('invalid');
+      expect(rebindRes.data?.errorCode).toBe('ERR_SSRF_PROHIBITED_TARGET');
+
+      const unresolvedRes = await runner.executeScenario<ValidateTargetIpcResult>(
+        'EXECUTE_RENDERER_IPC',
+        {
+          method: 'validateTarget',
+          payload: {
+            targetUrl: 'https://unresolvable-dns-test.invalid',
+            allowedScope: ['unresolvable-dns-test.invalid'],
+          },
+        },
+      );
+      expect(unresolvedRes.success).toBe(true);
+      expect(unresolvedRes.data?.valid).toBe(false);
+      expect(unresolvedRes.data?.status).toBe('indeterminate');
+      expect(unresolvedRes.data?.errorCode).toBe('ERR_DNS_RESOLUTION_FAILED');
     });
   });
 

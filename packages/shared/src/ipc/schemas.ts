@@ -72,8 +72,10 @@ export type AuditValidateTargetRequest = z.infer<typeof AuditValidateTargetReque
 export const AuditValidateTargetResponseSchema = z
   .object({
     valid: z.boolean(),
+    status: z.enum(['valid', 'invalid', 'indeterminate']).optional(),
     normalizedUrl: z.string().optional(),
     error: z.string().optional(),
+    errorCode: z.string().optional(),
     inScope: z.boolean().optional(),
   })
   .strict();

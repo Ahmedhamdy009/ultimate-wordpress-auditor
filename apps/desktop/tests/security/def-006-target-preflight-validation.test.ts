@@ -5,6 +5,7 @@ import {
   type IPCResult,
   type SiteDTO,
   type ScanRunDTO,
+  type AuditValidateTargetResponse,
 } from '@auditor/shared';
 import { DatabaseConnection } from '../../src/main/db/connection.js';
 import { MigrationRunner } from '../../src/main/db/migrations/runner.js';
@@ -25,6 +26,7 @@ import {
   createSiteUpdateHandler,
 } from '../../src/main/ipc/project-site-handlers.js';
 import { createScanCreateHandler } from '../../src/main/ipc/scan-handlers.js';
+import { createValidateTargetHandler } from '../../src/main/ipc/handlers.js';
 import { SecureIpcDispatcher } from '../../src/main/ipc/dispatcher.js';
 import { WindowSecurityRegistry } from '../../src/main/security/registry.js';
 import { SecurityWebRequestManager } from '../../src/main/security/csp.js';
@@ -636,6 +638,192 @@ describe('DEF-006: Strict Pre-flight Target Validation & Zero-Persistence Bounda
       expect(siteRepo.getById(site.id)!.baseUrl).toBe('https://initial-domain.com/');
 
       dispatcher.teardown();
+    });
+
+    it('Case 28: audit:validate-target, site:create, and scan:create strictly agree on rejecting prohibited targets, DNS rebinding, and unresolved DNS', async () => {
+      const validEvent = createAuthorizedEvent();
+      const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo);
+
+      const prohibitedTargets = [
+        'http://localhost/',
+        'http://sub.localhost/',
+        'http://127.0.0.1/',
+        'http://10.0.0.1/',
+        'http://172.16.0.1/',
+        'http://192.168.1.1/',
+        'http://169.254.169.254/latest/meta-data/',
+        'http://0.0.0.0/',
+        'http://2130706433/',
+        'http://0x7f.1/',
+        'http://0177.0.0.1/',
+        'http://[::1]/',
+        'http://[::ffff:127.0.0.1]/',
+        'http://[fe80::1]/',
+        'http://[fc00::1]/',
+      ];
+
+      const preExistingLegitSite = siteRepo.create({
+        projectId,
+        name: 'Fallback Valid Site',
+        baseUrl: 'https://valid-placeholder.example',
+      });
+
+      const registerConsistencyHandlers = () => {
+        const isoIpc = createMockIpcMain();
+        const disp = new SecureIpcDispatcher({
+          isDev: true,
+          isPackaged: false,
+          ipcMain: isoIpc as unknown as typeof import('electron').ipcMain,
+        });
+        disp.registerHandler(IPC_CHANNELS.AUDIT_VALIDATE_TARGET, createValidateTargetHandler());
+        disp.registerHandler(IPC_CHANNELS.SITE_CREATE, createSiteCreateHandler(siteService));
+        disp.registerHandler(
+          IPC_CHANNELS.SCAN_CREATE,
+          createScanCreateHandler(scanRunService, orchestrator, { siteService }),
+        );
+        return {
+          disp,
+          validateFn: isoIpc.handlers.get(IPC_CHANNELS.AUDIT_VALIDATE_TARGET)!,
+          siteCreateFn: isoIpc.handlers.get(IPC_CHANNELS.SITE_CREATE)!,
+          scanCreateFn: isoIpc.handlers.get(IPC_CHANNELS.SCAN_CREATE)!,
+        };
+      };
+
+      for (const targetUrl of prohibitedTargets) {
+        const { disp, validateFn, siteCreateFn, scanCreateFn } = registerConsistencyHandlers();
+        try {
+          const validateRes = (await validateFn(validEvent, {
+            targetUrl,
+            allowedScope: [targetUrl],
+          })) as IPCResult<AuditValidateTargetResponse>;
+
+          expect(validateRes.success).toBe(true);
+          if (validateRes.success) {
+            expect(validateRes.data.valid, `audit:validate-target must reject ${targetUrl}`).toBe(
+              false,
+            );
+            expect(validateRes.data.status).toBe('invalid');
+            expect(validateRes.data.errorCode).toBe(IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET);
+            expect(validateRes.data.inScope).toBe(false);
+          }
+
+          const siteRes = (await siteCreateFn(validEvent, {
+            projectId,
+            name: 'Prohibited Consistency Target',
+            baseUrl: targetUrl,
+          })) as IPCResult<SiteDTO>;
+          expect(siteRes.success, `site:create must reject ${targetUrl}`).toBe(false);
+          if (!siteRes.success) {
+            expect(siteRes.error.code).toBe(IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET);
+          }
+
+          const scanRes = (await scanCreateFn(validEvent, {
+            siteId: preExistingLegitSite.id,
+            targetUrl,
+            scanType: 'quick',
+          })) as IPCResult<ScanRunDTO>;
+          expect(scanRes.success, `scan:create must reject ${targetUrl}`).toBe(false);
+          if (!scanRes.success) {
+            expect(scanRes.error.code).toBe(IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET);
+          }
+        } finally {
+          disp.teardown();
+        }
+      }
+
+      // DNS rebinding / prohibited DNS answer -> all 3 reject
+      const rebindDnsMock = mockDnsLookup(async () => [{ address: '127.0.0.1', family: 4 }]);
+      const rebindHandlers = registerConsistencyHandlers();
+      try {
+        const rebindTarget = 'https://rebinding.consistency.test/';
+        const validateRes = (await rebindHandlers.validateFn(validEvent, {
+          targetUrl: rebindTarget,
+          allowedScope: [rebindTarget],
+        })) as IPCResult<AuditValidateTargetResponse>;
+        expect(validateRes.success).toBe(true);
+        if (validateRes.success) {
+          expect(validateRes.data.valid).toBe(false);
+          expect(validateRes.data.status).toBe('invalid');
+          expect(validateRes.data.errorCode).toBe(IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET);
+        }
+
+        const siteRes = (await rebindHandlers.siteCreateFn(validEvent, {
+          projectId,
+          name: 'Rebind Site',
+          baseUrl: rebindTarget,
+        })) as IPCResult<SiteDTO>;
+        expect(siteRes.success).toBe(false);
+        if (!siteRes.success) {
+          expect(siteRes.error.code).toBe(IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET);
+        }
+
+        const rebindSite = siteRepo.create({
+          projectId,
+          name: 'Stored Rebind Site',
+          baseUrl: rebindTarget,
+        });
+        const scanRes = (await rebindHandlers.scanCreateFn(validEvent, {
+          siteId: rebindSite.id,
+          scanType: 'quick',
+        })) as IPCResult<ScanRunDTO>;
+        expect(scanRes.success).toBe(false);
+        if (!scanRes.success) {
+          expect(scanRes.error.code).toBe(IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET);
+        }
+      } finally {
+        rebindHandlers.disp.teardown();
+        rebindDnsMock.restore();
+      }
+
+      // Unresolvable DNS -> validate returns explicit indeterminate (never valid: true), site:create & scan:create reject
+      const failedDnsMock = mockDnsLookup(async hostname => {
+        const err = new Error(`getaddrinfo ENOTFOUND ${hostname}`) as NodeJS.ErrnoException;
+        err.code = 'ENOTFOUND';
+        throw err;
+      });
+      const failedHandlers = registerConsistencyHandlers();
+      try {
+        const unresolvedTarget = 'https://unreachable.consistency.invalid/';
+        const validateRes = (await failedHandlers.validateFn(validEvent, {
+          targetUrl: unresolvedTarget,
+          allowedScope: [unresolvedTarget],
+        })) as IPCResult<AuditValidateTargetResponse>;
+        expect(validateRes.success).toBe(true);
+        if (validateRes.success) {
+          expect(validateRes.data.valid).toBe(false);
+          expect(validateRes.data.status).toBe('indeterminate');
+          expect(validateRes.data.errorCode).toBe(IPC_ERROR_CODES.DNS_RESOLUTION_FAILED);
+        }
+
+        const siteRes = (await failedHandlers.siteCreateFn(validEvent, {
+          projectId,
+          name: 'Unresolved DNS Site',
+          baseUrl: unresolvedTarget,
+        })) as IPCResult<SiteDTO>;
+        expect(siteRes.success).toBe(false);
+        if (!siteRes.success) {
+          expect(siteRes.error.code).toBe(IPC_ERROR_CODES.DNS_RESOLUTION_FAILED);
+        }
+
+        const unresolvedSite = siteRepo.create({
+          projectId,
+          name: 'Stored Unresolved Site',
+          baseUrl: unresolvedTarget,
+        });
+        const scanRes = (await failedHandlers.scanCreateFn(validEvent, {
+          siteId: unresolvedSite.id,
+          scanType: 'quick',
+        })) as IPCResult<ScanRunDTO>;
+        expect(scanRes.success).toBe(false);
+        if (!scanRes.success) {
+          expect(scanRes.error.code).toBe(IPC_ERROR_CODES.DNS_RESOLUTION_FAILED);
+        }
+      } finally {
+        failedHandlers.disp.teardown();
+        failedDnsMock.restore();
+      }
+
+      orchestrator.dispose();
     });
   });
 });

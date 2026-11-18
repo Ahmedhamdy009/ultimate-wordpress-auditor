@@ -35,6 +35,7 @@ export interface ReportScanRunModel {
   readonly urlsCrawled?: number;
   readonly crawlFailedPages?: number;
   readonly pagesScanned?: number;
+  readonly nonHtmlPages?: number;
   readonly pagesFailed?: number;
   readonly browserPagesAudited?: number;
   readonly browserFailedPages?: number;

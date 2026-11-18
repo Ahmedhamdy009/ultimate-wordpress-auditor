@@ -259,6 +259,7 @@ describe('BoundedCrawler Engine End-to-End Integration', () => {
     });
 
     expect(result.summary.totalPagesAttempted).toBe(1);
+    expect(result.summary.successfulPages).toBe(0);
     expect(result.summary.nonHtmlPages).toBe(1);
     expect(result.pages[0].isHtml).toBe(false);
     expect(result.pages[0].parsedDocument).toBeNull();

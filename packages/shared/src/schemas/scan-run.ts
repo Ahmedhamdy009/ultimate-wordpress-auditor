@@ -120,6 +120,7 @@ export interface ScanRunSummaryDTO {
   infoCount: number;
   urlsCrawled?: number;
   pagesScanned?: number;
+  nonHtmlPages?: number;
   pagesFailed?: number;
   crawlFailedPages?: number;
   browserFailedPages?: number;
@@ -156,6 +157,7 @@ export const ScanRunSummaryDTOSchema = z.object({
   infoCount: z.number().int().min(0),
   urlsCrawled: z.number().int().min(0).optional(),
   pagesScanned: z.number().int().min(0).optional(),
+  nonHtmlPages: z.number().int().min(0).optional(),
   pagesFailed: z.number().int().min(0).optional(),
   crawlFailedPages: z.number().int().min(0).optional(),
   browserFailedPages: z.number().int().min(0).optional(),

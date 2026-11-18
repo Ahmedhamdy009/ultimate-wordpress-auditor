@@ -611,6 +611,7 @@ export class ScanOrchestrator implements IScanOrchestrator {
         infoCount: countsBySeverity.info,
         urlsCrawled: crawlResult.summary.totalPagesAttempted,
         pagesScanned,
+        nonHtmlPages: crawlResult.summary.nonHtmlPages ?? 0,
         pagesFailed: totalPagesFailed,
         crawlFailedPages: crawlResult.summary.failedPages,
         browserFailedPages: browserResult?.failedPages.length ?? 0,
@@ -996,6 +997,7 @@ export class ScanOrchestrator implements IScanOrchestrator {
             context.crawlResult?.summary?.totalPagesAttempted ?? context.progress.pagesAttempted,
           pagesScanned:
             context.crawlResult?.summary?.successfulPages ?? context.progress.pagesSucceeded,
+          nonHtmlPages: context.crawlResult?.summary?.nonHtmlPages,
           pagesFailed: context.crawlResult?.summary?.failedPages ?? context.progress.pagesFailed,
           crawlFailedPages: context.crawlResult?.summary?.failedPages,
           browserPagesAudited: context.progress.browserPagesAudited,
@@ -1198,9 +1200,8 @@ export class ScanOrchestrator implements IScanOrchestrator {
     const seenCandidateUrls = new Set<string>();
 
     for (const page of crawlResult.pages) {
-      if (page.statusCode !== null && page.statusCode >= 200 && page.statusCode < 400) {
-        const contentType = (page.contentType ?? '').toLowerCase();
-        if (page.isHtml || contentType.includes('text/html') || contentType === '') {
+      if (page.statusCode !== null && page.statusCode >= 200 && page.statusCode < 300) {
+        if (page.isHtml) {
           try {
             const pageUrl = page.finalUrl || page.requestedUrl;
             const parsed = new URL(pageUrl);

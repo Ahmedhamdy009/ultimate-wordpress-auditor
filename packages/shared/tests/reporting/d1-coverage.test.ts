@@ -463,5 +463,43 @@ describe('D1 Crawl & Reachability Decision Matrix & Safe Counter Validation', ()
       expect(cov.auditCoverage).toBe(92);
       expect(Number.isFinite(cov.auditCoverage)).toBe(true);
     });
+
+    it('accounts for nonHtmlPages in D1 without penalizing HTML crawl reachability ratio (DEF-007-A)', () => {
+      const exactWithNonHtml = evaluateD1CrawlCoverage({
+        summary: {
+          urlsCrawled: 7,
+          pagesScanned: 4,
+          crawlFailedPages: 1,
+          nonHtmlPages: 2,
+        },
+      });
+      expect(exactWithNonHtml.status).toBe('exact');
+      expect(exactWithNonHtml.coverageApproximated).toBe(false);
+      // 4 / (7 - 2) = 4 / 5 = 0.8
+      expect(exactWithNonHtml.ratio).toBeCloseTo(0.8, 6);
+
+      const onlyNonHtml = evaluateD1CrawlCoverage({
+        summary: {
+          urlsCrawled: 2,
+          pagesScanned: 0,
+          crawlFailedPages: 0,
+          nonHtmlPages: 2,
+        },
+      });
+      expect(onlyNonHtml.status).toBe('unavailable');
+      expect(onlyNonHtml.ratio).toBe(0);
+      expect(onlyNonHtml.coverageApproximated).toBe(false);
+
+      const invalidNonHtml = evaluateD1CrawlCoverage({
+        summary: {
+          urlsCrawled: 5,
+          pagesScanned: 4,
+          crawlFailedPages: 1,
+          nonHtmlPages: -1,
+        },
+      });
+      expect(invalidNonHtml.status).toBe('unavailable');
+      expect(invalidNonHtml.reasonCodes).toEqual(['d1_crawl_telemetry_invalid_count']);
+    });
   });
 });

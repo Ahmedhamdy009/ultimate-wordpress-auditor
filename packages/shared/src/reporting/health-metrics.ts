@@ -306,6 +306,7 @@ export function evaluateD1CrawlCoverage(input: {
   const urlsCrawled = summary.urlsCrawled;
   const pagesScanned = summary.pagesScanned;
   const crawlFailedPages = summary.crawlFailedPages;
+  const nonHtmlPages = summary.nonHtmlPages;
   const pagesFailed = summary.pagesFailed;
   const errPagesFailed = errorDetails?.pagesFailed;
 
@@ -313,7 +314,8 @@ export function evaluateD1CrawlCoverage(input: {
   if (
     (urlsCrawled !== undefined && !isValidCount(urlsCrawled)) ||
     (pagesScanned !== undefined && !isValidCount(pagesScanned)) ||
-    (crawlFailedPages !== undefined && !isValidCount(crawlFailedPages))
+    (crawlFailedPages !== undefined && !isValidCount(crawlFailedPages)) ||
+    (nonHtmlPages !== undefined && !isValidCount(nonHtmlPages))
   ) {
     return invalidD1Result();
   }
@@ -350,15 +352,17 @@ export function evaluateD1CrawlCoverage(input: {
       };
     }
 
-    const outcomesSum = pagesScanned + crawlFailedPages;
+    const nonHtmlCount = isValidCount(nonHtmlPages) ? nonHtmlPages : 0;
+    const outcomesSum = pagesScanned + crawlFailedPages + nonHtmlCount;
     if (!isValidCount(outcomesSum)) {
       return invalidD1Result();
     }
 
     if (urlsCrawled === outcomesSum && urlsCrawled > 0) {
+      const htmlAttempted = urlsCrawled - nonHtmlCount;
       return {
-        status: 'exact',
-        ratio: clamp01(pagesScanned / urlsCrawled),
+        status: htmlAttempted > 0 ? 'exact' : 'unavailable',
+        ratio: htmlAttempted > 0 ? clamp01(pagesScanned / htmlAttempted) : 0,
         coverageApproximated: false,
         reasonCodes: [],
         pathUsed: 'path1_exact_triple',
@@ -366,9 +370,10 @@ export function evaluateD1CrawlCoverage(input: {
     }
 
     if (urlsCrawled > outcomesSum && urlsCrawled > 0) {
+      const htmlAttempted = Math.max(1, urlsCrawled - nonHtmlCount);
       return {
         status: 'approximated',
-        ratio: clamp01(pagesScanned / urlsCrawled),
+        ratio: clamp01(pagesScanned / htmlAttempted),
         coverageApproximated: true,
         reasonCodes: ['d1_crawl_telemetry_mismatch_attempts_gt_outcomes'],
         pathUsed: 'path1_exact_triple',

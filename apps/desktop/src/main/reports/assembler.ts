@@ -275,6 +275,9 @@ export function assembleReportData(
     ...(typeof metricsSource.pagesScanned === 'number'
       ? { pagesScanned: metricsSource.pagesScanned }
       : { pagesScanned }),
+    ...(typeof metricsSource.nonHtmlPages === 'number'
+      ? { nonHtmlPages: metricsSource.nonHtmlPages }
+      : {}),
     ...(typeof metricsSource.pagesFailed === 'number'
       ? { pagesFailed: metricsSource.pagesFailed }
       : { pagesFailed }),

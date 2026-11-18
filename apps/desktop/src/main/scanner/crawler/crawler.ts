@@ -4,7 +4,7 @@
  * using the Safe HTTP Client and HTML Parser Engine.
  */
 
-import { normalizeCrawlUrl } from '@auditor/shared';
+import { normalizeCrawlUrl, validateHtmlContentType } from '@auditor/shared';
 import { SafeHttpClient } from '../client/http-client.js';
 import { ScannerClientError } from '../client/errors.js';
 import {
@@ -38,14 +38,11 @@ const DEFAULT_CONFIG = {
 };
 
 /**
- * Checks whether the Content-Type header represents parseable HTML.
+ * Strictly validates whether the Content-Type header represents parseable HTML
+ * using the canonical RFC 7231 media-type parser (no substring or sniffing fallbacks).
  */
 function isHtmlContentType(contentTypeHeader: string | undefined): boolean {
-  if (!contentTypeHeader) {
-    return false;
-  }
-  const lower = contentTypeHeader.toLowerCase();
-  return lower.includes('text/html') || lower.includes('application/xhtml+xml');
+  return validateHtmlContentType(contentTypeHeader).allowed;
 }
 
 export class BoundedCrawler {
@@ -232,7 +229,6 @@ export class BoundedCrawler {
 
           if (!isHtml) {
             nonHtmlPages++;
-            successfulPages++;
             pages.push({
               requestedUrl: item.url,
               finalUrl: response.finalUrl,
@@ -253,12 +249,14 @@ export class BoundedCrawler {
             return;
           }
 
+          const isHttpSuccess = response.statusCode >= 200 && response.statusCode < 300;
+
           // Parse HTML and extract page structure
           const htmlContent = response.text();
           const parsedDoc = this.parser.parse(htmlContent, response.finalUrl, authorizedOrigin);
 
-          // Discover links if within depth limit and crawl is active
-          if (item.depth < maxDepth && !isCancelled && reservedPages < maxPages) {
+          // Discover links only from successful (2xx) HTML pages if within depth limit and crawl is active
+          if (isHttpSuccess && item.depth < maxDepth && !isCancelled && reservedPages < maxPages) {
             let pageEnqueuedCount = 0;
 
             for (const link of parsedDoc.links) {
@@ -290,7 +288,7 @@ export class BoundedCrawler {
                 }
               }
             }
-          } else {
+          } else if (isHttpSuccess) {
             // Count candidate links that exceeded max depth or maxPages
             for (const link of parsedDoc.links) {
               if (!link.isInternal) {
@@ -301,7 +299,17 @@ export class BoundedCrawler {
             }
           }
 
-          successfulPages++;
+          if (isHttpSuccess) {
+            successfulPages++;
+          } else {
+            failedPages++;
+            errors.push({
+              url: item.url,
+              code: `HTTP_${response.statusCode}`,
+              message: response.statusMessage || `HTTP error status ${response.statusCode}`,
+            });
+          }
+
           pages.push({
             requestedUrl: item.url,
             finalUrl: response.finalUrl,
@@ -327,11 +335,16 @@ export class BoundedCrawler {
             err.code === SCANNER_CLIENT_ERROR_CODES.ERR_NON_HTML_CONTENT_TYPE
           ) {
             nonHtmlPages++;
-            successfulPages++;
-            const details = err.details as { contentType?: string } | undefined;
+            const details = err.details as
+              { contentType?: string; redirectChain?: readonly RedirectHopInfo[] } | undefined;
+            const redirectChain = details?.redirectChain;
+            const resolvedFinalUrl =
+              redirectChain && redirectChain.length > 0
+                ? redirectChain[redirectChain.length - 1].toUrl
+                : item.url;
             pages.push({
               requestedUrl: item.url,
-              finalUrl: item.url,
+              finalUrl: resolvedFinalUrl,
               statusCode: null,
               statusMessage: null,
               headers: null,
@@ -343,6 +356,7 @@ export class BoundedCrawler {
               encodedBodyBytes: 0,
               decompressedBodyBytes: 0,
               parsedDocument: null,
+              redirectChain,
             });
             return;
           }

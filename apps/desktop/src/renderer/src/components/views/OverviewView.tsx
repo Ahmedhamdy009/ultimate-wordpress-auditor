@@ -326,7 +326,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             <Badge variant={connected ? 'success' : 'danger'}>
               {connected ? `IPC Connected (${latencyMs ?? 0}ms)` : 'IPC Disconnected'}
             </Badge>
-            <Badge variant="neutral">v{systemInfo?.appVersion ?? '0.1.7'}</Badge>
+            <Badge variant="neutral">v{systemInfo?.appVersion ?? '0.1.8'}</Badge>
           </div>
         </div>
       </section>

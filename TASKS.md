@@ -56,7 +56,33 @@
 -   [x] Batch 4.2: Runtime Errors & Network Resource Auditor (مكتملة ومقبولة رسمياً).
 -   [x] Batch 4.3: Viewport Emulation, Layout Shifts & Visual Evidence (مكتملة ومقبولة رسمياً).
 -   [x] Batch 4.4: Accessibility Engine (axe-core) & Fixture Tests (مكتملة ومقبولة رسمياً).
--   [ ] Batch 4.5: Unified ScanOrchestrator Integration, Desktop UI & Reporting (تم التنفيذ والتحقق واجتياز بوابات الجودة بالكامل — بانتظار المراجعة والاعتماد).
+-   [x] Batch 4.5: Unified ScanOrchestrator Integration, Desktop UI & Reporting (مكتملة ومقبولة رسمياً).
+
+## Phase 6 --- WordPress Companion Plugin
+
+-   [x] مراجعة نموذج التهديدات وبروتوكول الاقتران الآمن (Phase 6.1).
+-   [x] إضافة WordPress Companion للقراءة فقط وإجراء الفحوص الأمنية (Phase 6.1).
+-   [x] مراجعة الأمان واجتياز اختبارات الاعتماد (مكتملة ومقبولة رسمياً).
+
+## Phase 7 --- Core Enhancement & Advanced Reporting
+
+-   [x] Batch 7.1: UI/UX Modernization, Reports & Exports Workflow, and CSV Export Engine (مكتملة ومقبولة رسمياً).
+-   [x] Batch 7.1.1: Content Security Policy & Security Hardening (مكتملة ومقبولة رسمياً).
+-   [x] Batch 7.2: Advanced SEO Engines (Robots, Sitemaps, Hreflang, Structured Data, Redirects) (مكتملة ومقبولة رسمياً).
+-   [x] Batch 7.3: Performance Engine & Lab Vitals (FCP, LCP, TTFB, Bottlenecks) (مكتملة ومقبولة رسمياً).
+-   [x] Batch 7.4: Shared Reporting Architecture, Bilingual Localization (EN/AR), SVG Charts, View Models & Desktop GUI Integration (مكتملة ومقبولة رسمياً).
+
+## Phase 7.5.5 --- Final Acceptance & Candidate Remediation Cycle
+
+-   [x] Phase 7.5.5-A: Full Local Regression & 6 CI Quality Gates (1,829 tests, commit `04fa5bb`).
+-   [x] Phase 7.5.5-B: Local Operational E2E Testing against isolated HTTP fixture server (DEF-008 fix, commit `cad7045`).
+-   [x] Phase 7.5.5-C: Clean Packaging, candidate version bump to `v0.1.8`, and build provenance verification (commit `6f33816`).
+-   [x] Phase 7.5.5-D: Isolated Windows installation, persistence, crash recovery, and uninstall verification.
+-   [x] Production Hardening: Complete removal of test hooks (`__activeOrchestrator`) and IPC target validation alignment (commits `4a02266` & `bbbe388`).
+-   [x] Post-Hardening Runtime Verification: Isolated test composition root, 24/24 packaged runtime checks passing (commit `bdd8f54`).
+-   [x] Phase 7.5.5-E: Bounded real-world audit (`https://www.ahmedhamdy09.me/`), D1–D4 coverage multi-dimensional fix (60%), 31 screenshots, 5 export artifacts validated, CSV reconciliation (88 findings = 88 records) (commit `82dd60a`).
+-   [x] Phase 7.5.5-F Milestone 1: Pre-flight quality gate baseline verified (173 test files, 1,851 tests passed, 0 skipped, 0 failed, provenance valid).
+-   [x] Phase 7.5.5-F Milestone 2: Final Acceptance Documentation authored ([phase-7.5.5-final-acceptance-report.md](docs/audits/phase-7.5.5-final-acceptance-report.md)).
 
 ## قرارات مفتوحة
 

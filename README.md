@@ -8,7 +8,7 @@
   <a href="https://github.com/Ahmedhamdy009/ultimate-wordpress-auditor/actions/workflows/ci.yml"><img src="https://github.com/Ahmedhamdy009/ultimate-wordpress-auditor/actions/workflows/ci.yml/badge.svg" alt="CI Status" /></a>
   <a href="https://github.com/Ahmedhamdy009/ultimate-wordpress-auditor/releases/tag/v0.1.7"><img src="https://img.shields.io/badge/release-v0.1.7--alpha-blue.svg" alt="Release v0.1.7" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT" /></a>
-  <img src="https://img.shields.io/badge/tests-1391%20passing-brightgreen.svg" alt="1391 Tests Passing" />
+  <img src="https://img.shields.io/badge/tests-1851%20passing-brightgreen.svg" alt="1851 Tests Passing" />
   <img src="https://img.shields.io/badge/platform-Windows%20x64-lightgrey.svg" alt="Platform: Windows x64" />
   <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Electron-44.10.2-informational.svg" alt="Electron 44" /></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19.3.1-61dafb.svg" alt="React 19" /></a>

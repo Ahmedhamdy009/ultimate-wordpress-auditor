@@ -975,17 +975,19 @@ ${htmlOpenTag}
           </div>
         </div>
         <h3 class="meta-label" style="margin-bottom:8px;">${escapeHtml(activeVm.labels.dimensionBreakdown)}</h3>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>${isArabic ? 'البُعد' : 'Dimension'}</th>
-              <th>${isArabic ? 'الحالة' : 'Status'}</th>
-              <th>${isArabic ? 'النسبة' : 'Coverage'}</th>
-              <th>${isArabic ? 'الوزن' : 'Weight'}</th>
-            </tr>
-          </thead>
-          <tbody>${dimensionsHtml}</tbody>
-        </table>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>${isArabic ? 'البُعد' : 'Dimension'}</th>
+                <th>${isArabic ? 'الحالة' : 'Status'}</th>
+                <th>${isArabic ? 'النسبة' : 'Coverage'}</th>
+                <th>${isArabic ? 'الوزن' : 'Weight'}</th>
+              </tr>
+            </thead>
+            <tbody>${dimensionsHtml}</tbody>
+          </table>
+        </div>
         ${telemetryReasonsHtml}
         <p style="font-size:12px; color:var(--text-dim); margin-top:10px;">${escapeHtml(activeVm.disclosures.healthIndexDisclaimer)}</p>
       </section>
@@ -1011,43 +1013,47 @@ ${htmlOpenTag}
         <div class="details-table-grid">
           <div>
             <h3 class="meta-label" style="margin-bottom:8px;">Execution Coverage</h3>
-            <table class="data-table">
-              <tbody>
-                <tr><td>Target URL</td><td class="font-mono" dir="ltr">${escapeHtml(String(redactSensitiveData(model.scanRun.targetUrl)))}</td></tr>
-                <tr><td>Scan Type</td><td>${escapeHtml(model.scanRun.scanType)}</td></tr>
-                <tr><td>Scan Status</td><td><span class="status-badge ${escapeHtml(model.summary.scanStatus.toLowerCase())}">${escapeHtml(statusUpper)}</span></td></tr>
-                <tr><td>Audit Coverage</td><td><strong>${
-                  isFailedOrCancelled
-                    ? 'PARTIAL AUDIT (INTERRUPTED)'
-                    : isPartialCoverage
-                      ? 'COMPLETED (PARTIAL BROWSER COVERAGE)'
-                      : 'COMPLETE AUDIT (FULL COVERAGE)'
-                }</strong></td></tr>
-                ${isPartialCoverage && model.summary.coverageWarning ? `<tr><td>Coverage Notice</td><td style="color:var(--warning);">${escapeHtml(model.summary.coverageWarning)}</td></tr>` : ''}
-                ${typeof model.summary.browserCandidatesTotal === 'number' && model.summary.browserCandidatesTotal > 0 ? `<tr><td>Browser Candidates</td><td class="font-mono" dir="ltr">${model.summary.browserPagesAudited ?? 0} of ${model.summary.browserCandidatesTotal} audited${(model.summary.browserCandidatesSkipped ?? 0) > 0 ? ` (${model.summary.browserCandidatesSkipped} skipped due to budget)` : ''}</td></tr>` : ''}
-                <tr><td>Pages Crawled (Static Analysis)</td><td class="font-mono" dir="ltr">${model.summary.pagesScanned} pages (${model.summary.staticCoverageStatus === 'partial' ? 'partial' : '100%'} static coverage)</td></tr>
-                <tr><td>Browser Pages Audited</td><td class="font-mono" dir="ltr">${model.summary.browserPagesAudited ?? 0} of ${model.summary.pagesScanned} pages (${Math.round(((model.summary.browserPagesAudited ?? 0) / Math.max(1, model.summary.pagesScanned)) * 100)}% browser coverage)</td></tr>
-                <tr><td>Screenshots Captured</td><td class="font-mono" dir="ltr">${model.summary.screenshotsCaptured ?? 0}</td></tr>
-                <tr><td>Pages Failed / Errored</td><td class="font-mono" dir="ltr">${model.summary.pagesFailed}</td></tr>
-              </tbody>
-            </table>
+            <div class="table-responsive">
+              <table class="data-table">
+                <tbody>
+                  <tr><td>Target URL</td><td class="font-mono" dir="ltr">${escapeHtml(String(redactSensitiveData(model.scanRun.targetUrl)))}</td></tr>
+                  <tr><td>Scan Type</td><td>${escapeHtml(model.scanRun.scanType)}</td></tr>
+                  <tr><td>Scan Status</td><td><span class="status-badge ${escapeHtml(model.summary.scanStatus.toLowerCase())}">${escapeHtml(statusUpper)}</span></td></tr>
+                  <tr><td>Audit Coverage</td><td><strong>${
+                    isFailedOrCancelled
+                      ? 'PARTIAL AUDIT (INTERRUPTED)'
+                      : isPartialCoverage
+                        ? 'COMPLETED (PARTIAL BROWSER COVERAGE)'
+                        : 'COMPLETE AUDIT (FULL COVERAGE)'
+                  }</strong></td></tr>
+                  ${isPartialCoverage && model.summary.coverageWarning ? `<tr><td>Coverage Notice</td><td style="color:var(--warning);">${escapeHtml(model.summary.coverageWarning)}</td></tr>` : ''}
+                  ${typeof model.summary.browserCandidatesTotal === 'number' && model.summary.browserCandidatesTotal > 0 ? `<tr><td>Browser Candidates</td><td class="font-mono" dir="ltr">${model.summary.browserPagesAudited ?? 0} of ${model.summary.browserCandidatesTotal} audited${(model.summary.browserCandidatesSkipped ?? 0) > 0 ? ` (${model.summary.browserCandidatesSkipped} skipped due to budget)` : ''}</td></tr>` : ''}
+                  <tr><td>Pages Crawled (Static Analysis)</td><td class="font-mono" dir="ltr">${model.summary.pagesScanned} pages (${model.summary.staticCoverageStatus === 'partial' ? 'partial' : '100%'} static coverage)</td></tr>
+                  <tr><td>Browser Pages Audited</td><td class="font-mono" dir="ltr">${model.summary.browserPagesAudited ?? 0} of ${model.summary.pagesScanned} pages (${Math.round(((model.summary.browserPagesAudited ?? 0) / Math.max(1, model.summary.pagesScanned)) * 100)}% browser coverage)</td></tr>
+                  <tr><td>Screenshots Captured</td><td class="font-mono" dir="ltr">${model.summary.screenshotsCaptured ?? 0}</td></tr>
+                  <tr><td>Pages Failed / Errored</td><td class="font-mono" dir="ltr">${model.summary.pagesFailed}</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
           <div>
             <h3 class="meta-label" style="margin-bottom:8px;">Findings by Category &amp; Confidence</h3>
-            <table class="data-table">
-              <thead><tr><th>Category</th><th>Count</th></tr></thead>
-              <tbody>${categoryHtml}</tbody>
-              <tfoot>
-                <tr>
-                  <td style="font-weight:700; border-top:1px solid var(--border);">Verification State</td>
-                  <td style="border-top:1px solid var(--border); font-size:12px;">
-                    <span class="badge badge-conf conf-confirmed">${model.summary.confirmedCount} Confirmed</span>
-                    <span class="badge badge-conf conf-firm">${model.summary.firmCount ?? 0} Firm</span>
-                    <span class="badge badge-conf conf-potential">${model.summary.potentialCount} Potential</span>
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead><tr><th>Category</th><th>Count</th></tr></thead>
+                <tbody>${categoryHtml}</tbody>
+                <tfoot>
+                  <tr>
+                    <td style="font-weight:700; border-top:1px solid var(--border);">Verification State</td>
+                    <td style="border-top:1px solid var(--border); font-size:12px;">
+                      <span class="badge badge-conf conf-confirmed">${model.summary.confirmedCount} Confirmed</span>
+                      <span class="badge badge-conf conf-firm">${model.summary.firmCount ?? 0} Firm</span>
+                      <span class="badge badge-conf conf-potential">${model.summary.potentialCount} Potential</span>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </div>
         </div>
       </section>

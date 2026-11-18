@@ -1,32 +1,41 @@
 /* eslint-disable */
+/**
+ * Post-Hardening In-Flight Cancellation Verification.
+ *
+ * Uses a separate test-only composition root under D:\ahmed\.tmp that extracts the verified
+ * production /out bundle from app.asar and installs external fixture network interception
+ * ONLY for mock-audit-target.com before importing ./out/main/index.js.
+ *
+ * Zero global test handles, zero production testHooks, and zero orchestrator option mutations.
+ */
+
 import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs';
 import { _electron } from 'playwright-core';
+import {
+  TMP_ROOT,
+  createIsolatedRunSuffix,
+  createIsolatedUserDataDir,
+  inspectSqliteOnDisk,
+  openIsolatedSqlite,
+  prepareIsolatedCompositionRoot,
+  resolveElectronExecutablePath,
+} from './isolated-runtime-harness.mjs';
 
 async function runInFlightCancellationTest() {
-  const exePath = path.resolve(
-    'apps/desktop/dist/win-unpacked/Ultimate WordPress & Website Auditor.exe',
-  );
   console.log('======================================================================');
-  console.log(' IN-FLIGHT CANCELLATION FORENSIC VERIFICATION');
-  console.log(' Target Executable:', exePath);
+  console.log(' POST-HARDENING IN-FLIGHT CANCELLATION FORENSIC VERIFICATION');
   console.log('======================================================================\n');
 
-  if (!fs.existsSync(exePath)) {
-    throw new Error(`Executable not found at ${exePath}`);
-  }
-
-  // 1. Start controllable slow fixture server
-  const fixturePort = 9899;
-  let requestsReceived = [];
+  // 1. Start controllable slow fixture server on an ephemeral loopback port
+  const requestsReceived = [];
   const fixtureServer = http.createServer((req, res) => {
-    const url = new URL(req.url || '/', `http://127.0.0.1:${fixturePort}`);
+    const url = new URL(req.url || '/', 'http://127.0.0.1');
     requestsReceived.push({ url: url.pathname, time: Date.now() });
     console.log(`[Fixture Server] Incoming request: ${url.pathname}`);
 
     if (url.pathname === '/' || url.pathname === '/index.html') {
-      // Entry page with links to slow pages
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(`
         <!DOCTYPE html>
@@ -42,7 +51,6 @@ async function runInFlightCancellationTest() {
         </html>
       `);
     } else if (url.pathname === '/slow-page-1.html') {
-      // Delay 1200ms before responding
       setTimeout(() => {
         if (res.writableEnded) return;
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -59,7 +67,6 @@ async function runInFlightCancellationTest() {
         `);
       }, 1200);
     } else if (url.pathname === '/slow-page-2.html') {
-      // Delay 2000ms before responding
       setTimeout(() => {
         if (res.writableEnded) return;
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -75,11 +82,10 @@ async function runInFlightCancellationTest() {
         `);
       }, 2000);
     } else if (url.pathname === '/slow-page-3.html') {
-      // Delay 2000ms
       setTimeout(() => {
         if (res.writableEnded) return;
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(`<!DOCTYPE html><html><body><h2>Slow Page 3</h2></body></html>`);
+        res.end('<!DOCTYPE html><html><body><h2>Slow Page 3</h2></body></html>');
       }, 2000);
     } else {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -87,46 +93,63 @@ async function runInFlightCancellationTest() {
     }
   });
 
-  await new Promise(resolve => fixtureServer.listen(fixturePort, '127.0.0.1', resolve));
+  await new Promise(resolve => fixtureServer.listen(0, '127.0.0.1', resolve));
+  const fixturePort = fixtureServer.address().port;
   console.log(
     `[Fixture] Controlled delayed HTTP server listening on http://127.0.0.1:${fixturePort}\n`,
   );
 
+  const runSuffix = createIsolatedRunSuffix();
+  const harnessAppDir = path.join(TMP_ROOT, `cancel-harness-app-${runSuffix}`);
+  const isolatedUserDataDir = createIsolatedUserDataDir('cancel-harness-userdata', runSuffix);
+
+  prepareIsolatedCompositionRoot({
+    targetDir: harnessAppDir,
+    fixtureHost: 'mock-audit-target.com',
+    fixturePort,
+    syntheticPublicIp: '93.184.216.34',
+  });
+
+  const electronExe = resolveElectronExecutablePath();
   const app = await _electron.launch({
-    executablePath: exePath,
+    executablePath: electronExe,
+    args: [harnessAppDir],
+    env: {
+      ...process.env,
+      AUDITOR_USER_DATA_DIR: isolatedUserDataDir,
+    },
     timeout: 30000,
   });
 
   const testReport = {
-    testName: 'True In-Flight Cancellation Under Active Work',
+    testName: 'True In-Flight Cancellation Under Active Work (Post-Hardening)',
+    isolatedUserDataDir,
     observations: {},
     invariants: {},
     verdict: 'PENDING',
   };
 
+  let scanRunId = null;
+  let terminalScan = null;
+
   try {
     const window = await app.firstWindow({ timeout: 15000 });
 
-    // Configure testHooks in main process for loopback fixture
-    await app.evaluate(async port => {
-      const orchestrator = globalThis.__activeOrchestrator;
-      if (orchestrator) {
-        orchestrator.options.testHooks = {
-          lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
-          pinnedIpOverride: '127.0.0.1',
-          allowLoopbackInTests: true,
-        };
-      }
-    }, fixturePort);
+    // Confirm removed globals do NOT exist in main process
+    const globalsAbsent = await app.evaluate(async () => ({
+      hasActiveOrchestratorGlobal: '__activeOrchestrator' in globalThis,
+      hasActiveDbGlobal: '__activeDatabaseConnection' in globalThis,
+    }));
+    testReport.invariants.removedGlobalsAbsent =
+      !globalsAbsent.hasActiveOrchestratorGlobal && !globalsAbsent.hasActiveDbGlobal;
 
     // 1. Create project & site via Renderer IPC
-    const suffix = Date.now().toString(36);
     const projectRes = await window.evaluate(async sfx => {
       return await window.electronAPI.createProject({
         name: `In-Flight Cancel Project ${sfx}`,
         description: 'Testing in-flight cancellation while actively processing pages',
       });
-    }, suffix);
+    }, runSuffix);
 
     const siteRes = await window.evaluate(
       async ({ pId, port, sfx }) => {
@@ -136,7 +159,7 @@ async function runInFlightCancellationTest() {
           baseUrl: `http://mock-audit-target.com:${port}/`,
         });
       },
-      { pId: projectRes.data.id, port: fixturePort, sfx: suffix },
+      { pId: projectRes.data.id, port: fixturePort, sfx: runSuffix },
     );
 
     const siteId = siteRes.data.id;
@@ -164,7 +187,7 @@ async function runInFlightCancellationTest() {
       { sId: siteId, port: fixturePort },
     );
 
-    const scanRunId = scanCreateRes.data.id;
+    scanRunId = scanCreateRes.data.id;
     console.log(
       `[Test] Scan run created with ID: ${scanRunId}, initial status: ${scanCreateRes.data.status}`,
     );
@@ -189,7 +212,6 @@ async function runInFlightCancellationTest() {
       const status = scanRes.data?.status;
 
       if (status === 'running' || (prog && prog.status === 'running')) {
-        // Check for demonstrable active work: crawling started, pages attempted, or active requests
         if (
           prog &&
           (prog.pagesAttempted >= 1 ||
@@ -240,7 +262,6 @@ async function runInFlightCancellationTest() {
 
     // 5. Poll until scan reaches terminal 'cancelled' state
     console.log('[Test] Verifying scan transition to terminal cancelled state in SQLite...');
-    let terminalScan = null;
     for (let i = 0; i < 50; i++) {
       await new Promise(r => setTimeout(r, 100));
       const poll = await window.evaluate(async id => {
@@ -280,25 +301,10 @@ async function runInFlightCancellationTest() {
       `[Test] Post-quiet period check: Total fixture hits: ${postWaitRequests} (was ${totalRequestsAtCancel}), Pages scanned: ${postWaitPagesScanned}`,
     );
 
-    const noFurtherRequestsProcessed = postWaitRequests <= totalRequestsAtCancel + 1; // max 1 in-flight abort
-    testReport.invariants.noFurtherPagesProcessed = noFurtherRequestsProcessed;
+    testReport.invariants.noFurtherPagesProcessed = postWaitRequests <= totalRequestsAtCancel + 1;
     testReport.invariants.postQuietScanStatus = postWaitScan.data?.status === 'cancelled';
 
-    // 7. Verify main process resource cleanup and page leases
-    const resourceCleanup = await app.evaluate(async () => {
-      const orchestrator = globalThis.__activeOrchestrator;
-      const db = globalThis.__activeDatabaseConnection;
-      return {
-        activeScansCount: orchestrator ? orchestrator.getActiveScans().length : -1,
-        quickCheckOk: db ? db.quickCheck().ok : false,
-      };
-    });
-
-    console.log('[Test] Main process resource cleanup check:', JSON.stringify(resourceCleanup));
-    testReport.invariants.activeScansCountZero = resourceCleanup.activeScansCount === 0;
-    testReport.invariants.sqliteIntegrityOk = resourceCleanup.quickCheckOk;
-
-    // 8. Verify persisted findings integrity: findings recorded before cancellation remain intact
+    // 7. Verify persisted findings integrity: findings recorded before cancellation remain intact
     const findingsList = await window.evaluate(async id => {
       return await window.electronAPI.listFindings({ scanRunId: id, limit: 100 });
     }, scanRunId);
@@ -308,30 +314,53 @@ async function runInFlightCancellationTest() {
     );
     testReport.invariants.findingsIntact = findingsList.success;
     testReport.invariants.findingsCount = findingsList.data?.items?.length || 0;
-
-    // Determine final verdict
-    const allPassed =
-      testReport.observations.activeWorkObserved &&
-      terminalScan?.status === 'cancelled' &&
-      Boolean(terminalScan?.cancelledAt) &&
-      testReport.invariants.noFurtherPagesProcessed &&
-      testReport.invariants.activeScansCountZero &&
-      testReport.invariants.sqliteIntegrityOk &&
-      testReport.invariants.findingsIntact;
-
-    testReport.verdict = allPassed ? 'PASSED' : 'FAILED';
-    console.log('\n======================================================================');
-    console.log(` IN-FLIGHT CANCELLATION VERDICT: ${testReport.verdict}`);
-    console.log('======================================================================\n');
   } finally {
     await app.close();
-    fixtureServer.close();
-    console.log('[Test] Packaged application and fixture server closed cleanly.');
+    await new Promise(resolve => fixtureServer.close(() => resolve()));
+    fs.rmSync(harnessAppDir, { recursive: true, force: true });
+    console.log('[Test] Packaged composition root and fixture server closed cleanly.');
   }
 
-  const outPath = path.resolve('D:/ahmed/.tmp/in-flight-cancellation-results.json');
-  fs.writeFileSync(outPath, JSON.stringify(testReport, null, 2));
+  // 8. Verify SQLite integrity & zero remaining pending/running scans directly on disk
+  const dbInspect = inspectSqliteOnDisk(isolatedUserDataDir);
+  const { db } = openIsolatedSqlite(isolatedUserDataDir, { readonly: true });
+  let activeScansInDb = -1;
+  try {
+    const row = db
+      .prepare("SELECT COUNT(*) as cnt FROM scan_runs WHERE status IN ('pending', 'running')")
+      .get();
+    activeScansInDb = Number(row?.cnt ?? -1);
+  } finally {
+    db.close();
+  }
+
+  testReport.invariants.activeScansCountZero = activeScansInDb === 0;
+  testReport.invariants.sqliteIntegrityOk = dbInspect.quickCheckOk && dbInspect.integrityCheckOk;
+
+  const allPassed =
+    testReport.invariants.removedGlobalsAbsent &&
+    testReport.observations.activeWorkObserved &&
+    terminalScan?.status === 'cancelled' &&
+    Boolean(terminalScan?.cancelledAt) &&
+    testReport.invariants.noFurtherPagesProcessed &&
+    testReport.invariants.postQuietScanStatus &&
+    testReport.invariants.activeScansCountZero &&
+    testReport.invariants.sqliteIntegrityOk &&
+    testReport.invariants.findingsIntact;
+
+  testReport.verdict = allPassed ? 'PASSED' : 'FAILED';
+  console.log('\n======================================================================');
+  console.log(` IN-FLIGHT CANCELLATION VERDICT: ${testReport.verdict}`);
+  console.log('======================================================================\n');
+
+  const outPath = path.resolve(TMP_ROOT, 'in-flight-cancellation-results.json');
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, JSON.stringify(testReport, null, 2), 'utf8');
   console.log('Results written to:', outPath);
+
+  if (!allPassed) {
+    process.exit(1);
+  }
   return testReport;
 }
 

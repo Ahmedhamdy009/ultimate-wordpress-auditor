@@ -163,8 +163,18 @@ describe('ScanOrchestrator Security & Regression Boundaries', () => {
     }).toThrowError(new RegExp(SCAN_ORCHESTRATOR_ERROR_CODES.ERR_SSRF_PROHIBITED_TARGET));
   });
 
-  it('strictly strips and ignores any caller-supplied pinnedIpOverride or testHooks in createScan config', () => {
-    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo);
+  it('strictly rejects and ignores any caller-supplied pinnedIpOverride, allowLoopbackInTests, lookupFn, or testHooks in createScan or constructor', () => {
+    // Adversarial attempt to inject testHooks into ScanOrchestrator constructor at runtime
+    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
+      testHooks: {
+        pinnedIpOverride: '127.0.0.1',
+        allowLoopbackInTests: true,
+        lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
+      },
+      clientOptions: {
+        allowPrivateLoopback: true,
+      },
+    } as unknown as ConstructorParameters<typeof ScanOrchestrator>[3]);
 
     // Adversarial attempt to inject testHooks and pinnedIpOverride via request payload
     const maliciousRequest = {
@@ -174,6 +184,7 @@ describe('ScanOrchestrator Security & Regression Boundaries', () => {
         maxPages: 5,
         // Hostile injected fields that must never be recognized by ScanConfigSchema
         pinnedIpOverride: '169.254.169.254',
+        allowLoopbackInTests: true,
         testHooks: {
           pinnedIpOverride: '127.0.0.1',
           allowLoopbackInTests: true,
@@ -192,24 +203,47 @@ describe('ScanOrchestrator Security & Regression Boundaries', () => {
     expect(retrieved).not.toBeNull();
     const persistedConfig = retrieved!.config as Record<string, unknown>;
     expect(persistedConfig).not.toHaveProperty('pinnedIpOverride');
+    expect(persistedConfig).not.toHaveProperty('allowLoopbackInTests');
     expect(persistedConfig).not.toHaveProperty('testHooks');
 
-    // Verify orchestrator internal options have testHooks strictly undefined
-    const internalOptions = (orchestrator as unknown as { options: { testHooks?: unknown } })
+    // Verify orchestrator internal options strictly do NOT retain testHooks
+    const internalOptions = (orchestrator as unknown as { options: Record<string, unknown> })
       .options;
-    expect(internalOptions.testHooks).toBeUndefined();
+    expect(internalOptions).not.toHaveProperty('testHooks');
+
+    // Verify constructor-injected testHooks cannot unlock localhost/loopback targets
+    const parentProjectId = siteRepo.getById(siteId)!.projectId;
+    const loopbackSite = siteRepo.create({
+      projectId: parentProjectId,
+      name: 'Secondary Test Site',
+      baseUrl: 'https://secondary.example.com',
+    });
+
+    expect(() =>
+      orchestrator.createScan({
+        siteId: loopbackSite.id,
+        targetUrl: 'http://127.0.0.1:8080/',
+      }),
+    ).toThrowError(new RegExp(SCAN_ORCHESTRATOR_ERROR_CODES.ERR_SSRF_PROHIBITED_TARGET));
+
+    expect(() =>
+      orchestrator.createScan({
+        siteId: loopbackSite.id,
+        targetUrl: 'http://localhost:3000/',
+      }),
+    ).toThrowError(new RegExp(SCAN_ORCHESTRATOR_ERROR_CODES.ERR_SSRF_PROHIBITED_TARGET));
 
     orchestrator.dispose();
   });
 
-  it('verifies default production ScanOrchestrator has options.testHooks strictly undefined', () => {
+  it('verifies default production ScanOrchestrator has no testHooks property on options', () => {
     const defaultOrchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo);
     const internalOptions = (
       defaultOrchestrator as unknown as {
         options: { testHooks?: unknown; clientOptions?: unknown };
       }
     ).options;
-    expect(internalOptions.testHooks).toBeUndefined();
+    expect(internalOptions).not.toHaveProperty('testHooks');
     expect(internalOptions.clientOptions).toEqual({});
     defaultOrchestrator.dispose();
   });

@@ -13,6 +13,10 @@ import {
 } from '../../src/main/browser/visual-auditor.js';
 import { VisualAuditorTimeoutError } from '../../src/main/browser/visual-types.js';
 import { DEFAULT_VIEWPORT_PROFILES } from '../../src/main/browser/viewport-profiles.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../support/fixture-network.js';
 
 describe('DEF-005: VisualAuditor Navigation Deadline & Timeout Remediation Suite', () => {
   let fixtureServer: http.Server;
@@ -20,13 +24,13 @@ describe('DEF-005: VisualAuditor Navigation Deadline & Timeout Remediation Suite
   let manager: BrowserManager;
   let testStorageDir: string;
   const openSockets = new Set<net.Socket>();
-
-  const mockLookup = async () => [{ address: '93.184.216.34', family: 4 }];
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
   const smallMobile = DEFAULT_VIEWPORT_PROFILES.find(p => p.id === 'small-mobile')!;
   const desktop = DEFAULT_VIEWPORT_PROFILES.find(p => p.id === 'desktop')!;
 
   beforeAll(async () => {
+    fixtureNet = installLocalFixtureNetwork();
     testStorageDir = path.resolve('D:\\ahmed\\.tmp\\test-va-deadline-' + crypto.randomUUID());
     fs.mkdirSync(testStorageDir, { recursive: true });
 
@@ -82,10 +86,6 @@ describe('DEF-005: VisualAuditor Navigation Deadline & Timeout Remediation Suite
         authorizedOrigin: `http://audit-target.test:${fixturePort}`,
         thirdPartyPolicy: 'ALLOW_PUBLIC_SUBRESOURCES',
       },
-      testHooks: {
-        lookupFn: mockLookup,
-        pinnedIpOverride: '127.0.0.1',
-      },
     });
     await manager.launch();
   });
@@ -109,6 +109,7 @@ describe('DEF-005: VisualAuditor Navigation Deadline & Timeout Remediation Suite
       }
       await new Promise(resolve => fixtureServer.close(resolve));
     }
+    fixtureNet?.restore();
     if (fs.existsSync(testStorageDir)) {
       try {
         fs.rmSync(testStorageDir, { recursive: true, force: true });

@@ -43,9 +43,6 @@ describe('BrowserManager Lifecycle & Concurrency Pool Suite', () => {
       scopePolicy: {
         authorizedOrigin: 'http://audit-target.test',
       },
-      testHooks: {
-        allowLoopbackInTests: true,
-      },
     });
     activeManager = manager;
 
@@ -66,9 +63,6 @@ describe('BrowserManager Lifecycle & Concurrency Pool Suite', () => {
       headless: true,
       maxConcurrentPages: 1, // Strict limit of 1
       acquireTimeoutMs: 5000,
-      testHooks: {
-        allowLoopbackInTests: true,
-      },
     });
     activeManager = manager;
 
@@ -105,9 +99,6 @@ describe('BrowserManager Lifecycle & Concurrency Pool Suite', () => {
       headless: true,
       maxConcurrentPages: 1,
       acquireTimeoutMs: 300, // Short timeout for test
-      testHooks: {
-        allowLoopbackInTests: true,
-      },
     });
     activeManager = manager;
 
@@ -130,9 +121,6 @@ describe('BrowserManager Lifecycle & Concurrency Pool Suite', () => {
       headless: true,
       maxConcurrentPages: 1,
       acquireTimeoutMs: 5000,
-      testHooks: {
-        allowLoopbackInTests: true,
-      },
     });
     activeManager = manager;
 
@@ -160,9 +148,6 @@ describe('BrowserManager Lifecycle & Concurrency Pool Suite', () => {
   it('detects unexpected browser crash and marks lifecycle as crashed', async () => {
     const manager = new BrowserManager({
       headless: true,
-      testHooks: {
-        allowLoopbackInTests: true,
-      },
     });
     activeManager = manager;
 

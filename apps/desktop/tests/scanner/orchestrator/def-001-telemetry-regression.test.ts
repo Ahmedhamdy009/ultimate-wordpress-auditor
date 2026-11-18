@@ -14,7 +14,10 @@ import { SiteRepository } from '../../../src/main/db/repositories/site.repositor
 import { FindingRepository } from '../../../src/main/db/repositories/finding.repository.js';
 import { ScanRunRepository } from '../../../src/main/db/repositories/scan-run.repository.js';
 import { ScanOrchestrator } from '../../../src/main/scanner/orchestrator/orchestrator.js';
-import type { SafeHttpClientTestHooks } from '../../../src/main/scanner/client/types.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../../support/fixture-network.js';
 import type { BrowserManager, ManagedPage } from '../../../src/main/browser/browser-manager.js';
 import type { AccessibilityAuditor } from '../../../src/main/browser/accessibility-types.js';
 import type { VisualAuditor } from '../../../src/main/browser/visual-types.js';
@@ -37,11 +40,10 @@ describe('DEF-001 Live Coverage Telemetry Regression Suite', () => {
   let scanRunRepo: ScanRunRepository;
   let siteId: string;
   let projectId: string;
-  let testHooks: SafeHttpClientTestHooks;
-
-  const mockPublicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
   beforeAll(async () => {
+    fixtureNet = installLocalFixtureNetwork();
     server = http.createServer((req, res) => {
       const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
 
@@ -74,14 +76,10 @@ describe('DEF-001 Live Coverage Telemetry Regression Suite', () => {
         resolve();
       });
     });
-
-    testHooks = {
-      lookupFn: mockPublicLookup,
-      pinnedIpOverride: '127.0.0.1',
-    };
   });
 
   afterAll(async () => {
+    fixtureNet?.restore();
     await new Promise<void>(resolve => server.close(() => resolve()));
   });
 
@@ -302,8 +300,6 @@ describe('DEF-001 Live Coverage Telemetry Regression Suite', () => {
     } as unknown as VisualAuditor;
 
     const orchestrator = new ScanOrchestrator(connection, {
-      testHooks,
-      clientOptions: { allowPrivateLoopback: true },
       crawlerFactory: () => mockCrawler as unknown as BoundedCrawler,
       analyzerEngineFactory: () => mockAnalyzer as unknown as AnalyzerEngine,
       browserManagerFactory: () => mockBrowserManager,
@@ -594,8 +590,6 @@ describe('DEF-001 Live Coverage Telemetry Regression Suite', () => {
     } as unknown as BrowserManager;
 
     const orchestrator = new ScanOrchestrator(connection, {
-      testHooks,
-      clientOptions: { allowPrivateLoopback: true },
       crawlerFactory: () => mockCrawler as unknown as BoundedCrawler,
       analyzerEngineFactory: () => mockAnalyzer as unknown as AnalyzerEngine,
       browserManagerFactory: () => failingBrowserManager,
@@ -714,8 +708,6 @@ describe('DEF-001 Live Coverage Telemetry Regression Suite', () => {
     } as unknown as BrowserManager;
 
     const orchestrator = new ScanOrchestrator(connection, {
-      testHooks,
-      clientOptions: { allowPrivateLoopback: true },
       crawlerFactory: () => mockCrawler as unknown as BoundedCrawler,
       analyzerEngineFactory: () => mockAnalyzer as unknown as AnalyzerEngine,
       browserManagerFactory: () => slowBrowserManager,

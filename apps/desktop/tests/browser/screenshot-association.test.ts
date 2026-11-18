@@ -7,17 +7,22 @@ import crypto from 'node:crypto';
 import { BrowserManager } from '../../src/main/browser/manager.js';
 import { VisualAuditor } from '../../src/main/browser/visual-auditor.js';
 import { DEFAULT_VIEWPORT_PROFILES } from '../../src/main/browser/viewport-profiles.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../support/fixture-network.js';
 
 describe('Screenshot Association & Metadata Integrity Suite', () => {
   let fixtureServer: http.Server;
   let fixturePort: number;
   let manager: BrowserManager;
   let testStorageDir: string;
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
-  const mockLookup = async () => [{ address: '93.184.216.34', family: 4 }];
   const smallMobile = DEFAULT_VIEWPORT_PROFILES.find(p => p.id === 'small-mobile')!;
 
   beforeAll(async () => {
+    fixtureNet = installLocalFixtureNetwork();
     testStorageDir = path.resolve('D:\\ahmed\\.tmp\\test-assoc-' + crypto.randomUUID());
     fs.mkdirSync(testStorageDir, { recursive: true });
 
@@ -53,10 +58,6 @@ describe('Screenshot Association & Metadata Integrity Suite', () => {
         authorizedOrigin: `http://audit-target.test:${fixturePort}`,
         thirdPartyPolicy: 'ALLOW_PUBLIC_SUBRESOURCES',
       },
-      testHooks: {
-        lookupFn: mockLookup,
-        pinnedIpOverride: '127.0.0.1',
-      },
     });
     await manager.launch();
   }, 30000);
@@ -68,6 +69,7 @@ describe('Screenshot Association & Metadata Integrity Suite', () => {
     if (fixtureServer) {
       await new Promise(resolve => fixtureServer.close(resolve));
     }
+    fixtureNet?.restore();
     if (fs.existsSync(testStorageDir)) {
       try {
         fs.rmSync(testStorageDir, { recursive: true, force: true });

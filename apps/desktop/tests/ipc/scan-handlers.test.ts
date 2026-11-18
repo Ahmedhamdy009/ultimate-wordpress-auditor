@@ -31,6 +31,7 @@ import {
 } from '../../src/main/ipc/scan-handlers.js';
 import { WindowSecurityRegistry } from '../../src/main/security/registry.js';
 import { SecurityWebRequestManager } from '../../src/main/security/csp.js';
+import { mockDnsLookup } from '../support/fixture-network.js';
 
 interface MockIpcMain {
   handlers: Map<string, (event: unknown, payload: unknown) => Promise<unknown>>;
@@ -173,9 +174,10 @@ describe('Scan, Finding & Report IPC Handlers', () => {
     });
     siteId = site.id;
 
-    registerScanHandlers(dispatcher, scanRunService, findingService, reportService, undefined, {
-      lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
-    });
+    const dnsMock = mockDnsLookup(async () => [{ address: '93.184.216.34', family: 4 }]);
+    activeCleanups.push(() => dnsMock.restore());
+
+    registerScanHandlers(dispatcher, scanRunService, findingService, reportService);
   });
 
   afterEach(() => {
@@ -374,9 +376,6 @@ describe('Scan, Finding & Report IPC Handlers', () => {
       findingService,
       reportService,
       orchestrator,
-      {
-        lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
-      },
     );
 
     const createFn = isolatedIpcMain.handlers.get(IPC_CHANNELS.SCAN_CREATE)!;

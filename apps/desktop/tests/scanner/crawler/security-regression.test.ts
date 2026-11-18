@@ -3,13 +3,17 @@ import http from 'node:http';
 import type net from 'node:net';
 import { BoundedCrawler } from '../../../src/main/scanner/crawler/crawler.js';
 import { SCANNER_CLIENT_ERROR_CODES } from '../../../src/main/scanner/client/types.js';
+import {
+  installLocalFixtureNetwork,
+  mockDnsLookup,
+  type LocalFixtureNetworkHandle,
+} from '../../support/fixture-network.js';
 
 describe('BoundedCrawler Security & Regression Verification Suite', () => {
   let server: http.Server;
   let serverPort: number;
   const requestsMade: string[] = [];
-
-  const mockPublicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
   beforeAll(async () => {
     server = http.createServer((req, res) => {
@@ -75,87 +79,89 @@ describe('BoundedCrawler Security & Regression Verification Suite', () => {
 
   it('guarantees ZERO requests outside authorized scope, zero form submissions, and zero script executions', async () => {
     requestsMade.length = 0;
-    const crawler = new BoundedCrawler();
-    const entryUrl = `http://audit-target.com:${serverPort}/`;
+    fixtureNet = installLocalFixtureNetwork();
+    try {
+      const crawler = new BoundedCrawler();
+      const entryUrl = `http://audit-target.com:${serverPort}/`;
 
-    const result = await crawler.crawl({
-      entryUrl,
-      maxPages: 20,
-      maxDepth: 3,
-      maxConcurrency: 1,
-      testHooks: {
-        lookupFn: mockPublicLookup,
-        pinnedIpOverride: '127.0.0.1',
-      },
-    });
+      const result = await crawler.crawl({
+        entryUrl,
+        maxPages: 20,
+        maxDepth: 3,
+        maxConcurrency: 1,
+      });
 
-    // Verify only the entry URL and the internal safe link were requested
-    expect(requestsMade).toEqual(['/', '/internal-safe']);
+      // Verify only the entry URL and the internal safe link were requested
+      expect(requestsMade).toEqual(['/', '/internal-safe']);
 
-    // Check summary statistics
-    expect(result.summary.totalPagesAttempted).toBe(2);
-    expect(result.summary.successfulPages).toBe(2);
-    expect(result.summary.failedPages).toBe(0);
+      // Check summary statistics
+      expect(result.summary.totalPagesAttempted).toBe(2);
+      expect(result.summary.successfulPages).toBe(2);
+      expect(result.summary.failedPages).toBe(0);
 
-    // Verify external links were properly skipped from crawling
-    expect(result.summary.urlsSkippedScope).toBeGreaterThanOrEqual(5);
+      // Verify external links were properly skipped from crawling
+      expect(result.summary.urlsSkippedScope).toBeGreaterThanOrEqual(5);
 
-    // Verify discovered links on the entry page
-    const entryPage = result.pages.find(p => p.requestedUrl === entryUrl);
-    expect(entryPage).toBeDefined();
-    expect(entryPage?.isHtml).toBe(true);
+      // Verify discovered links on the entry page
+      const entryPage = result.pages.find(p => p.requestedUrl === entryUrl);
+      expect(entryPage).toBeDefined();
+      expect(entryPage?.isHtml).toBe(true);
 
-    const links = entryPage?.parsedDocument?.links ?? [];
+      const links = entryPage?.parsedDocument?.links ?? [];
 
-    // External bank link
-    const bankLink = links.find(l => l.originalValue.includes('external-bank.com'));
-    expect(bankLink).toBeDefined();
-    expect(bankLink?.isInternal).toBe(false);
-    expect(bankLink?.isEligibleForCrawl).toBe(false);
-    expect(bankLink?.rejectionReason).toBe('EXTERNAL_ORIGIN');
+      // External bank link
+      const bankLink = links.find(l => l.originalValue.includes('external-bank.com'));
+      expect(bankLink).toBeDefined();
+      expect(bankLink?.isInternal).toBe(false);
+      expect(bankLink?.isEligibleForCrawl).toBe(false);
+      expect(bankLink?.rejectionReason).toBe('EXTERNAL_ORIGIN');
 
-    // JS pseudo-protocol link
-    const jsLink = links.find(l => l.originalValue.startsWith('javascript:'));
-    expect(jsLink).toBeDefined();
-    expect(jsLink?.isEligibleForCrawl).toBe(false);
-    expect(jsLink?.rejectionReason).toBe('INVALID_OR_DISALLOWED_PROTOCOL');
+      // JS pseudo-protocol link
+      const jsLink = links.find(l => l.originalValue.startsWith('javascript:'));
+      expect(jsLink).toBeDefined();
+      expect(jsLink?.isEligibleForCrawl).toBe(false);
+      expect(jsLink?.rejectionReason).toBe('INVALID_OR_DISALLOWED_PROTOCOL');
 
-    // File URI link
-    const fileLink = links.find(l => l.originalValue.startsWith('file:'));
-    expect(fileLink).toBeDefined();
-    expect(fileLink?.isEligibleForCrawl).toBe(false);
+      // File URI link
+      const fileLink = links.find(l => l.originalValue.startsWith('file:'));
+      expect(fileLink).toBeDefined();
+      expect(fileLink?.isEligibleForCrawl).toBe(false);
 
-    // Data URI link
-    const dataLink = links.find(l => l.originalValue.startsWith('data:'));
-    expect(dataLink).toBeDefined();
-    expect(dataLink?.isEligibleForCrawl).toBe(false);
+      // Data URI link
+      const dataLink = links.find(l => l.originalValue.startsWith('data:'));
+      expect(dataLink).toBeDefined();
+      expect(dataLink?.isEligibleForCrawl).toBe(false);
 
-    // Form extraction verification: extracted without triggering submission
-    const forms = entryPage?.parsedDocument?.forms ?? [];
-    expect(forms).toHaveLength(1);
-    expect(forms[0].action).toBe(`http://audit-target.com:${serverPort}/delete-account`);
-    expect(forms[0].method).toBe('post');
+      // Form extraction verification: extracted without triggering submission
+      const forms = entryPage?.parsedDocument?.forms ?? [];
+      expect(forms).toHaveLength(1);
+      expect(forms[0].action).toBe(`http://audit-target.com:${serverPort}/delete-account`);
+      expect(forms[0].method).toBe('post');
 
-    // Verify /delete-account was NEVER requested or submitted
-    expect(requestsMade).not.toContain('/delete-account');
+      // Verify /delete-account was NEVER requested or submitted
+      expect(requestsMade).not.toContain('/delete-account');
+    } finally {
+      fixtureNet?.restore();
+      fixtureNet = null;
+    }
   });
 
   it('blocks SSRF destinations fail-closed during crawling', async () => {
     const crawler = new BoundedCrawler();
     const ssrfMetadataUrl = 'http://metadata.aws/latest/meta-data';
 
-    const mockMetadataLookup = async () => [{ address: '169.254.169.254', family: 4 }];
+    const dnsMock = mockDnsLookup(async () => [{ address: '169.254.169.254', family: 4 }]);
+    try {
+      const result = await crawler.crawl({
+        entryUrl: ssrfMetadataUrl,
+      });
 
-    const result = await crawler.crawl({
-      entryUrl: ssrfMetadataUrl,
-      testHooks: {
-        lookupFn: mockMetadataLookup,
-      },
-    });
-
-    expect(result.summary.totalPagesAttempted).toBe(1);
-    expect(result.summary.failedPages).toBe(1);
-    expect(result.errors).toHaveLength(1);
-    expect(result.errors[0].code).toBe(SCANNER_CLIENT_ERROR_CODES.ERR_SSRF_PROHIBITED_IP);
+      expect(result.summary.totalPagesAttempted).toBe(1);
+      expect(result.summary.failedPages).toBe(1);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].code).toBe(SCANNER_CLIENT_ERROR_CODES.ERR_SSRF_PROHIBITED_IP);
+    } finally {
+      dnsMock.restore();
+    }
   });
 });

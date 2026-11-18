@@ -24,6 +24,7 @@ import { createScanCreateHandler } from '../../src/main/ipc/scan-handlers.js';
 import { SecureIpcDispatcher } from '../../src/main/ipc/dispatcher.js';
 import { WindowSecurityRegistry } from '../../src/main/security/registry.js';
 import { SecurityWebRequestManager } from '../../src/main/security/csp.js';
+import { mockDnsLookup } from '../support/fixture-network.js';
 import {
   VisualAuditor,
   MIN_VISUAL_NAVIGATION_TIMEOUT_MS,
@@ -156,11 +157,8 @@ describe('DEF-006: Final Security Verification — DNS Enforcement and Zero Pers
 
   describe('1. Site Creation: Prohibited DNS Target Rejection with Zero Rows Persisted', () => {
     it('rejects target resolving to 127.0.0.1 and persists zero site rows', async () => {
-      const mockLoopbackLookup = async () => [{ address: '127.0.0.1', family: 4 }];
-      dispatcher.registerHandler(
-        IPC_CHANNELS.SITE_CREATE,
-        createSiteCreateHandler(siteService, { lookupFn: mockLoopbackLookup }),
-      );
+      mockDnsLookup(async () => [{ address: '127.0.0.1', family: 4 }]);
+      dispatcher.registerHandler(IPC_CHANNELS.SITE_CREATE, createSiteCreateHandler(siteService));
 
       const createFn = mockIpcMain.handlers.get(IPC_CHANNELS.SITE_CREATE)!;
       const res = (await createFn(createAuthorizedEvent(), {
@@ -180,11 +178,8 @@ describe('DEF-006: Final Security Verification — DNS Enforcement and Zero Pers
     });
 
     it('rejects target resolving to private RFC 1918 10.0.0.5 and persists zero site rows', async () => {
-      const mockPrivateLookup = async () => [{ address: '10.0.0.5', family: 4 }];
-      dispatcher.registerHandler(
-        IPC_CHANNELS.SITE_CREATE,
-        createSiteCreateHandler(siteService, { lookupFn: mockPrivateLookup }),
-      );
+      mockDnsLookup(async () => [{ address: '10.0.0.5', family: 4 }]);
+      dispatcher.registerHandler(IPC_CHANNELS.SITE_CREATE, createSiteCreateHandler(siteService));
 
       const createFn = mockIpcMain.handlers.get(IPC_CHANNELS.SITE_CREATE)!;
       const res = (await createFn(createAuthorizedEvent(), {
@@ -202,14 +197,11 @@ describe('DEF-006: Final Security Verification — DNS Enforcement and Zero Pers
     });
 
     it('rejects mixed DNS answers (public + loopback) fail-closed and persists zero site rows', async () => {
-      const mockMixedLookup = async () => [
+      mockDnsLookup(async () => [
         { address: '93.184.216.34', family: 4 },
         { address: '127.0.0.1', family: 4 },
-      ];
-      dispatcher.registerHandler(
-        IPC_CHANNELS.SITE_CREATE,
-        createSiteCreateHandler(siteService, { lookupFn: mockMixedLookup }),
-      );
+      ]);
+      dispatcher.registerHandler(IPC_CHANNELS.SITE_CREATE, createSiteCreateHandler(siteService));
 
       const createFn = mockIpcMain.handlers.get(IPC_CHANNELS.SITE_CREATE)!;
       const res = (await createFn(createAuthorizedEvent(), {
@@ -227,14 +219,15 @@ describe('DEF-006: Final Security Verification — DNS Enforcement and Zero Pers
     });
 
     it('rejects DNS resolution timeout fail-closed and persists zero site rows', async () => {
-      const mockHangingLookup = async () =>
-        new Promise<Array<{ address: string; family: number }>>(() => {
-          // Never resolves
-        });
+      mockDnsLookup(
+        async () =>
+          new Promise<Array<{ address: string; family: number }>>(() => {
+            // Never resolves
+          }),
+      );
       dispatcher.registerHandler(
         IPC_CHANNELS.SITE_CREATE,
         createSiteCreateHandler(siteService, {
-          lookupFn: mockHangingLookup,
           timeoutMs: 50, // Short timeout for deterministic fast test
         }),
       );
@@ -255,15 +248,12 @@ describe('DEF-006: Final Security Verification — DNS Enforcement and Zero Pers
     });
 
     it('rejects non-existent domain (ENOTFOUND) fail-closed and persists zero site rows', async () => {
-      const mockFailingLookup = async () => {
+      mockDnsLookup(async () => {
         const error = new Error('getaddrinfo ENOTFOUND non-existent.domain');
         (error as { code?: string }).code = 'ENOTFOUND';
         throw error;
-      };
-      dispatcher.registerHandler(
-        IPC_CHANNELS.SITE_CREATE,
-        createSiteCreateHandler(siteService, { lookupFn: mockFailingLookup }),
-      );
+      });
+      dispatcher.registerHandler(IPC_CHANNELS.SITE_CREATE, createSiteCreateHandler(siteService));
 
       const createFn = mockIpcMain.handlers.get(IPC_CHANNELS.SITE_CREATE)!;
       const res = (await createFn(createAuthorizedEvent(), {
@@ -281,11 +271,8 @@ describe('DEF-006: Final Security Verification — DNS Enforcement and Zero Pers
     });
 
     it('rejects empty DNS answers list fail-closed and persists zero site rows', async () => {
-      const mockEmptyLookup = async () => [];
-      dispatcher.registerHandler(
-        IPC_CHANNELS.SITE_CREATE,
-        createSiteCreateHandler(siteService, { lookupFn: mockEmptyLookup }),
-      );
+      mockDnsLookup(async () => []);
+      dispatcher.registerHandler(IPC_CHANNELS.SITE_CREATE, createSiteCreateHandler(siteService));
 
       const createFn = mockIpcMain.handlers.get(IPC_CHANNELS.SITE_CREATE)!;
       const res = (await createFn(createAuthorizedEvent(), {
@@ -303,11 +290,8 @@ describe('DEF-006: Final Security Verification — DNS Enforcement and Zero Pers
     });
 
     it('accepts legitimate public target and persists exactly one site row', async () => {
-      const mockPublicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
-      dispatcher.registerHandler(
-        IPC_CHANNELS.SITE_CREATE,
-        createSiteCreateHandler(siteService, { lookupFn: mockPublicLookup }),
-      );
+      mockDnsLookup(async () => [{ address: '93.184.216.34', family: 4 }]);
+      dispatcher.registerHandler(IPC_CHANNELS.SITE_CREATE, createSiteCreateHandler(siteService));
 
       const createFn = mockIpcMain.handlers.get(IPC_CHANNELS.SITE_CREATE)!;
       const res = (await createFn(createAuthorizedEvent(), {
@@ -334,11 +318,8 @@ describe('DEF-006: Final Security Verification — DNS Enforcement and Zero Pers
         baseUrl: 'https://legit-store.com',
       });
 
-      const mockRebindLookup = async () => [{ address: '127.0.0.1', family: 4 }];
-      dispatcher.registerHandler(
-        IPC_CHANNELS.SITE_UPDATE,
-        createSiteUpdateHandler(siteService, { lookupFn: mockRebindLookup }),
-      );
+      mockDnsLookup(async () => [{ address: '127.0.0.1', family: 4 }]);
+      dispatcher.registerHandler(IPC_CHANNELS.SITE_UPDATE, createSiteUpdateHandler(siteService));
 
       const updateFn = mockIpcMain.handlers.get(IPC_CHANNELS.SITE_UPDATE)!;
       const res = (await updateFn(createAuthorizedEvent(), {
@@ -366,7 +347,7 @@ describe('DEF-006: Final Security Verification — DNS Enforcement and Zero Pers
       });
 
       // DNS lookup now returns loopback 127.0.0.1 (simulated DNS rebinding)
-      const mockReboundLookup = async () => [{ address: '127.0.0.1', family: 4 }];
+      mockDnsLookup(async () => [{ address: '127.0.0.1', family: 4 }]);
 
       const mockCrawler = {
         crawl: vi.fn(),
@@ -390,9 +371,6 @@ describe('DEF-006: Final Security Verification — DNS Enforcement and Zero Pers
         maxConcurrentScans: 2,
         crawlerFactory,
         browserManagerFactory,
-        testHooks: {
-          lookupFn: mockReboundLookup,
-        },
       });
 
       const spyCreateScan = vi.spyOn(orchestrator, 'createScan');
@@ -401,7 +379,6 @@ describe('DEF-006: Final Security Verification — DNS Enforcement and Zero Pers
       dispatcher.registerHandler(
         IPC_CHANNELS.SCAN_CREATE,
         createScanCreateHandler(scanRunService, orchestrator, {
-          lookupFn: mockReboundLookup,
           siteService,
         }),
       );
@@ -444,18 +421,15 @@ describe('DEF-006: Final Security Verification — DNS Enforcement and Zero Pers
         baseUrl: 'http://corporate-gateway.internal',
       });
 
-      const mockPrivateLookup = async () => [{ address: '10.0.0.5', family: 4 }];
+      mockDnsLookup(async () => [{ address: '10.0.0.5', family: 4 }]);
 
-      const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-        testHooks: { lookupFn: mockPrivateLookup },
-      });
+      const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo);
 
       const spyCreateScan = vi.spyOn(orchestrator, 'createScan');
 
       dispatcher.registerHandler(
         IPC_CHANNELS.SCAN_CREATE,
         createScanCreateHandler(scanRunService, orchestrator, {
-          lookupFn: mockPrivateLookup,
           siteService,
         }),
       );
@@ -482,17 +456,13 @@ describe('DEF-006: Final Security Verification — DNS Enforcement and Zero Pers
         baseUrl: 'https://timeout-site.example.com',
       });
 
-      const mockHangingLookup = async () =>
-        new Promise<Array<{ address: string; family: number }>>(() => {});
+      mockDnsLookup(async () => new Promise<Array<{ address: string; family: number }>>(() => {}));
 
-      const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-        testHooks: { lookupFn: mockHangingLookup },
-      });
+      const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo);
 
       dispatcher.registerHandler(
         IPC_CHANNELS.SCAN_CREATE,
         createScanCreateHandler(scanRunService, orchestrator, {
-          lookupFn: mockHangingLookup,
           timeoutMs: 50,
           siteService,
         }),
@@ -518,16 +488,13 @@ describe('DEF-006: Final Security Verification — DNS Enforcement and Zero Pers
         baseUrl: 'https://legitimate-store.com',
       });
 
-      const mockPublicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
+      mockDnsLookup(async () => [{ address: '93.184.216.34', family: 4 }]);
 
-      const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-        testHooks: { lookupFn: mockPublicLookup },
-      });
+      const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo);
 
       dispatcher.registerHandler(
         IPC_CHANNELS.SCAN_CREATE,
         createScanCreateHandler(scanRunService, orchestrator, {
-          lookupFn: mockPublicLookup,
           siteService,
         }),
       );
@@ -568,6 +535,76 @@ describe('DEF-006: Final Security Verification — DNS Enforcement and Zero Pers
       // Verify zero scan runs exist in SQLite
       const runs = scanRunRepo.list({ siteId: site.id });
       expect(runs.total).toBe(0);
+    });
+
+    it('rejects hostile payloads attempting to activate test hooks via site:create, site:update, or scan:create IPC', async () => {
+      const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo);
+      dispatcher.registerHandler(IPC_CHANNELS.SITE_CREATE, createSiteCreateHandler(siteService));
+      dispatcher.registerHandler(IPC_CHANNELS.SITE_UPDATE, createSiteUpdateHandler(siteService));
+      dispatcher.registerHandler(
+        IPC_CHANNELS.SCAN_CREATE,
+        createScanCreateHandler(scanRunService, orchestrator, { siteService }),
+      );
+
+      const legitSite = siteRepo.create({
+        projectId: testProjectId,
+        name: 'Legit Site',
+        baseUrl: 'https://example.com',
+      });
+
+      const hostileOverrides = {
+        testHooks: {
+          pinnedIpOverride: '127.0.0.1',
+          allowLoopbackInTests: true,
+          lookupFn: 'bypass',
+        },
+        pinnedIpOverride: '127.0.0.1',
+        allowLoopbackInTests: true,
+        allowPrivateLoopback: true,
+        lookupFn: 'bypass',
+      };
+
+      const createSiteRes = (await mockIpcMain.handlers.get(IPC_CHANNELS.SITE_CREATE)!(
+        createAuthorizedEvent(),
+        {
+          projectId: testProjectId,
+          name: 'Hostile Localhost',
+          baseUrl: 'http://localhost:8080',
+          ...hostileOverrides,
+        },
+      )) as IPCResult<SiteDTO>;
+
+      expect(createSiteRes.success).toBe(false);
+
+      const updateSiteRes = (await mockIpcMain.handlers.get(IPC_CHANNELS.SITE_UPDATE)!(
+        createAuthorizedEvent(),
+        {
+          id: legitSite.id,
+          baseUrl: 'http://127.0.0.1:8080',
+          ...hostileOverrides,
+        },
+      )) as IPCResult<SiteDTO>;
+
+      expect(updateSiteRes.success).toBe(false);
+
+      const badSite = siteRepo.create({
+        projectId: testProjectId,
+        name: 'Stored Loopback',
+        baseUrl: 'http://127.0.0.1:9000',
+      });
+
+      const createScanRes = (await mockIpcMain.handlers.get(IPC_CHANNELS.SCAN_CREATE)!(
+        createAuthorizedEvent(),
+        {
+          siteId: badSite.id,
+          scanType: 'quick',
+          config: hostileOverrides,
+          ...hostileOverrides,
+        },
+      )) as IPCResult<ScanRunDTO>;
+
+      expect(createScanRes.success).toBe(false);
+      orchestrator.dispose();
     });
   });
 

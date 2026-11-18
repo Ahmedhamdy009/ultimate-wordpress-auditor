@@ -2,12 +2,18 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import http from 'node:http';
 import type net from 'node:net';
 import { BrowserManager } from '../../src/main/browser/manager.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../support/fixture-network.js';
 
 describe('Browser Isolation & Network Hardening Suite', () => {
   let fixtureServer: http.Server;
   let fixturePort: number;
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
   beforeAll(async () => {
+    fixtureNet = installLocalFixtureNetwork();
     fixtureServer = http.createServer((req, res) => {
       const url = new URL(req.url ?? '/', `http://${req.headers.host || 'localhost'}`);
 
@@ -56,12 +62,11 @@ describe('Browser Isolation & Network Hardening Suite', () => {
   });
 
   afterAll(async () => {
+    fixtureNet?.restore();
     await new Promise<void>(resolve => {
       fixtureServer.close(() => resolve());
     });
   });
-
-  const mockLookup = async () => [{ address: '93.184.216.34', family: 4 }];
 
   it('strictly neutralizes WebRTC APIs and restricts direct UDP communication', async () => {
     const manager = new BrowserManager({
@@ -69,10 +74,6 @@ describe('Browser Isolation & Network Hardening Suite', () => {
       maxConcurrentPages: 1,
       scopePolicy: {
         authorizedOrigin: `http://audit-target.test:${fixturePort}`,
-      },
-      testHooks: {
-        lookupFn: mockLookup,
-        pinnedIpOverride: '127.0.0.1',
       },
     });
 
@@ -141,10 +142,6 @@ describe('Browser Isolation & Network Hardening Suite', () => {
         authorizedOrigin: `http://audit-target.test:${fixturePort}`,
         thirdPartyPolicy: 'SAME_ORIGIN_ONLY',
       },
-      testHooks: {
-        lookupFn: mockLookup,
-        pinnedIpOverride: '127.0.0.1',
-      },
     });
 
     try {
@@ -202,10 +199,6 @@ describe('Browser Isolation & Network Hardening Suite', () => {
       scopePolicy: {
         authorizedOrigin: `http://audit-target.test:${fixturePort}`,
       },
-      testHooks: {
-        lookupFn: mockLookup,
-        pinnedIpOverride: '127.0.0.1',
-      },
     });
 
     try {
@@ -254,10 +247,6 @@ describe('Browser Isolation & Network Hardening Suite', () => {
         authorizedOrigin: `http://audit-target.test:${fixturePort}`,
         thirdPartyPolicy: 'SAME_ORIGIN_ONLY',
       },
-      testHooks: {
-        lookupFn: mockLookup,
-        pinnedIpOverride: '127.0.0.1',
-      },
     });
 
     try {
@@ -292,10 +281,6 @@ describe('Browser Isolation & Network Hardening Suite', () => {
         authorizedOrigin: `http://audit-target.test:${fixturePort}`,
         allowedAdditionalDomains: ['cross-origin.test'],
         thirdPartyPolicy: 'ALLOW_CUSTOM_LIST',
-      },
-      testHooks: {
-        lookupFn: mockLookup,
-        pinnedIpOverride: '127.0.0.1',
       },
     });
 

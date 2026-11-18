@@ -2,12 +2,18 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import http from 'node:http';
 import type net from 'node:net';
 import { BrowserManager } from '../../src/main/browser/manager.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../support/fixture-network.js';
 
 describe('Live Browser Security & SSRF End-to-End Suite', () => {
   let fixtureServer: http.Server;
   let fixturePort: number;
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
   beforeAll(async () => {
+    fixtureNet = installLocalFixtureNetwork();
     fixtureServer = http.createServer((req, res) => {
       const url = new URL(req.url ?? '/', `http://${req.headers.host || 'localhost'}`);
 
@@ -47,12 +53,11 @@ describe('Live Browser Security & SSRF End-to-End Suite', () => {
   });
 
   afterAll(async () => {
+    fixtureNet?.restore();
     await new Promise<void>(resolve => {
       fixtureServer.close(() => resolve());
     });
   });
-
-  const mockPublicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
 
   it('renders authorized page dynamically through controlled proxy with socket pinning', async () => {
     const manager = new BrowserManager({
@@ -61,10 +66,6 @@ describe('Live Browser Security & SSRF End-to-End Suite', () => {
       scopePolicy: {
         authorizedOrigin: `http://audit-target.test:${fixturePort}`,
         thirdPartyPolicy: 'SAME_ORIGIN_ONLY',
-      },
-      testHooks: {
-        lookupFn: mockPublicLookup,
-        pinnedIpOverride: '127.0.0.1', // Connects socket to local fixture server
       },
     });
 
@@ -162,10 +163,6 @@ describe('Live Browser Security & SSRF End-to-End Suite', () => {
         authorizedOrigin: `http://audit-target.test:${fixturePort}`,
         thirdPartyPolicy: 'SAME_ORIGIN_ONLY',
       },
-      testHooks: {
-        lookupFn: mockPublicLookup,
-        pinnedIpOverride: '127.0.0.1',
-      },
     });
 
     try {
@@ -199,10 +196,6 @@ describe('Live Browser Security & SSRF End-to-End Suite', () => {
       scopePolicy: {
         authorizedOrigin: `http://audit-target.test:${fixturePort}`,
         thirdPartyPolicy: 'SAME_ORIGIN_ONLY',
-      },
-      testHooks: {
-        lookupFn: mockPublicLookup,
-        pinnedIpOverride: '127.0.0.1',
       },
     });
 

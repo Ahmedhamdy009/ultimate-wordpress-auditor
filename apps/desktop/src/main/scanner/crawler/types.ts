@@ -6,7 +6,6 @@ import type { IncomingHttpHeaders } from 'node:http';
 import type {
   RedirectHopInfo,
   SafeHttpClientOptions,
-  SafeHttpClientTestHooks,
   TlsConnectionMetadata,
 } from '../client/types.js';
 import type { ParsedHtmlDocument } from '../parser/types.js';
@@ -88,11 +87,6 @@ export interface CrawlConfig {
    * HTTP client configuration overrides.
    */
   readonly clientOptions?: Partial<SafeHttpClientOptions>;
-
-  /**
-   * Isolated test-only hooks for dependency injection and deterministic local testing.
-   */
-  readonly testHooks?: SafeHttpClientTestHooks;
 }
 
 export interface CrawlQueueItem {

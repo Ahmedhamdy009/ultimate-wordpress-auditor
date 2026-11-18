@@ -5,12 +5,18 @@ import { SafeHttpClient } from '../../../src/main/scanner/client/http-client.js'
 import {
   SCANNER_CLIENT_ERROR_CODES,
   type SafeHttpClientOptions,
-  type SafeHttpClientTestHooks,
+  type SafeHttpRequest,
 } from '../../../src/main/scanner/client/types.js';
+import {
+  installLocalFixtureNetwork,
+  mockDnsLookup,
+  type LocalFixtureNetworkHandle,
+} from '../../support/fixture-network.js';
 
 describe('SafeHttpClient End-to-End Security & Networking Integration', () => {
   let server: http.Server;
   let serverPort: number;
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
   beforeAll(async () => {
     server = http.createServer((req, res) => {
@@ -85,46 +91,55 @@ describe('SafeHttpClient End-to-End Security & Networking Integration', () => {
         resolve();
       });
     });
+
+    fixtureNet = installLocalFixtureNetwork({
+      pinnedRoutes: {
+        '93.184.216.34': '127.0.0.1',
+        '2606:2800:220:1:248:1893:25c8:1946': '127.0.0.1',
+      },
+    });
   });
 
   afterAll(async () => {
+    fixtureNet?.restore();
     await new Promise<void>(resolve => {
       server.close(() => resolve());
     });
   });
 
-  // Mock public DNS lookup helper that resolves example.com to public IP 93.184.216.34
-  const mockPublicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
-
   describe('SSRF Protection Gatekeeper', () => {
     it('blocks request to loopback address (127.0.0.1) before opening any socket', async () => {
       const client = new SafeHttpClient();
-      const mockLoopbackLookup = async () => [{ address: '127.0.0.1', family: 4 }];
+      const dnsMock = mockDnsLookup(async () => [{ address: '127.0.0.1', family: 4 }]);
 
-      await expect(
-        client.get(`http://internal.site:${serverPort}/hello.html`, {
-          lookupFn: mockLoopbackLookup,
-        }),
-      ).rejects.toThrowError(
-        expect.objectContaining({
-          code: SCANNER_CLIENT_ERROR_CODES.ERR_SSRF_PROHIBITED_IP,
-        }),
-      );
+      try {
+        await expect(
+          client.get(`http://internal.site:${serverPort}/hello.html`),
+        ).rejects.toThrowError(
+          expect.objectContaining({
+            code: SCANNER_CLIENT_ERROR_CODES.ERR_SSRF_PROHIBITED_IP,
+          }),
+        );
+      } finally {
+        dnsMock.restore();
+      }
     });
 
     it('blocks request to cloud metadata address (169.254.169.254)', async () => {
       const client = new SafeHttpClient();
-      const mockMetadataLookup = async () => [{ address: '169.254.169.254', family: 4 }];
+      const dnsMock = mockDnsLookup(async () => [{ address: '169.254.169.254', family: 4 }]);
 
-      await expect(
-        client.get(`http://metadata.aws:${serverPort}/latest/meta-data`, {
-          lookupFn: mockMetadataLookup,
-        }),
-      ).rejects.toThrowError(
-        expect.objectContaining({
-          code: SCANNER_CLIENT_ERROR_CODES.ERR_SSRF_PROHIBITED_IP,
-        }),
-      );
+      try {
+        await expect(
+          client.get(`http://metadata.aws:${serverPort}/latest/meta-data`),
+        ).rejects.toThrowError(
+          expect.objectContaining({
+            code: SCANNER_CLIENT_ERROR_CODES.ERR_SSRF_PROHIBITED_IP,
+          }),
+        );
+      } finally {
+        dnsMock.restore();
+      }
     });
   });
 
@@ -132,10 +147,7 @@ describe('SafeHttpClient End-to-End Security & Networking Integration', () => {
     it('successfully fetches HTML page with verified headers and body buffer', async () => {
       const client = new SafeHttpClient();
 
-      const response = await client.get(`http://audit-target.com:${serverPort}/hello.html`, {
-        lookupFn: mockPublicLookup,
-        pinnedIpOverride: '127.0.0.1',
-      });
+      const response = await client.get(`http://audit-target.com:${serverPort}/hello.html`);
 
       expect(response.statusCode).toBe(200);
       expect(response.headers['content-type']).toContain('text/html');
@@ -154,13 +166,10 @@ describe('SafeHttpClient End-to-End Security & Networking Integration', () => {
 
       const response = await client.get(
         `http://[2606:2800:220:1:248:1893:25c8:1946]:${serverPort}/hello.html`,
-        {
-          pinnedIpOverride: '127.0.0.1',
-        },
       );
 
       expect(response.statusCode).toBe(200);
-      expect(response.resolvedIp).toBe('127.0.0.1');
+      expect(response.resolvedIp).toBe('2606:2800:220:1:248:1893:25c8:1946');
       expect(response.text()).toContain('Safe Scanner');
     });
   });
@@ -169,10 +178,7 @@ describe('SafeHttpClient End-to-End Security & Networking Integration', () => {
     it('returns headers with empty body for standard HEAD request', async () => {
       const client = new SafeHttpClient();
 
-      const response = await client.head(`http://audit-target.com:${serverPort}/hello.html`, {
-        lookupFn: mockPublicLookup,
-        pinnedIpOverride: '127.0.0.1',
-      });
+      const response = await client.head(`http://audit-target.com:${serverPort}/hello.html`);
 
       expect(response.statusCode).toBe(200);
       expect(response.headers['content-type']).toContain('text/html');
@@ -183,10 +189,7 @@ describe('SafeHttpClient End-to-End Security & Networking Integration', () => {
     it('automatically triggers fallback GET Range probe on 405 Method Not Allowed', async () => {
       const client = new SafeHttpClient();
 
-      const response = await client.head(`http://audit-target.com:${serverPort}/head-not-allowed`, {
-        lookupFn: mockPublicLookup,
-        pinnedIpOverride: '127.0.0.1',
-      });
+      const response = await client.head(`http://audit-target.com:${serverPort}/head-not-allowed`);
 
       // The fallback GET with Range header returned status 206 and X-Fallback-Success header
       expect(response.statusCode).toBe(206);
@@ -199,10 +202,6 @@ describe('SafeHttpClient End-to-End Security & Networking Integration', () => {
 
       const response = await client.head(
         `http://audit-target.com:${serverPort}/head-ignores-range`,
-        {
-          lookupFn: mockPublicLookup,
-          pinnedIpOverride: '127.0.0.1',
-        },
       );
 
       // Server returned 200 and tried to send 50 KB body, but stream was immediately aborted
@@ -217,8 +216,6 @@ describe('SafeHttpClient End-to-End Security & Networking Integration', () => {
       const controller = new AbortController();
 
       const promise = client.head(`http://audit-target.com:${serverPort}/head-fallback-hanging`, {
-        lookupFn: mockPublicLookup,
-        pinnedIpOverride: '127.0.0.1',
         signal: controller.signal,
         responseTimeoutMs: 5000,
       });
@@ -237,8 +234,6 @@ describe('SafeHttpClient End-to-End Security & Networking Integration', () => {
 
       await expect(
         client.head(`http://audit-target.com:${serverPort}/head-fallback-hanging`, {
-          lookupFn: mockPublicLookup,
-          pinnedIpOverride: '127.0.0.1',
           responseTimeoutMs: 150,
         }),
       ).rejects.toThrowError(
@@ -254,10 +249,7 @@ describe('SafeHttpClient End-to-End Security & Networking Integration', () => {
       const client = new SafeHttpClient();
 
       await expect(
-        client.get(`http://audit-target.com:${serverPort}/pdf-file`, {
-          lookupFn: mockPublicLookup,
-          pinnedIpOverride: '127.0.0.1',
-        }),
+        client.get(`http://audit-target.com:${serverPort}/pdf-file`),
       ).rejects.toThrowError(
         expect.objectContaining({
           code: SCANNER_CLIENT_ERROR_CODES.ERR_NON_HTML_CONTENT_TYPE,
@@ -272,8 +264,6 @@ describe('SafeHttpClient End-to-End Security & Networking Integration', () => {
 
       await expect(
         client.get(`http://audit-target.com:${serverPort}/huge-header`, {
-          lookupFn: mockPublicLookup,
-          pinnedIpOverride: '127.0.0.1',
           maxHeaderSize: 16384,
         }),
       ).rejects.toThrowError(
@@ -290,8 +280,6 @@ describe('SafeHttpClient End-to-End Security & Networking Integration', () => {
 
       await expect(
         client.get(`http://audit-target.com:${serverPort}/hanging`, {
-          lookupFn: mockPublicLookup,
-          pinnedIpOverride: '127.0.0.1',
           responseTimeoutMs: 150,
         }),
       ).rejects.toThrowError(
@@ -306,8 +294,6 @@ describe('SafeHttpClient End-to-End Security & Networking Integration', () => {
       const controller = new AbortController();
 
       const promise = client.get(`http://audit-target.com:${serverPort}/hanging`, {
-        lookupFn: mockPublicLookup,
-        pinnedIpOverride: '127.0.0.1',
         signal: controller.signal,
         responseTimeoutMs: 5000,
       });
@@ -327,8 +313,6 @@ describe('SafeHttpClient End-to-End Security & Networking Integration', () => {
       const client = new SafeHttpClient();
 
       const response = await client.get(`http://audit-target.com:${serverPort}/redirect-hop1`, {
-        lookupFn: mockPublicLookup,
-        pinnedIpOverride: '127.0.0.1',
         allowedHosts: ['audit-target.com'],
       });
 
@@ -341,7 +325,7 @@ describe('SafeHttpClient End-to-End Security & Networking Integration', () => {
     it('rejects redirect immediately when redirect destination resolves to an SSRF prohibited address', async () => {
       const client = new SafeHttpClient();
 
-      const mockLookupWithSsrfRedirect = async (hostname: string) => {
+      const dnsMock = mockDnsLookup(async (hostname: string) => {
         if (hostname === 'audit-target.com') {
           return [{ address: '93.184.216.34', family: 4 }];
         }
@@ -349,19 +333,21 @@ describe('SafeHttpClient End-to-End Security & Networking Integration', () => {
           return [{ address: '10.0.0.1', family: 4 }]; // Private IP
         }
         return [];
-      };
+      });
 
-      await expect(
-        client.get(`http://audit-target.com:${serverPort}/redirect-to-ssrf`, {
-          lookupFn: mockLookupWithSsrfRedirect,
-          pinnedIpOverride: '127.0.0.1',
-          allowedHosts: ['audit-target.com', 'internal-vault.corp'],
-        }),
-      ).rejects.toThrowError(
-        expect.objectContaining({
-          code: SCANNER_CLIENT_ERROR_CODES.ERR_SSRF_PROHIBITED_IP,
-        }),
-      );
+      try {
+        await expect(
+          client.get(`http://audit-target.com:${serverPort}/redirect-to-ssrf`, {
+            allowedHosts: ['audit-target.com', 'internal-vault.corp'],
+          }),
+        ).rejects.toThrowError(
+          expect.objectContaining({
+            code: SCANNER_CLIENT_ERROR_CODES.ERR_SSRF_PROHIBITED_IP,
+          }),
+        );
+      } finally {
+        dnsMock.restore();
+      }
     });
   });
 
@@ -372,8 +358,6 @@ describe('SafeHttpClient End-to-End Security & Networking Integration', () => {
 
       await expect(
         client.get(`http://audit-target.com:${closedPort}/test.html`, {
-          lookupFn: mockPublicLookup,
-          pinnedIpOverride: '127.0.0.1',
           connectTimeoutMs: 1000,
         }),
       ).rejects.toThrowError(
@@ -385,37 +369,37 @@ describe('SafeHttpClient End-to-End Security & Networking Integration', () => {
   });
 
   describe('Public Trust Boundary & Options Segregation', () => {
-    it('strictly confines public SafeHttpClientOptions to production settings (no ca, rejectUnauthorized, lookupFn, pinnedIpOverride)', () => {
-      // Type-level assertion: verify that public SafeHttpClientOptions lacks test/DI hooks
+    it('strictly confines SafeHttpClientOptions and SafeHttpRequest to production settings (no test hooks or TLS bypasses)', () => {
       expectTypeOf<SafeHttpClientOptions>().not.toHaveProperty('ca');
       expectTypeOf<SafeHttpClientOptions>().not.toHaveProperty('rejectUnauthorized');
       expectTypeOf<SafeHttpClientOptions>().not.toHaveProperty('lookupFn');
       expectTypeOf<SafeHttpClientOptions>().not.toHaveProperty('pinnedIpOverride');
+      expectTypeOf<SafeHttpClientOptions>().not.toHaveProperty('allowLoopbackInTests');
+      expectTypeOf<SafeHttpClientOptions>().not.toHaveProperty('allowPrivateLoopback');
 
-      // Test hooks interface explicitly contains them
-      expectTypeOf<SafeHttpClientTestHooks>().toHaveProperty('ca');
-      expectTypeOf<SafeHttpClientTestHooks>().toHaveProperty('lookupFn');
-      expectTypeOf<SafeHttpClientTestHooks>().toHaveProperty('pinnedIpOverride');
+      expectTypeOf<SafeHttpRequest>().not.toHaveProperty('testHooks');
+      expectTypeOf<SafeHttpRequest>().not.toHaveProperty('lookupFn');
+      expectTypeOf<SafeHttpRequest>().not.toHaveProperty('pinnedIpOverride');
     });
 
-    it('ignores custom CA if passed as an unknown property on public options object', async () => {
+    it('ignores custom CA or testHooks if passed as unknown properties on request/options', async () => {
       const client = new SafeHttpClient();
 
-      // If an external consumer tries to pass `ca` inside `options` via raw JSON or type bypass,
-      // SafeHttpClient.request strips non-public fields so it does NOT leak into testHooks
-      const reqWithOptionsCa = {
+      const reqWithInjectedHooks = {
         url: `http://audit-target.com:${serverPort}/hello.html`,
         options: {
           connectTimeoutMs: 2000,
           ca: 'invalid-arbitrary-ca',
+          pinnedIpOverride: '169.254.169.254',
+          allowLoopbackInTests: true,
         } as unknown as Partial<SafeHttpClientOptions>,
         testHooks: {
-          lookupFn: mockPublicLookup,
-          pinnedIpOverride: '127.0.0.1',
+          pinnedIpOverride: '169.254.169.254',
+          allowLoopbackInTests: true,
         },
-      };
+      } as SafeHttpRequest;
 
-      const res = await client.request(reqWithOptionsCa);
+      const res = await client.request(reqWithInjectedHooks);
       expect(res.statusCode).toBe(200);
       expect(res.text()).toContain('Safe Scanner');
     });

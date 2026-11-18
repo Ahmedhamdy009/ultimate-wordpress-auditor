@@ -8,8 +8,11 @@ import { SiteRepository } from '../../../src/main/db/repositories/site.repositor
 import { ScanRunRepository } from '../../../src/main/db/repositories/scan-run.repository.js';
 import { FindingRepository } from '../../../src/main/db/repositories/finding.repository.js';
 import { ScanOrchestrator } from '../../../src/main/scanner/orchestrator/orchestrator.js';
-import type { SafeHttpClientTestHooks } from '../../../src/main/scanner/client/types.js';
 import type { ScanProgressDTO } from '@auditor/shared';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../../support/fixture-network.js';
 
 describe('ScanOrchestrator Full End-to-End Execution', () => {
   let server: http.Server;
@@ -21,11 +24,10 @@ describe('ScanOrchestrator Full End-to-End Execution', () => {
   let findingRepo: FindingRepository;
   let orchestrator: ScanOrchestrator;
   let siteId: string;
-  let testHooks: SafeHttpClientTestHooks;
-
-  const mockPublicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
   beforeAll(async () => {
+    fixtureNet = installLocalFixtureNetwork();
     server = http.createServer((req, res) => {
       const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
 
@@ -94,14 +96,10 @@ describe('ScanOrchestrator Full End-to-End Execution', () => {
         resolve();
       });
     });
-
-    testHooks = {
-      lookupFn: mockPublicLookup,
-      pinnedIpOverride: '127.0.0.1',
-    };
   });
 
   afterAll(async () => {
+    fixtureNet?.restore();
     await new Promise<void>(resolve => {
       server.close(() => resolve());
     });
@@ -126,9 +124,7 @@ describe('ScanOrchestrator Full End-to-End Execution', () => {
     });
     siteId = site.id;
 
-    orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-      testHooks,
-    });
+    orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo);
   });
 
   afterEach(() => {

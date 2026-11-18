@@ -6,11 +6,6 @@ import { ScannerClientError } from './errors.js';
 export interface ResolveDnsOptions {
   readonly timeoutMs?: number;
   readonly signal?: AbortSignal;
-  readonly lookupFn?: (
-    hostname: string,
-    options: { all: true; verbatim: true },
-  ) => Promise<Array<{ address: string; family: number }>>;
-  readonly allowPrivateLoopback?: boolean;
 }
 
 /**
@@ -36,7 +31,7 @@ export async function resolveAndValidateDns(
 
   // If the hostname is already an IP address literal, validate it directly
   const directIpValidation = isIpAllowedForScan(trimmedHost);
-  if (directIpValidation.allowed || options?.allowPrivateLoopback) {
+  if (directIpValidation.allowed) {
     const family = directIpValidation.family ?? (trimmedHost.includes(':') ? 6 : 4);
     const cleanIp = directIpValidation.ip ?? trimmedHost;
     return {
@@ -48,7 +43,9 @@ export async function resolveAndValidateDns(
   } else if (
     directIpValidation.matchedEntry ||
     directIpValidation.reason?.includes('prohibited') ||
-    directIpValidation.reason?.includes('special')
+    directIpValidation.reason?.includes('special') ||
+    directIpValidation.reason?.includes('forbidden') ||
+    directIpValidation.reason?.includes('Globally Routable')
   ) {
     // Prohibited IP literal directly supplied
     throw new ScannerClientError(
@@ -69,15 +66,12 @@ export async function resolveAndValidateDns(
     );
   }
 
-  const lookupFn =
-    options?.lookupFn ?? (dns.promises.lookup as NonNullable<ResolveDnsOptions['lookupFn']>);
-
   let addresses: Array<{ address: string; family: number }>;
   let timer: NodeJS.Timeout | undefined;
   let abortListener: (() => void) | undefined;
   try {
     const promises: Promise<Array<{ address: string; family: number }>>[] = [
-      lookupFn(trimmedHost, { all: true, verbatim: true }),
+      dns.promises.lookup(trimmedHost, { all: true, verbatim: true }),
     ];
 
     if (options?.timeoutMs && options.timeoutMs > 0) {
@@ -153,7 +147,7 @@ export async function resolveAndValidateDns(
   // Validate EVERY resolved address against IANA special registries & SSRF rules
   for (const entry of addresses) {
     const validation = isIpAllowedForScan(entry.address);
-    if (!validation.allowed && !options?.allowPrivateLoopback) {
+    if (!validation.allowed) {
       throw new ScannerClientError(
         SCANNER_CLIENT_ERROR_CODES.ERR_SSRF_PROHIBITED_IP,
         `Hostname "${trimmedHost}" resolved to prohibited address "${entry.address}": ${validation.reason}`,

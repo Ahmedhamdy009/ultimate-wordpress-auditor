@@ -3,13 +3,16 @@ import http from 'node:http';
 import type net from 'node:net';
 import { BrowserManager } from '../../src/main/browser/manager.js';
 import { RuntimeResourceAuditor } from '../../src/main/browser/runtime-auditor.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../support/fixture-network.js';
 
 describe('Runtime Errors Auditor — JavaScript & Console Suite', () => {
   let fixtureServer: http.Server;
   let fixturePort: number;
   let manager: BrowserManager;
-
-  const mockLookup = async () => [{ address: '93.184.216.34', family: 4 }];
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
   async function waitForErrors(
     auditor: RuntimeResourceAuditor,
@@ -167,11 +170,8 @@ describe('Runtime Errors Auditor — JavaScript & Console Suite', () => {
       scopePolicy: {
         authorizedOrigin: `http://audit-target.test:${fixturePort}`,
       },
-      testHooks: {
-        lookupFn: mockLookup,
-        pinnedIpOverride: '127.0.0.1',
-      },
     });
+    fixtureNet = installLocalFixtureNetwork();
     await manager.launch();
   });
 
@@ -182,6 +182,7 @@ describe('Runtime Errors Auditor — JavaScript & Console Suite', () => {
     if (fixtureServer) {
       await new Promise<void>(resolve => fixtureServer.close(() => resolve()));
     }
+    fixtureNet?.restore();
   });
 
   it('captures uncaught JavaScript exceptions with error name, message, and source location', async () => {

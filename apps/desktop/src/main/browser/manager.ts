@@ -24,16 +24,12 @@ interface QueuedAcquisition {
 
 export class BrowserManager {
   private readonly options: Required<
-    Omit<
-      BrowserManagerOptions,
-      'executablePath' | 'scopePolicy' | 'proxyOptions' | 'testHooks' | 'browserType'
-    >
+    Omit<BrowserManagerOptions, 'executablePath' | 'scopePolicy' | 'proxyOptions' | 'browserType'>
   > & {
     readonly browserType?: BrowserManagerOptions['browserType'];
     readonly executablePath?: string;
     readonly scopePolicy?: BrowserScopePolicy;
     readonly proxyOptions?: BrowserManagerOptions['proxyOptions'];
-    readonly testHooks?: BrowserManagerOptions['testHooks'];
   };
 
   private state: BrowserLifecycleState = 'uninitialized';
@@ -57,7 +53,6 @@ export class BrowserManager {
       defaultViewport: options.defaultViewport ?? { width: 1440, height: 900 },
       scopePolicy: options.scopePolicy,
       proxyOptions: options.proxyOptions,
-      testHooks: options.testHooks,
     };
   }
 
@@ -143,7 +138,6 @@ export class BrowserManager {
       this.proxyServer = new BrowserProxyServer({
         ...this.options.proxyOptions,
         scopePolicy: this.options.scopePolicy,
-        testHooks: this.options.testHooks,
       });
       this.proxyUrl = await this.proxyServer.start();
 
@@ -346,7 +340,7 @@ export class BrowserManager {
       `);
 
       // Attach scope interceptor to the BrowserContext to enforce SSRF and policy on all pages/popups
-      await setupBrowserScopeInterception(context, effectivePolicy, this.options.testHooks);
+      await setupBrowserScopeInterception(context, effectivePolicy);
 
       page = await context.newPage();
 

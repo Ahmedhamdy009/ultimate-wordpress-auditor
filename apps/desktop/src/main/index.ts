@@ -92,14 +92,6 @@ let isInitialized = false;
 let isInitializing = false;
 let isLifecycleWired = false;
 
-export function getActiveDatabaseConnection(): DatabaseConnection | null {
-  return activeDatabaseConnection;
-}
-
-export function getActiveOrchestrator(): ScanOrchestrator | null {
-  return activeOrchestrator;
-}
-
 function hasUnresolvedCoreChannelRemovals(): boolean {
   return CORE_CHANNELS.some(channel => CentralIpcRegistrationManager.isRemovalFailed(channel));
 }
@@ -245,12 +237,6 @@ export function initializeMainProcess(options?: MainProcessBootstrapOptions): Se
         activeOrchestrator = orchestrator instanceof ScanOrchestrator ? orchestrator : null;
 
         activeDatabaseConnection = dbConn;
-
-        if (typeof globalThis !== 'undefined') {
-          (globalThis as Record<string, unknown>).__activeOrchestrator = activeOrchestrator;
-          (globalThis as Record<string, unknown>).__activeDatabaseConnection =
-            activeDatabaseConnection;
-        }
       } catch (dbErr) {
         if (dbConn && dbConn.isOpen()) {
           dbConn.close();
@@ -314,9 +300,6 @@ export function shutdownMainProcess(): void {
       // Ignore orchestrator disposal errors on shutdown
     } finally {
       activeOrchestrator = null;
-      if (typeof globalThis !== 'undefined') {
-        (globalThis as Record<string, unknown>).__activeOrchestrator = null;
-      }
     }
   }
 
@@ -327,9 +310,6 @@ export function shutdownMainProcess(): void {
       // Ignore database close errors on shutdown
     } finally {
       activeDatabaseConnection = null;
-      if (typeof globalThis !== 'undefined') {
-        (globalThis as Record<string, unknown>).__activeDatabaseConnection = null;
-      }
     }
   }
 
@@ -341,10 +321,6 @@ export function shutdownMainProcess(): void {
   const dispatcher = activeDispatcher;
   isInitialized = false;
   teardownAndPreserveIfUnresolved(dispatcher);
-}
-
-export function resetMainProcessLifecycleForTesting(): void {
-  isLifecycleWired = false;
 }
 
 /**

@@ -2,7 +2,10 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from
 import http from 'node:http';
 import type net from 'node:net';
 import { BoundedCrawler } from '../../../src/main/scanner/crawler/crawler.js';
-import type { SafeHttpClientTestHooks } from '../../../src/main/scanner/client/types.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../../support/fixture-network.js';
 import { DatabaseConnection } from '../../../src/main/db/connection.js';
 import { MigrationRunner } from '../../../src/main/db/migrations/runner.js';
 import { ProjectRepository } from '../../../src/main/db/repositories/project.repository.js';
@@ -15,14 +18,10 @@ import { evaluateD1CrawlCoverage, evaluateAuditCoverage } from '@auditor/shared'
 describe('DEF-007-A: Successful HTML Page Counting & Resource Classification', () => {
   let server: http.Server;
   let serverPort: number;
-  const mockPublicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
-
-  const getTestHooks = (): SafeHttpClientTestHooks => ({
-    lookupFn: mockPublicLookup,
-    pinnedIpOverride: '127.0.0.1',
-  });
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
   beforeAll(async () => {
+    fixtureNet = installLocalFixtureNetwork();
     server = http.createServer((req, res) => {
       const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
 
@@ -150,6 +149,7 @@ describe('DEF-007-A: Successful HTML Page Counting & Resource Classification', (
   });
 
   afterAll(async () => {
+    fixtureNet?.restore();
     await new Promise<void>(resolve => {
       server.close(() => resolve());
     });
@@ -160,7 +160,6 @@ describe('DEF-007-A: Successful HTML Page Counting & Resource Classification', (
     const res = await crawler.crawl({
       entryUrl: `http://audit-target.com:${serverPort}/html-ok`,
       maxPages: 5,
-      testHooks: getTestHooks(),
     });
     expect(res.summary.totalPagesAttempted).toBe(1);
     expect(res.summary.successfulPages).toBe(1);
@@ -175,7 +174,6 @@ describe('DEF-007-A: Successful HTML Page Counting & Resource Classification', (
     const res = await crawler.crawl({
       entryUrl: `http://audit-target.com:${serverPort}/xhtml-ok`,
       maxPages: 5,
-      testHooks: getTestHooks(),
     });
     expect(res.summary.totalPagesAttempted).toBe(1);
     expect(res.summary.successfulPages).toBe(1);
@@ -200,7 +198,6 @@ describe('DEF-007-A: Successful HTML Page Counting & Resource Classification', (
     const res = await crawler.crawl({
       entryUrl: `http://audit-target.com:${serverPort}${pathName}`,
       maxPages: 5,
-      testHooks: getTestHooks(),
     });
     expect(res.summary.totalPagesAttempted).toBe(1);
     expect(res.summary.successfulPages).toBe(0);
@@ -218,7 +215,6 @@ describe('DEF-007-A: Successful HTML Page Counting & Resource Classification', (
     const res = await crawler.crawl({
       entryUrl: `http://audit-target.com:${serverPort}${pathName}`,
       maxPages: 5,
-      testHooks: getTestHooks(),
     });
     expect(res.summary.totalPagesAttempted).toBe(1);
     expect(res.summary.successfulPages).toBe(0);
@@ -234,7 +230,6 @@ describe('DEF-007-A: Successful HTML Page Counting & Resource Classification', (
     const htmlRedirectRes = await crawler.crawl({
       entryUrl: `http://audit-target.com:${serverPort}/redirect-to-html`,
       maxPages: 5,
-      testHooks: getTestHooks(),
     });
     expect(htmlRedirectRes.summary.successfulPages).toBe(1);
     expect(htmlRedirectRes.summary.nonHtmlPages).toBe(0);
@@ -244,7 +239,6 @@ describe('DEF-007-A: Successful HTML Page Counting & Resource Classification', (
     const pdfRedirectRes = await crawler.crawl({
       entryUrl: `http://audit-target.com:${serverPort}/redirect-to-pdf`,
       maxPages: 5,
-      testHooks: getTestHooks(),
     });
     expect(pdfRedirectRes.summary.successfulPages).toBe(0);
     expect(pdfRedirectRes.summary.nonHtmlPages).toBe(1);
@@ -258,7 +252,6 @@ describe('DEF-007-A: Successful HTML Page Counting & Resource Classification', (
       entryUrl: `http://audit-target.com:${serverPort}/duplicate-hub`,
       maxPages: 10,
       maxDepth: 2,
-      testHooks: getTestHooks(),
     });
     // Only /duplicate-hub and /html-ok should be crawled once each
     expect(res.summary.totalPagesAttempted).toBe(2);
@@ -274,7 +267,6 @@ describe('DEF-007-A: Successful HTML Page Counting & Resource Classification', (
       maxPages: 25,
       maxDepth: 2,
       maxConcurrency: 3,
-      testHooks: getTestHooks(),
     });
 
     // 13 total URLs attempted:
@@ -327,7 +319,6 @@ describe('DEF-007-A: Successful HTML Page Counting & Resource Classification', (
 
       const browserVisited: string[] = [];
       orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-        testHooks: getTestHooks(),
         browserManagerFactory: () =>
           ({
             launch: async () => {},

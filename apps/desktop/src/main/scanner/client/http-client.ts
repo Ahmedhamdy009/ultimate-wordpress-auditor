@@ -7,7 +7,6 @@ import {
   SCANNER_CLIENT_ERROR_CODES,
   type RedirectHopInfo,
   type SafeHttpClientOptions,
-  type SafeHttpClientTestHooks,
   type SafeHttpRequest,
   type SafeHttpResponse,
   type TlsCertificateInfo,
@@ -90,11 +89,9 @@ function extractTlsMetadata(socket: stream.Duplex | undefined): TlsConnectionMet
 
 export class SafeHttpClient {
   private readonly defaultOptions: SafeHttpClientOptions;
-  private readonly defaultTestHooks?: SafeHttpClientTestHooks;
 
-  constructor(options?: Partial<SafeHttpClientOptions>, testHooks?: SafeHttpClientTestHooks) {
+  constructor(options?: Partial<SafeHttpClientOptions>) {
     this.defaultOptions = { ...DEFAULT_OPTIONS, ...options };
-    this.defaultTestHooks = testHooks;
   }
 
   /**
@@ -105,12 +102,8 @@ export class SafeHttpClient {
       ...this.defaultOptions,
       ...req.options,
     };
-    const mergedTestHooks: SafeHttpClientTestHooks | undefined =
-      req.testHooks || this.defaultTestHooks
-        ? { ...this.defaultTestHooks, ...req.testHooks }
-        : undefined;
 
-    return this.executeWithRedirects(req, mergedOptions, mergedTestHooks, 1);
+    return this.executeWithRedirects(req, mergedOptions, 1);
   }
 
   async get(
@@ -118,15 +111,9 @@ export class SafeHttpClient {
     options?: Partial<SafeHttpClientOptions> & {
       signal?: AbortSignal;
       headers?: Record<string, string>;
-      testHooks?: SafeHttpClientTestHooks;
-    } & SafeHttpClientTestHooks,
+    },
   ): Promise<SafeHttpResponse> {
-    const { signal, headers, testHooks, lookupFn, pinnedIpOverride, ca, ...cleanOptions } =
-      options ?? {};
-    const effectiveTestHooks: SafeHttpClientTestHooks | undefined =
-      testHooks || lookupFn || pinnedIpOverride || ca
-        ? { lookupFn, pinnedIpOverride, ca, ...testHooks }
-        : undefined;
+    const { signal, headers, ...cleanOptions } = options ?? {};
 
     return this.request({
       url,
@@ -134,7 +121,6 @@ export class SafeHttpClient {
       headers,
       signal,
       options: cleanOptions,
-      testHooks: effectiveTestHooks,
     });
   }
 
@@ -143,15 +129,9 @@ export class SafeHttpClient {
     options?: Partial<SafeHttpClientOptions> & {
       signal?: AbortSignal;
       headers?: Record<string, string>;
-      testHooks?: SafeHttpClientTestHooks;
-    } & SafeHttpClientTestHooks,
+    },
   ): Promise<SafeHttpResponse> {
-    const { signal, headers, testHooks, lookupFn, pinnedIpOverride, ca, ...cleanOptions } =
-      options ?? {};
-    const effectiveTestHooks: SafeHttpClientTestHooks | undefined =
-      testHooks || lookupFn || pinnedIpOverride || ca
-        ? { lookupFn, pinnedIpOverride, ca, ...testHooks }
-        : undefined;
+    const { signal, headers, ...cleanOptions } = options ?? {};
 
     return this.request({
       url,
@@ -159,14 +139,12 @@ export class SafeHttpClient {
       headers,
       signal,
       options: cleanOptions,
-      testHooks: effectiveTestHooks,
     });
   }
 
   private async executeWithRedirects(
     req: SafeHttpRequest,
     options: SafeHttpClientOptions,
-    testHooks: SafeHttpClientTestHooks | undefined,
     currentHop: number,
     redirectChain: RedirectHopInfo[] = [],
   ): Promise<SafeHttpResponse> {
@@ -195,10 +173,9 @@ export class SafeHttpClient {
     // 1. Resolve and authoritatively validate DNS (rejects any prohibited IP)
     const dnsResult = await resolveAndValidateDns(hostname, {
       signal: req.signal,
-      lookupFn: testHooks?.lookupFn,
     });
 
-    const pinnedIp = testHooks?.pinnedIpOverride ?? dnsResult.pinnedIp;
+    const pinnedIp = dnsResult.pinnedIp;
 
     // 2. Dispatch the single request hop with socket IP pinning
     const responseResult = await this.dispatchSingleHop({
@@ -211,7 +188,6 @@ export class SafeHttpClient {
       headers: req.headers,
       signal: req.signal,
       options,
-      testHooks,
       currentHop,
     });
 
@@ -233,7 +209,6 @@ export class SafeHttpClient {
             url: responseResult.redirectUrl,
           },
           options,
-          testHooks,
           nextHop,
           redirectChain,
         );
@@ -277,7 +252,6 @@ export class SafeHttpClient {
     readonly headers?: Record<string, string>;
     readonly signal?: AbortSignal;
     readonly options: SafeHttpClientOptions;
-    readonly testHooks?: SafeHttpClientTestHooks;
     readonly currentHop: number;
   }): Promise<{
     redirectUrl?: string;
@@ -297,7 +271,6 @@ export class SafeHttpClient {
       headers,
       signal,
       options,
-      testHooks,
       currentHop,
     } = args;
 
@@ -385,7 +358,6 @@ export class SafeHttpClient {
             isHttps,
             connectTimeoutMs,
             signal,
-            ca: testHooks?.ca,
           },
           (err, socket) => {
             if (err) {
@@ -459,7 +431,6 @@ export class SafeHttpClient {
                   headers,
                   signal,
                   options,
-                  testHooks,
                   currentHop,
                 });
                 settleSuccess({ response: fallbackResponse });
@@ -565,21 +536,10 @@ export class SafeHttpClient {
     readonly headers?: Record<string, string>;
     readonly signal?: AbortSignal;
     readonly options: SafeHttpClientOptions;
-    readonly testHooks?: SafeHttpClientTestHooks;
     readonly currentHop: number;
   }): Promise<SafeHttpResponse> {
-    const {
-      urlObj,
-      hostname,
-      pinnedIp,
-      port,
-      isHttps,
-      headers,
-      signal,
-      options,
-      testHooks,
-      currentHop,
-    } = args;
+    const { urlObj, hostname, pinnedIp, port, isHttps, headers, signal, options, currentHop } =
+      args;
 
     const requestModule = isHttps ? https : http;
     const connectTimeoutMs = options.connectTimeoutMs ?? DEFAULT_OPTIONS.connectTimeoutMs;
@@ -647,7 +607,6 @@ export class SafeHttpClient {
             isHttps,
             connectTimeoutMs,
             signal,
-            ca: testHooks?.ca,
           },
           (err, socket) => {
             if (err) {

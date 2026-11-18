@@ -2,18 +2,21 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import http from 'node:http';
 import type net from 'node:net';
 import { BoundedCrawler } from '../../../src/main/scanner/crawler/crawler.js';
-import type { SafeHttpClientTestHooks } from '../../../src/main/scanner/client/types.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../../support/fixture-network.js';
 
 describe('BoundedCrawler Depth-Frontier BFS & Concurrency Scheduling Audit', () => {
   let server: http.Server;
   let serverPort: number;
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
   const startTimes = new Map<string, number>();
   const finishTimes = new Map<string, number>();
 
-  const mockPublicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
-
   beforeAll(async () => {
+    fixtureNet = installLocalFixtureNetwork();
     server = http.createServer((req, res) => {
       const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
       startTimes.set(url.pathname, Date.now());
@@ -106,14 +109,10 @@ describe('BoundedCrawler Depth-Frontier BFS & Concurrency Scheduling Audit', () 
   });
 
   afterAll(async () => {
+    fixtureNet?.restore();
     await new Promise<void>(resolve => {
       server.close(() => resolve());
     });
-  });
-
-  const getTestHooks = (): SafeHttpClientTestHooks => ({
-    lookupFn: mockPublicLookup,
-    pinnedIpOverride: '127.0.0.1',
   });
 
   describe('1. True Breadth-First Traversal Under Concurrency', () => {
@@ -128,7 +127,6 @@ describe('BoundedCrawler Depth-Frontier BFS & Concurrency Scheduling Audit', () 
         maxPages: 10,
         maxDepth: 2,
         maxConcurrency: 2, // Concurrency > 1 is strictly required
-        testHooks: getTestHooks(),
       });
 
       expect(result.summary.totalPagesAttempted).toBe(5);
@@ -192,7 +190,6 @@ describe('BoundedCrawler Depth-Frontier BFS & Concurrency Scheduling Audit', () 
         maxPages: 10,
         maxDepth: 2,
         maxConcurrency: 2,
-        testHooks: getTestHooks(),
       });
 
       const run2 = await crawler.crawl({
@@ -200,7 +197,6 @@ describe('BoundedCrawler Depth-Frontier BFS & Concurrency Scheduling Audit', () 
         maxPages: 10,
         maxDepth: 2,
         maxConcurrency: 2,
-        testHooks: getTestHooks(),
       });
 
       const run3 = await crawler.crawl({
@@ -208,7 +204,6 @@ describe('BoundedCrawler Depth-Frontier BFS & Concurrency Scheduling Audit', () 
         maxPages: 10,
         maxDepth: 2,
         maxConcurrency: 2,
-        testHooks: getTestHooks(),
       });
 
       expect(run1.discoveredUrls).toEqual(run2.discoveredUrls);
@@ -226,7 +221,6 @@ describe('BoundedCrawler Depth-Frontier BFS & Concurrency Scheduling Audit', () 
         entryUrl,
         maxPages: 3,
         maxConcurrency: 5,
-        testHooks: getTestHooks(),
       });
 
       // Must never exceed maxPages under concurrent scheduling
@@ -248,7 +242,6 @@ describe('BoundedCrawler Depth-Frontier BFS & Concurrency Scheduling Audit', () 
         entryUrl,
         maxPages: 3,
         maxConcurrency: 4,
-        testHooks: getTestHooks(),
       });
 
       // Total attempted must be exactly 3
@@ -274,7 +267,6 @@ describe('BoundedCrawler Depth-Frontier BFS & Concurrency Scheduling Audit', () 
         maxDepth: 1,
         maxConcurrency: 3,
         maxDiscoveredLinksPerPage: 4, // Only 4 links allowed from root
-        testHooks: getTestHooks(),
       });
 
       // Root (1) + 4 allowed links = 5 pages

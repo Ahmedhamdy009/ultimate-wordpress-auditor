@@ -33,6 +33,7 @@ import { SecurityWebRequestManager } from '../../src/main/security/csp.js';
 import { createElectronAPI } from '../../src/preload/index.js';
 import type { ElectronAPI } from '../../src/common/ipc/contracts.js';
 import type { CrawlResult } from '../../src/main/scanner/crawler/types.js';
+import { mockDnsLookup } from '../support/fixture-network.js';
 import type { AnalyzerEngineResult } from '../../src/main/scanner/analyzers/analyzer-engine.js';
 import type { NormalizedFinding } from '../../src/main/scanner/analyzers/types.js';
 
@@ -224,15 +225,18 @@ describe('Phase 3 — Batch 3.7: End-to-End Scan Integration Workflow', () => {
       ipcMain: mockIpcMain as unknown as typeof import('electron').ipcMain,
     });
 
-    const mockPublicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
+    const dnsMock = mockDnsLookup(async () => [{ address: '93.184.216.34', family: 4 }]);
+    const originalTeardown = dispatcher.teardown.bind(dispatcher);
+    dispatcher.teardown = () => {
+      dnsMock.restore();
+      originalTeardown();
+    };
+
     registerDatabaseIpcHandlers(dispatcher, {
       projectService,
       siteService,
-      siteOptions: { lookupFn: mockPublicLookup },
     });
-    registerScanHandlers(dispatcher, scanRunService, findingService, reportService, orchestrator, {
-      lookupFn: mockPublicLookup,
-    });
+    registerScanHandlers(dispatcher, scanRunService, findingService, reportService, orchestrator);
 
     // 8. Register Trusted Web Contents & Preload Invoker
     const webContentsId = 910;

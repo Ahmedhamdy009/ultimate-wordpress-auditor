@@ -32,11 +32,8 @@ export interface ISiteService {
  * - Discards hash fragments and query parameters for base URLs.
  * - Normalizes empty pathname to '/'.
  */
-export function normalizeSiteBaseUrl(
-  rawUrl: string,
-  options?: { allowPrivateLoopback?: boolean },
-): string {
-  const { parsedUrl } = validateTargetUrlSync(rawUrl, options);
+export function normalizeSiteBaseUrl(rawUrl: string): string {
+  const { parsedUrl } = validateTargetUrlSync(rawUrl);
   const parsed = new URL(parsedUrl.toString());
 
   // Remove default port numbers

@@ -355,7 +355,7 @@ describe('Pinned Socket Factory', () => {
         }
       });
 
-      it('respects explicit rejectUnauthorized: false only when specifically provided', async () => {
+      it('strictly enforces rejectUnauthorized: true even when caller tries to pass false', async () => {
         let capturedOptions: tls.ConnectionOptions | null = null;
         const tlsSpy = vi
           .spyOn(tls, 'connect')
@@ -376,14 +376,12 @@ describe('Pinned Socket Factory', () => {
                 port: serverPort,
                 isHttps: true,
                 rejectUnauthorized: false,
-              },
+              } as unknown as Parameters<typeof createPinnedSocket>[0],
               err => (err ? reject(err) : resolve()),
             );
           });
-          expect(capturedOptions!.rejectUnauthorized).toBe(false);
-          // When false, checkServerIdentity bypasses checks
-          const mockCert = {} as tls.PeerCertificate;
-          expect(capturedOptions!.checkServerIdentity!('test.com', mockCert)).toBeUndefined();
+          expect(capturedOptions!.rejectUnauthorized).toBe(true);
+          expect(typeof capturedOptions!.checkServerIdentity).toBe('function');
         } finally {
           tlsSpy.mockRestore();
         }

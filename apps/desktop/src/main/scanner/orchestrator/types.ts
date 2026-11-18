@@ -18,7 +18,7 @@ import type { CrawlConfig, CrawlResult } from '../crawler/types.js';
 import type { BoundedCrawler } from '../crawler/crawler.js';
 import type { AnalyzerEngine, AnalyzerEngineResult } from '../analyzers/analyzer-engine.js';
 import type { AnalyzerEngineOptions, AnalyzerFinding } from '../analyzers/types.js';
-import type { SafeHttpClientOptions, SafeHttpClientTestHooks } from '../client/types.js';
+import type { SafeHttpClientOptions } from '../client/types.js';
 import type {
   BrowserManager,
   BrowserManagerOptions,
@@ -136,11 +136,6 @@ export interface ScanOrchestratorOptions {
    * Factory function to create a PerformanceAuditor instance.
    */
   readonly performanceAuditorFactory?: () => PerformanceAuditor;
-
-  /**
-   * Isolated test-only hooks for dependency injection.
-   */
-  readonly testHooks?: SafeHttpClientTestHooks;
 
   /**
    * HTTP client configuration overrides.

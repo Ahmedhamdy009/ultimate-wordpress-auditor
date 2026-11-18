@@ -101,46 +101,12 @@ export interface SafeHttpClientOptions {
   readonly allowedMediaEssences?: readonly string[];
 }
 
-/**
- * Isolated test-only hooks for dependency injection and deterministic local testing.
- * Strictly segregated from public production scanner configuration.
- * Production callers must NOT have access to these hooks.
- */
-export interface SafeHttpClientTestHooks {
-  /**
-   * Custom DNS lookup function (for deterministic testing and DI).
-   */
-  readonly lookupFn?: (
-    hostname: string,
-    options: { all: true; verbatim: true },
-  ) => Promise<Array<{ address: string; family: number }>>;
-
-  /**
-   * Optional test override for the socket connection destination IP.
-   * Allows routing TCP connections to a local test server while verifying DNS SSRF checks.
-   */
-  readonly pinnedIpOverride?: string;
-
-  /**
-   * Optional test-only trusted CA certificates for TLS verification (e.g. for testing against local HTTPS servers).
-   * Strictly segregated from public production scanner configuration.
-   */
-  readonly ca?: string | Buffer | Array<string | Buffer>;
-}
-
-/**
- * Internal union of production scanner options and test hooks.
- */
-export interface InternalSafeHttpClientOptions
-  extends SafeHttpClientOptions, SafeHttpClientTestHooks {}
-
 export interface SafeHttpRequest {
   readonly url: string;
   readonly method?: 'GET' | 'HEAD' | 'POST';
   readonly headers?: Record<string, string>;
   readonly signal?: AbortSignal;
   readonly options?: Partial<SafeHttpClientOptions>;
-  readonly testHooks?: SafeHttpClientTestHooks;
 }
 
 export interface TlsCertificateInfo {

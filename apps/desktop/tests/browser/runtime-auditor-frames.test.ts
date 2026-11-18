@@ -3,15 +3,19 @@ import http from 'node:http';
 import type net from 'node:net';
 import { BrowserManager } from '../../src/main/browser/manager.js';
 import { RuntimeResourceAuditor } from '../../src/main/browser/runtime-auditor.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../support/fixture-network.js';
 
 describe('Runtime Resource Auditor — Main Frame vs. Iframe Classification Suite', () => {
   let fixtureServer: http.Server;
   let fixturePort: number;
   let manager: BrowserManager;
-
-  const mockLookup = async () => [{ address: '93.184.216.34', family: 4 }];
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
   beforeAll(async () => {
+    fixtureNet = installLocalFixtureNetwork();
     fixtureServer = http.createServer((req, res) => {
       const url = new URL(req.url ?? '/', `http://${req.headers.host || 'localhost'}`);
 
@@ -73,10 +77,6 @@ describe('Runtime Resource Auditor — Main Frame vs. Iframe Classification Suit
         allowedAdditionalDomains: ['external-cdn.test'],
         thirdPartyPolicy: 'ALLOW_PUBLIC_SUBRESOURCES',
       },
-      testHooks: {
-        lookupFn: mockLookup,
-        pinnedIpOverride: '127.0.0.1',
-      },
     });
 
     await manager.launch();
@@ -89,6 +89,7 @@ describe('Runtime Resource Auditor — Main Frame vs. Iframe Classification Suit
     if (fixtureServer) {
       await new Promise<void>(resolve => fixtureServer.close(() => resolve()));
     }
+    fixtureNet?.restore();
   });
 
   it('1. classifies main document HTTP 404 as HTTP_MAIN_DOCUMENT_404 with critical severity', async () => {

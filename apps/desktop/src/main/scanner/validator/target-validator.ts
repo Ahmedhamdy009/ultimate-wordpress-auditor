@@ -11,12 +11,6 @@ import { ScannerClientError } from '../client/errors.js';
 
 export interface ValidateTargetOptions {
   /**
-   * If true, allows private and loopback addresses (only for internal test fixtures with pinnedIpOverride).
-   * Default: false (strictly forbidden per SECURITY_POLICY.md).
-   */
-  readonly allowPrivateLoopback?: boolean;
-
-  /**
    * DNS resolution timeout in milliseconds.
    * Default: 5,000 ms.
    */
@@ -26,14 +20,6 @@ export interface ValidateTargetOptions {
    * Optional AbortSignal for cancellation.
    */
   readonly signal?: AbortSignal;
-
-  /**
-   * Optional DNS lookup function (for dependency injection and mock testing).
-   */
-  readonly lookupFn?: (
-    hostname: string,
-    options: { all: true; verbatim: true },
-  ) => Promise<Array<{ address: string; family: number }>>;
 }
 
 export interface SyncTargetValidationResult {
@@ -54,18 +40,18 @@ export interface AsyncTargetValidationResult extends SyncTargetValidationResult 
  * Checks whether a hostname or IP string represents an RFC 6761 localhost
  * or private/loopback/special IP address according to IANA and RFC 6890.
  */
-export function isProhibitedHost(hostname: string, options?: ValidateTargetOptions): boolean {
+export function isProhibitedHost(hostname: string): boolean {
   const trimmed = hostname.trim().toLowerCase();
   if (!trimmed) return true;
 
   if (trimmed === 'localhost' || trimmed.endsWith('.localhost')) {
-    return !options?.allowPrivateLoopback;
+    return true;
   }
 
   const rawIp = trimmed.startsWith('[') && trimmed.endsWith(']') ? trimmed.slice(1, -1) : trimmed;
   if (isValidIPv4(rawIp) || isValidIPv6(rawIp)) {
     const ipCheck = isIpAllowedForScan(rawIp);
-    if (!ipCheck.allowed && !options?.allowPrivateLoopback) {
+    if (!ipCheck.allowed) {
       return true;
     }
   }
@@ -86,10 +72,7 @@ export function isProhibitedHost(hostname: string, options?: ValidateTargetOptio
  *
  * Runs BEFORE creating any site record, scan record, or database entry.
  */
-export function validateTargetUrlSync(
-  targetUrl: string,
-  options?: ValidateTargetOptions,
-): SyncTargetValidationResult {
+export function validateTargetUrlSync(targetUrl: string): SyncTargetValidationResult {
   if (!targetUrl || typeof targetUrl !== 'string') {
     throw new IPCError('Target URL must be a non-empty string', IPC_ERROR_CODES.INVALID_TARGET_URL);
   }
@@ -134,12 +117,10 @@ export function validateTargetUrlSync(
 
   // Reject RFC 6761 localhost
   if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
-    if (!options?.allowPrivateLoopback) {
-      throw new IPCError(
-        'Target destination or resolved address is prohibited by security policy',
-        IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET,
-      );
-    }
+    throw new IPCError(
+      'Target destination or resolved address is prohibited by security policy',
+      IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET,
+    );
   }
 
   // Check IPv4 or IPv6 literals (WHATWG URL automatically canonicalizes alternative formats e.g. 2130706433 -> 127.0.0.1)
@@ -151,7 +132,7 @@ export function validateTargetUrlSync(
 
   if (isIpLiteral) {
     const ipCheck = isIpAllowedForScan(rawIp);
-    if (!ipCheck.allowed && !options?.allowPrivateLoopback) {
+    if (!ipCheck.allowed) {
       throw new IPCError(
         `Target destination or resolved address is prohibited by security policy: ${ipCheck.reason ?? 'private or reserved IP'}`,
         IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET,
@@ -182,7 +163,7 @@ export async function validateTargetUrlAsync(
   targetUrl: string,
   options?: ValidateTargetOptions,
 ): Promise<AsyncTargetValidationResult> {
-  const syncResult = validateTargetUrlSync(targetUrl, options);
+  const syncResult = validateTargetUrlSync(targetUrl);
 
   if (syncResult.isIpLiteral) {
     return {
@@ -196,8 +177,6 @@ export async function validateTargetUrlAsync(
     const dnsResult = await resolveAndValidateDns(syncResult.hostname, {
       timeoutMs: options?.timeoutMs ?? 5_000,
       signal: options?.signal,
-      lookupFn: options?.lookupFn,
-      allowPrivateLoopback: options?.allowPrivateLoopback,
     });
 
     return {

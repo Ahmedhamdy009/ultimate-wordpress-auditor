@@ -5,6 +5,7 @@ import path from 'node:path';
 import type net from 'node:net';
 import { SafeHttpClient } from '../../../src/main/scanner/client/http-client.js';
 import { SCANNER_CLIENT_ERROR_CODES } from '../../../src/main/scanner/client/types.js';
+import { installLocalFixtureNetwork } from '../../support/fixture-network.js';
 
 describe('Real HTTPS & TLS Verification Integration Suite', () => {
   const fixturesDir = path.resolve(__dirname, '../../fixtures/tls');
@@ -103,96 +104,99 @@ describe('Real HTTPS & TLS Verification Integration Suite', () => {
   it('accepts valid trusted certificate when CA is provided and hostname matches SAN', async () => {
     const client = new SafeHttpClient();
     const beforeConn = connectionsCount;
+    const fixtureNet = installLocalFixtureNetwork({ ca: caCert });
 
-    const res = await client.get(`https://audit-target.com:${validPort}/index.html`, {
-      lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
-      pinnedIpOverride: '127.0.0.1',
-      ca: caCert,
-    });
+    try {
+      const res = await client.get(`https://audit-target.com:${validPort}/index.html`);
 
-    expect(res.statusCode).toBe(200);
-    expect(res.text()).toContain('Secure Audit Target');
-    // Confirm exact single TCP connection wrapped by TLS (no secondary uncontrolled socket)
-    expect(connectionsCount - beforeConn).toBe(1);
+      expect(res.statusCode).toBe(200);
+      expect(res.text()).toContain('Secure Audit Target');
+      // Confirm exact single TCP connection wrapped by TLS (no secondary uncontrolled socket)
+      expect(connectionsCount - beforeConn).toBe(1);
+    } finally {
+      fixtureNet.restore();
+    }
   });
 
   it('rejects self-signed certificate by default (without CA anchor)', async () => {
     const client = new SafeHttpClient();
+    const fixtureNet = installLocalFixtureNetwork();
 
-    await expect(
-      client.get(`https://audit-target.com:${selfsignedPort}/index.html`, {
-        lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
-        pinnedIpOverride: '127.0.0.1',
-      }),
-    ).rejects.toThrowError(
-      expect.objectContaining({
-        code: SCANNER_CLIENT_ERROR_CODES.ERR_TLS_CERT_INVALID,
-      }),
-    );
+    try {
+      await expect(
+        client.get(`https://audit-target.com:${selfsignedPort}/index.html`),
+      ).rejects.toThrowError(
+        expect.objectContaining({
+          code: SCANNER_CLIENT_ERROR_CODES.ERR_TLS_CERT_INVALID,
+        }),
+      );
+    } finally {
+      fixtureNet.restore();
+    }
   });
 
   it('rejects expired certificate even when signed by trusted CA', async () => {
     const client = new SafeHttpClient();
+    const fixtureNet = installLocalFixtureNetwork({ ca: caCert });
 
-    await expect(
-      client.get(`https://audit-target.com:${expiredPort}/index.html`, {
-        lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
-        pinnedIpOverride: '127.0.0.1',
-        ca: caCert,
-      }),
-    ).rejects.toThrowError(
-      expect.objectContaining({
-        code: SCANNER_CLIENT_ERROR_CODES.ERR_TLS_CERT_INVALID,
-      }),
-    );
+    try {
+      await expect(
+        client.get(`https://audit-target.com:${expiredPort}/index.html`),
+      ).rejects.toThrowError(
+        expect.objectContaining({
+          code: SCANNER_CLIENT_ERROR_CODES.ERR_TLS_CERT_INVALID,
+        }),
+      );
+    } finally {
+      fixtureNet.restore();
+    }
   });
 
   it('rejects certificate with mismatched hostname (unrelated-site.com vs audit-target.com)', async () => {
     const client = new SafeHttpClient();
+    const fixtureNet = installLocalFixtureNetwork({ ca: caCert });
 
-    await expect(
-      client.get(`https://audit-target.com:${mismatchPort}/index.html`, {
-        lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
-        pinnedIpOverride: '127.0.0.1',
-        ca: caCert,
-      }),
-    ).rejects.toThrowError(
-      expect.objectContaining({
-        code: SCANNER_CLIENT_ERROR_CODES.ERR_TLS_CERT_INVALID,
-      }),
-    );
+    try {
+      await expect(
+        client.get(`https://audit-target.com:${mismatchPort}/index.html`),
+      ).rejects.toThrowError(
+        expect.objectContaining({
+          code: SCANNER_CLIENT_ERROR_CODES.ERR_TLS_CERT_INVALID,
+        }),
+      );
+    } finally {
+      fixtureNet.restore();
+    }
   });
 
   it('validates IPv4 literal certificate identity matching SAN iPAddress', async () => {
     const client = new SafeHttpClient();
+    const fixtureNet = installLocalFixtureNetwork({ ca: caCert });
 
-    // validCert has subjectAltName=DNS:audit-target.com,IP:93.184.216.34
-    // URL hostname is public IP 93.184.216.34 (passes SSRF check)
-    // pinnedIpOverride routes socket to local validPort
-    // RFC 6066: SNI servername is omitted for IP literals
-    // tls.checkServerIdentity matches 93.184.216.34 against iPAddress SAN
-    const res = await client.get(`https://93.184.216.34:${validPort}/index.html`, {
-      ca: caCert,
-      pinnedIpOverride: '127.0.0.1',
-    });
+    try {
+      const res = await client.get(`https://93.184.216.34:${validPort}/index.html`);
 
-    expect(res.statusCode).toBe(200);
-    expect(res.text()).toContain('Secure Audit Target');
+      expect(res.statusCode).toBe(200);
+      expect(res.text()).toContain('Secure Audit Target');
+    } finally {
+      fixtureNet.restore();
+    }
   });
 
   it('rejects IPv4 literal certificate when certificate lacks matching IP SAN', async () => {
     const client = new SafeHttpClient();
+    const fixtureNet = installLocalFixtureNetwork({ ca: caCert });
 
-    // mismatchCert only has subjectAltName=DNS:unrelated-site.com (lacks IP:93.184.216.34)
-    await expect(
-      client.get(`https://93.184.216.34:${mismatchPort}/index.html`, {
-        ca: caCert,
-        pinnedIpOverride: '127.0.0.1',
-      }),
-    ).rejects.toThrowError(
-      expect.objectContaining({
-        code: SCANNER_CLIENT_ERROR_CODES.ERR_TLS_CERT_INVALID,
-      }),
-    );
+    try {
+      await expect(
+        client.get(`https://93.184.216.34:${mismatchPort}/index.html`),
+      ).rejects.toThrowError(
+        expect.objectContaining({
+          code: SCANNER_CLIENT_ERROR_CODES.ERR_TLS_CERT_INVALID,
+        }),
+      );
+    } finally {
+      fixtureNet.restore();
+    }
   });
 });

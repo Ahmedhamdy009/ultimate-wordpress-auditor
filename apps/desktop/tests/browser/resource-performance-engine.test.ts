@@ -19,6 +19,10 @@ import type {
   RawResourceTimingEntry,
 } from '../../src/main/browser/resource-performance-types.js';
 import type { ResourceCategory } from '../../src/main/browser/runtime-types.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../support/fixture-network.js';
 
 describe('ResourcePerformanceEngine Suite (Batch 7.3.2)', () => {
   const createBaseRawData = (
@@ -1356,7 +1360,7 @@ describe('ResourcePerformanceEngine Suite (Batch 7.3.2)', () => {
         crossOriginServer.listen(0, '127.0.0.1', () => resolve());
       });
       const crossAddr = crossOriginServer.address() as AddressInfo;
-      crossOriginUrl = `http://127.0.0.1:${crossAddr.port}`;
+      crossOriginUrl = `http://cdn-fixture.test:${crossAddr.port}`;
 
       server = http.createServer((req, res) => {
         const url = req.url || '/';
@@ -1440,22 +1444,26 @@ describe('ResourcePerformanceEngine Suite (Batch 7.3.2)', () => {
         server.listen(0, '127.0.0.1', () => resolve());
       });
       const addr = server.address() as AddressInfo;
-      serverUrl = `http://127.0.0.1:${addr.port}`;
+      serverUrl = `http://resource-fixture.test:${addr.port}`;
 
+      const fixtureNet: LocalFixtureNetworkHandle = installLocalFixtureNetwork();
       browserManager = new BrowserManager({
         headless: true,
         scopePolicy: {
           authorizedOrigin: serverUrl,
           thirdPartyPolicy: 'ALLOW_PUBLIC_SUBRESOURCES',
         },
-        testHooks: {
-          allowLoopbackInTests: true,
-        },
       });
+      (browserManager as unknown as { __fixtureNet?: LocalFixtureNetworkHandle }).__fixtureNet =
+        fixtureNet;
       await browserManager.launch();
     });
 
     afterAll(async () => {
+      const bm = browserManager as unknown as {
+        __fixtureNet?: LocalFixtureNetworkHandle;
+      } | null;
+      bm?.__fixtureNet?.restore();
       if (browserManager) {
         await browserManager.close().catch(() => {});
       }

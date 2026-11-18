@@ -22,6 +22,11 @@ import {
   ScreenshotManager,
 } from '../../src/main/browser/index.js';
 import { DEFAULT_AUDIT_MODULES } from '@auditor/shared';
+import {
+  installLocalFixtureNetwork,
+  mockDnsLookup,
+  type LocalFixtureNetworkHandle,
+} from '../support/fixture-network.js';
 
 describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
   let fixtureServer: http.Server;
@@ -36,15 +41,10 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
   let testReportsDir: string;
   let testSiteId: string;
   let baseUrl: string;
-
-  const mockPublicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
-  const testHooks = {
-    lookupFn: mockPublicLookup,
-    pinnedIpOverride: '127.0.0.1',
-    allowLoopbackInTests: true,
-  };
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
   beforeAll(async () => {
+    fixtureNet = installLocalFixtureNetwork();
     testReportsDir = path.resolve('D:\\ahmed\\.tmp\\unified-test-reports-' + crypto.randomUUID());
     fs.mkdirSync(testReportsDir, { recursive: true });
 
@@ -140,6 +140,7 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
   });
 
   afterAll(async () => {
+    fixtureNet?.restore();
     if (fixtureServer) {
       await new Promise<void>(resolve => fixtureServer.close(() => resolve()));
     }
@@ -186,9 +187,7 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
   });
 
   it('1. executes complete unified scan with crawler, analyzers, and browser engines', async () => {
-    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-      testHooks,
-    });
+    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo);
 
     const progressStages: string[] = [];
     const completedRun = await orchestrator.startScan(
@@ -241,9 +240,7 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
   }, 45000);
 
   it('2. generates standalone HTML, JSON, and CSV reports from persisted findings', async () => {
-    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-      testHooks,
-    });
+    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo);
 
     const completedRun = await orchestrator.startScan({
       siteId: testSiteId,
@@ -299,9 +296,7 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
   }, 30000);
 
   it('3. selectively disables modules and verifies excluded findings', async () => {
-    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-      testHooks,
-    });
+    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo);
 
     const completedRun = await orchestrator.startScan({
       siteId: testSiteId,
@@ -340,7 +335,6 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
   it('4. isolates browser launch failure with SYS_BROWSER_UNAVAILABLE while preserving HTTP findings', async () => {
     // Orchestrator with browser factory that intentionally fails
     const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-      testHooks,
       browserManagerFactory: () => {
         throw new Error('Simulated Chromium binary missing or corrupted');
       },
@@ -373,9 +367,7 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
   }, 20000);
 
   it('5. isolates single page failure during browser audit without failing the entire scan', async () => {
-    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-      testHooks,
-    });
+    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo);
 
     const completedRun = await orchestrator.startScan({
       siteId: testSiteId,
@@ -396,9 +388,7 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
   }, 30000);
 
   it('6. deduplicates identical findings across pages and tracks occurrences', async () => {
-    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-      testHooks,
-    });
+    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo);
 
     const completedRun = await orchestrator.startScan({
       siteId: testSiteId,
@@ -428,9 +418,7 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
   }, 30000);
 
   it('7. redacts sensitive attributes, form data, and raw identifiers', async () => {
-    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-      testHooks,
-    });
+    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo);
 
     const completedRun = await orchestrator.startScan({
       siteId: testSiteId,
@@ -456,9 +444,7 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
   }, 25000);
 
   it('8. handles cancellation during crawling and browser auditing cleanly', async () => {
-    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-      testHooks,
-    });
+    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo);
 
     const createdRun = orchestrator.createScan({
       siteId: testSiteId,
@@ -483,7 +469,7 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
   }, 20000);
 
   it('9. deduplicates findings without composite key collisions across selectors, viewports, and subresources', async () => {
-    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, { testHooks });
+    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo);
     const scanRunId = crypto.randomUUID();
 
     const rawFindings = [
@@ -624,7 +610,6 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
 
   it('10. isolates screenshot capture failure without failing the visual audit or scan', async () => {
     const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-      testHooks,
       visualAuditorFactory: (manager, opts) => {
         const auditor = new VisualAuditor(manager, opts);
         (auditor as unknown as { screenshotManager: unknown }).screenshotManager = {
@@ -658,7 +643,6 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
 
   it('11. isolates axe-core audit failure or timeout without crashing the orchestrator', async () => {
     const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-      testHooks,
       accessibilityAuditorFactory: () =>
         ({
           auditPage: async () => {
@@ -691,9 +675,7 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
       throw new Error('Simulated SQLite disk I/O error during batchCreate');
     };
 
-    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, brokenFindingRepo, {
-      testHooks,
-    });
+    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, brokenFindingRepo);
 
     const createdRun = orchestrator.createScan({
       siteId: testSiteId,
@@ -715,7 +697,7 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
   }, 20000);
 
   it('13. guarantees that report generation failure after persistence does not discard committed findings', async () => {
-    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, { testHooks });
+    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo);
     const completedRun = await orchestrator.startScan({
       siteId: testSiteId,
       scanType: 'quick',
@@ -747,7 +729,7 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
   }, 20000);
 
   it('14. handles cancellation cleanly during browser page navigation', async () => {
-    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, { testHooks });
+    const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo);
     const created = orchestrator.createScan({
       siteId: testSiteId,
       scanType: 'quick',
@@ -772,7 +754,7 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
     let browserMgr: BrowserManager | null = null;
 
     try {
-      browserMgr = new BrowserManager({ testHooks });
+      browserMgr = new BrowserManager();
       await browserMgr.launch();
 
       const visualAuditor = new VisualAuditor(browserMgr, {
@@ -820,25 +802,23 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
     ];
 
     for (const target of ssrfTargets) {
-      const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-        testHooks: {
-          lookupFn: async () => [{ address: target.ip, family: target.family }],
-          allowLoopbackInTests: false, // Strict production-grade SSRF defense enabled
-        },
-      });
+      const dnsMock = mockDnsLookup(async () => [{ address: target.ip, family: target.family }]);
+      const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo);
+      try {
+        const ssrfRun = await orchestrator.startScan({
+          siteId: testSiteId,
+          scanType: 'quick',
+          config: { enableBrowserAudit: false, maxPages: 1 },
+        });
 
-      const ssrfRun = await orchestrator.startScan({
-        siteId: testSiteId,
-        scanType: 'quick',
-        config: { enableBrowserAudit: false, maxPages: 1 },
-      });
-
-      // Scan completes because crawler safely isolates and rejects the prohibited target
-      expect(ssrfRun.status).toBe('completed');
-      expect(ssrfRun.summary?.pagesFailed).toBeGreaterThanOrEqual(1);
-      expect(ssrfRun.summary?.pagesScanned).toBe(0);
-
-      orchestrator.dispose();
+        // Scan completes because crawler safely isolates and rejects the prohibited target
+        expect(ssrfRun.status).toBe('completed');
+        expect(ssrfRun.summary?.pagesFailed).toBeGreaterThanOrEqual(1);
+        expect(ssrfRun.summary?.pagesScanned).toBe(0);
+      } finally {
+        orchestrator.dispose();
+        dnsMock.restore();
+      }
     }
   }, 40000);
 
@@ -847,7 +827,6 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
     let screenshotMgrRef: ScreenshotManager | null = null;
 
     const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-      testHooks,
       visualAuditorFactory: (manager, opts) => {
         const auditor = new VisualAuditor(manager, opts);
         screenshotMgrRef = (auditor as unknown as { screenshotManager: ScreenshotManager })
@@ -913,7 +892,6 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
     let a11yEvaluated = false;
 
     const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-      testHooks,
       accessibilityAuditorFactory: opts => {
         const auditor = new AccessibilityAuditor(opts);
         const originalAuditPage = auditor.auditPage.bind(auditor);
@@ -1005,9 +983,7 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
     fs.writeFileSync(dummyReportPath, '<html><body>Valid Report Content</body></html>', 'utf8');
 
     // 4. Initialize a fresh orchestrator instance (simulating application restart)
-    const freshOrchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-      testHooks,
-    });
+    const freshOrchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo);
     expect(freshOrchestrator.getActiveScans().length).toBe(0);
 
     // 5. Execute startup recovery
@@ -1042,7 +1018,6 @@ describe('Batch 4.5 — Unified Scan Workflow Integration Suite', () => {
   it('20. accurately reflects partial completion, engine failures, and coverage metrics without claiming multi-engine success', async () => {
     // Orchestrator with simulated browser launch failure (SYS_BROWSER_UNAVAILABLE)
     const orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-      testHooks,
       browserManagerFactory: () => {
         throw new Error('Chromium binary missing or launch failed');
       },

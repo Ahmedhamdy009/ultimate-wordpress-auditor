@@ -7,9 +7,12 @@ import { ProjectRepository } from '../../../src/main/db/repositories/project.rep
 import { SiteRepository } from '../../../src/main/db/repositories/site.repository.js';
 import { FindingRepository } from '../../../src/main/db/repositories/finding.repository.js';
 import { ScanOrchestrator } from '../../../src/main/scanner/orchestrator/orchestrator.js';
-import type { SafeHttpClientTestHooks } from '../../../src/main/scanner/client/types.js';
 import type { BrowserManager, ManagedPage } from '../../../src/main/browser/browser-manager.js';
 import type { AccessibilityAuditor } from '../../../src/main/browser/accessibility-types.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../../support/fixture-network.js';
 
 describe('ScanOrchestrator Coverage Semantics & Browser Budget Safety Suite', () => {
   let server: http.Server;
@@ -20,11 +23,10 @@ describe('ScanOrchestrator Coverage Semantics & Browser Budget Safety Suite', ()
   let findingRepo: FindingRepository;
   let siteId: string;
   let projectId: string;
-  let testHooks: SafeHttpClientTestHooks;
-
-  const mockPublicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
   beforeAll(async () => {
+    fixtureNet = installLocalFixtureNetwork();
     server = http.createServer((req, res) => {
       const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
 
@@ -60,14 +62,10 @@ describe('ScanOrchestrator Coverage Semantics & Browser Budget Safety Suite', ()
         resolve();
       });
     });
-
-    testHooks = {
-      lookupFn: mockPublicLookup,
-      pinnedIpOverride: '127.0.0.1',
-    };
   });
 
   afterAll(async () => {
+    fixtureNet?.restore();
     await new Promise<void>(resolve => server.close(() => resolve()));
   });
 
@@ -141,8 +139,6 @@ describe('ScanOrchestrator Coverage Semantics & Browser Budget Safety Suite', ()
     } as unknown as AccessibilityAuditor;
 
     const orchestrator = new ScanOrchestrator(connection, {
-      testHooks,
-      clientOptions: { allowPrivateLoopback: true },
       browserManagerFactory: () => mockBrowserManager,
       accessibilityAuditorFactory: () => mockA11yAuditor,
     });
@@ -223,8 +219,6 @@ describe('ScanOrchestrator Coverage Semantics & Browser Budget Safety Suite', ()
     } as unknown as AccessibilityAuditor;
 
     const orchestrator = new ScanOrchestrator(connection, {
-      testHooks,
-      clientOptions: { allowPrivateLoopback: true },
       browserManagerFactory: () => mockBrowserManager,
       accessibilityAuditorFactory: () => mockA11yAuditor,
     });
@@ -312,8 +306,6 @@ describe('ScanOrchestrator Coverage Semantics & Browser Budget Safety Suite', ()
     } as unknown as AccessibilityAuditor;
 
     const orchestrator = new ScanOrchestrator(connection, {
-      testHooks,
-      clientOptions: { allowPrivateLoopback: true },
       browserManagerFactory: () => mockBrowserManager,
       accessibilityAuditorFactory: () => mockA11yAuditor,
     });
@@ -349,10 +341,7 @@ describe('ScanOrchestrator Coverage Semantics & Browser Budget Safety Suite', ()
   });
 
   it('4. User Cancellation: cleanly sets status to cancelled and preserves cancellation reason', async () => {
-    const orchestrator = new ScanOrchestrator(connection, {
-      testHooks,
-      clientOptions: { allowPrivateLoopback: true },
-    });
+    const orchestrator = new ScanOrchestrator(connection);
 
     const scan = orchestrator.createScan({ siteId });
     const cancelled = await orchestrator.cancelScan(

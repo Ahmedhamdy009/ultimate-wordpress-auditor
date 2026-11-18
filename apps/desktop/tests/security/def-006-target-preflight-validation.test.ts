@@ -28,6 +28,7 @@ import { createScanCreateHandler } from '../../src/main/ipc/scan-handlers.js';
 import { SecureIpcDispatcher } from '../../src/main/ipc/dispatcher.js';
 import { WindowSecurityRegistry } from '../../src/main/security/registry.js';
 import { SecurityWebRequestManager } from '../../src/main/security/csp.js';
+import { mockDnsLookup } from '../support/fixture-network.js';
 
 function createMockIpcMain() {
   const handlers = new Map<string, (event: unknown, ...args: unknown[]) => Promise<unknown>>();
@@ -333,76 +334,93 @@ describe('DEF-006: Strict Pre-flight Target Validation & Zero-Persistence Bounda
 
   describe('2. Bounded DNS Resolution & Fail-Closed Hostname Validation (validateTargetUrlAsync)', () => {
     it('Case 17: rejects public domain name resolving to loopback address (127.0.0.1)', async () => {
-      const mockLookup = async () => [{ address: '127.0.0.1', family: 4 }];
+      const dnsMock = mockDnsLookup(async () => [{ address: '127.0.0.1', family: 4 }]);
 
-      await expect(
-        validateTargetUrlAsync('http://malicious-rebind.com', { lookupFn: mockLookup }),
-      ).rejects.toThrowError(
-        expect.objectContaining({ code: IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET }),
-      );
+      try {
+        await expect(validateTargetUrlAsync('http://malicious-rebind.com')).rejects.toThrowError(
+          expect.objectContaining({ code: IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET }),
+        );
+      } finally {
+        dnsMock.restore();
+      }
     });
 
     it('Case 18: rejects public domain name resolving to private address (10.0.0.5)', async () => {
-      const mockLookup = async () => [{ address: '10.0.0.5', family: 4 }];
+      const dnsMock = mockDnsLookup(async () => [{ address: '10.0.0.5', family: 4 }]);
 
-      await expect(
-        validateTargetUrlAsync('http://internal-corp-gateway.com', { lookupFn: mockLookup }),
-      ).rejects.toThrowError(
-        expect.objectContaining({ code: IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET }),
-      );
+      try {
+        await expect(
+          validateTargetUrlAsync('http://internal-corp-gateway.com'),
+        ).rejects.toThrowError(
+          expect.objectContaining({ code: IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET }),
+        );
+      } finally {
+        dnsMock.restore();
+      }
     });
 
     it('Case 19: fail-closed rejection on mixed round-robin DNS answers (1 public + 1 private/loopback)', async () => {
-      const mixedLookup = async () => [
+      const dnsMock = mockDnsLookup(async () => [
         { address: '93.184.216.34', family: 4 }, // public example.com IP
         { address: '127.0.0.1', family: 4 }, // loopback IP
-      ];
+      ]);
 
-      await expect(
-        validateTargetUrlAsync('http://round-robin-rebind.com', { lookupFn: mixedLookup }),
-      ).rejects.toThrowError(
-        expect.objectContaining({ code: IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET }),
-      );
+      try {
+        await expect(validateTargetUrlAsync('http://round-robin-rebind.com')).rejects.toThrowError(
+          expect.objectContaining({ code: IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET }),
+        );
+      } finally {
+        dnsMock.restore();
+      }
     });
 
     it('Case 20: DNS timeout handling aborts promptly with ERR_DNS_RESOLUTION_FAILED', async () => {
-      const hangingLookup = async () =>
-        new Promise<Array<{ address: string; family: number }>>(() => {
-          // intentionally hangs indefinitely
-        });
-
-      await expect(
-        validateTargetUrlAsync('http://slow-dns.example.com', {
-          lookupFn: hangingLookup,
-          timeoutMs: 50, // 50ms bounded timeout
-        }),
-      ).rejects.toThrowError(
-        expect.objectContaining({ code: IPC_ERROR_CODES.DNS_RESOLUTION_FAILED }),
+      const dnsMock = mockDnsLookup(
+        async () =>
+          new Promise<Array<{ address: string; family: number }>>(() => {
+            // intentionally hangs indefinitely
+          }),
       );
+
+      try {
+        await expect(
+          validateTargetUrlAsync('http://slow-dns.example.com', {
+            timeoutMs: 50, // 50ms bounded timeout
+          }),
+        ).rejects.toThrowError(
+          expect.objectContaining({ code: IPC_ERROR_CODES.DNS_RESOLUTION_FAILED }),
+        );
+      } finally {
+        dnsMock.restore();
+      }
     });
 
     it('Case 21: DNS system error (ENOTFOUND) rejects with ERR_DNS_RESOLUTION_FAILED', async () => {
-      const failingLookup = async () => {
+      const dnsMock = mockDnsLookup(async () => {
         const err = new Error('getaddrinfo ENOTFOUND non-existent.domain');
         (err as unknown as { code: string }).code = 'ENOTFOUND';
         throw err;
-      };
+      });
 
-      await expect(
-        validateTargetUrlAsync('http://non-existent.domain', { lookupFn: failingLookup }),
-      ).rejects.toThrowError(
-        expect.objectContaining({ code: IPC_ERROR_CODES.DNS_RESOLUTION_FAILED }),
-      );
+      try {
+        await expect(validateTargetUrlAsync('http://non-existent.domain')).rejects.toThrowError(
+          expect.objectContaining({ code: IPC_ERROR_CODES.DNS_RESOLUTION_FAILED }),
+        );
+      } finally {
+        dnsMock.restore();
+      }
     });
 
     it('Case 22: empty DNS resolution answers ([]) reject with ERR_DNS_RESOLUTION_FAILED', async () => {
-      const emptyLookup = async () => [];
+      const dnsMock = mockDnsLookup(async () => []);
 
-      await expect(
-        validateTargetUrlAsync('http://empty-answers.domain', { lookupFn: emptyLookup }),
-      ).rejects.toThrowError(
-        expect.objectContaining({ code: IPC_ERROR_CODES.DNS_RESOLUTION_FAILED }),
-      );
+      try {
+        await expect(validateTargetUrlAsync('http://empty-answers.domain')).rejects.toThrowError(
+          expect.objectContaining({ code: IPC_ERROR_CODES.DNS_RESOLUTION_FAILED }),
+        );
+      } finally {
+        dnsMock.restore();
+      }
     });
   });
 
@@ -537,27 +555,30 @@ describe('DEF-006: Strict Pre-flight Target Validation & Zero-Persistence Bounda
     });
 
     it('Case 26: valid public targets are accepted cleanly across all application boundaries', async () => {
-      const mockPublicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
+      const dnsMock = mockDnsLookup(async () => [{ address: '93.184.216.34', family: 4 }]);
+      let site: ReturnType<typeof siteService.createSite>;
 
-      // 1. Synchronous validation passes
-      const syncResult = validateTargetUrlSync('https://example.com/blog');
-      expect(syncResult.valid).toBe(true);
-      expect(syncResult.hostname).toBe('example.com');
+      try {
+        // 1. Synchronous validation passes
+        const syncResult = validateTargetUrlSync('https://example.com/blog');
+        expect(syncResult.valid).toBe(true);
+        expect(syncResult.hostname).toBe('example.com');
 
-      // 2. Async DNS validation passes
-      const asyncResult = await validateTargetUrlAsync('https://example.com/blog', {
-        lookupFn: mockPublicLookup,
-      });
-      expect(asyncResult.valid).toBe(true);
-      expect(asyncResult.pinnedIp).toBe('93.184.216.34');
+        // 2. Async DNS validation passes
+        const asyncResult = await validateTargetUrlAsync('https://example.com/blog');
+        expect(asyncResult.valid).toBe(true);
+        expect(asyncResult.pinnedIp).toBe('93.184.216.34');
 
-      // 3. Site creation succeeds
-      const site = siteService.createSite({
-        projectId,
-        name: 'Example Public Site',
-        baseUrl: 'https://example.com/blog',
-      });
-      expect(site.id).toBeDefined();
+        // 3. Site creation succeeds
+        site = siteService.createSite({
+          projectId,
+          name: 'Example Public Site',
+          baseUrl: 'https://example.com/blog',
+        });
+        expect(site.id).toBeDefined();
+      } finally {
+        dnsMock.restore();
+      }
       expect(site.baseUrl).toBe('https://example.com/blog');
 
       // 4. Scan creation succeeds

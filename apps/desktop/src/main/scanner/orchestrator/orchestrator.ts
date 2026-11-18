@@ -104,7 +104,6 @@ export class ScanOrchestrator implements IScanOrchestrator {
     ) => AccessibilityAuditor;
     readonly runtimeAuditorFactory: (options?: RuntimeAuditorOptions) => RuntimeResourceAuditor;
     readonly performanceAuditorFactory: () => PerformanceAuditor;
-    readonly testHooks?: ScanOrchestratorOptions['testHooks'];
     readonly clientOptions?: ScanOrchestratorOptions['clientOptions'];
   };
 
@@ -148,7 +147,6 @@ export class ScanOrchestrator implements IScanOrchestrator {
         (opts => new RuntimeResourceAuditor(opts ?? { authorizedOrigin: '' })),
       performanceAuditorFactory:
         options?.performanceAuditorFactory ?? (() => new PerformanceAuditor()),
-      testHooks: options?.testHooks,
       clientOptions: options?.clientOptions ?? {},
     };
   }
@@ -223,9 +221,7 @@ export class ScanOrchestrator implements IScanOrchestrator {
 
     // Strict pre-flight target validation before creating any scan run record
     try {
-      validateTargetUrlSync(rawTargetUrl, {
-        allowPrivateLoopback: Boolean(this.options.testHooks?.pinnedIpOverride),
-      });
+      validateTargetUrlSync(rawTargetUrl);
     } catch (valErr: unknown) {
       if (valErr instanceof IPCError && valErr.code === IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET) {
         throw new ScanOrchestratorError(
@@ -406,7 +402,6 @@ export class ScanOrchestrator implements IScanOrchestrator {
         userAgent: config.userAgent,
         signal: abortController.signal,
         clientOptions: this.options.clientOptions,
-        testHooks: this.options.testHooks,
       });
 
       const onCrawlProgress = (cp: CrawlProgress): void => {
@@ -432,7 +427,6 @@ export class ScanOrchestrator implements IScanOrchestrator {
           userAgent: config.userAgent,
           signal: abortController.signal,
           clientOptions: this.options.clientOptions,
-          testHooks: this.options.testHooks,
         },
         onCrawlProgress,
       );
@@ -461,7 +455,7 @@ export class ScanOrchestrator implements IScanOrchestrator {
       this.notifyProgress(context, onProgress, true);
 
       const analyzerEngine = this.options.analyzerEngineFactory();
-      const httpClient = new SafeHttpClient(this.options.clientOptions, this.options.testHooks);
+      const httpClient = new SafeHttpClient(this.options.clientOptions);
       const analyzerResult = await analyzerEngine.runAnalysis(crawlResult, {
         authorizedOrigin: context.authorizedOrigin,
         entryUrl: context.entryUrl,
@@ -1321,18 +1315,6 @@ export class ScanOrchestrator implements IScanOrchestrator {
           authorizedOrigin: context.authorizedOrigin,
           thirdPartyPolicy: 'ALLOW_PUBLIC_SUBRESOURCES',
         },
-        testHooks: this.options.testHooks
-          ? {
-              lookupFn: this.options.testHooks.lookupFn,
-              pinnedIpOverride: this.options.testHooks.pinnedIpOverride,
-              allowLoopbackInTests:
-                (
-                  this.options.testHooks as {
-                    allowLoopbackInTests?: boolean;
-                  }
-                ).allowLoopbackInTests ?? Boolean(this.options.testHooks.pinnedIpOverride),
-            }
-          : undefined,
       });
 
       await browserManager.launch();

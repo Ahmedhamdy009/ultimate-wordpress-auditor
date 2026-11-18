@@ -3,14 +3,18 @@ import http from 'node:http';
 import type net from 'node:net';
 import { BoundedCrawler } from '../../../src/main/scanner/crawler/crawler.js';
 import { SCANNER_CRAWLER_ERROR_CODES } from '../../../src/main/scanner/crawler/errors.js';
-import type { SafeHttpClientTestHooks } from '../../../src/main/scanner/client/types.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../../support/fixture-network.js';
 
 describe('BoundedCrawler Engine End-to-End Integration', () => {
   let server: http.Server;
   let serverPort: number;
-  const mockPublicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
   beforeAll(async () => {
+    fixtureNet = installLocalFixtureNetwork();
     server = http.createServer((req, res) => {
       const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
 
@@ -157,14 +161,10 @@ describe('BoundedCrawler Engine End-to-End Integration', () => {
   });
 
   afterAll(async () => {
+    fixtureNet?.restore();
     await new Promise<void>(resolve => {
       server.close(() => resolve());
     });
-  });
-
-  const getTestHooks = (): SafeHttpClientTestHooks => ({
-    lookupFn: mockPublicLookup,
-    pinnedIpOverride: '127.0.0.1',
   });
 
   it('performs breadth-first crawl traversal and deduplicates cycle links', async () => {
@@ -176,7 +176,6 @@ describe('BoundedCrawler Engine End-to-End Integration', () => {
       maxPages: 10,
       maxDepth: 2,
       maxConcurrency: 2,
-      testHooks: getTestHooks(),
     });
 
     expect(result.summary.totalPagesAttempted).toBeGreaterThanOrEqual(4);
@@ -204,7 +203,6 @@ describe('BoundedCrawler Engine End-to-End Integration', () => {
       maxPages: 3,
       maxDepth: 3,
       maxConcurrency: 1,
-      testHooks: getTestHooks(),
     });
 
     expect(result.summary.totalPagesAttempted).toBe(3);
@@ -221,7 +219,6 @@ describe('BoundedCrawler Engine End-to-End Integration', () => {
       maxPages: 20,
       maxDepth: 1,
       maxConcurrency: 2,
-      testHooks: getTestHooks(),
     });
 
     // With maxDepth = 1, /about (depth 0) and /team (depth 1) are crawled, but /team/member-1 is NOT crawled
@@ -240,7 +237,6 @@ describe('BoundedCrawler Engine End-to-End Integration', () => {
       maxDepth: 1,
       maxConcurrency: 1,
       maxDiscoveredLinksPerPage: 3,
-      testHooks: getTestHooks(),
     });
 
     // 1 (entry) + 3 (discovered) = 4 total pages attempted
@@ -255,7 +251,6 @@ describe('BoundedCrawler Engine End-to-End Integration', () => {
     const result = await crawler.crawl({
       entryUrl,
       maxPages: 5,
-      testHooks: getTestHooks(),
     });
 
     expect(result.summary.totalPagesAttempted).toBe(1);
@@ -275,7 +270,6 @@ describe('BoundedCrawler Engine End-to-End Integration', () => {
       maxPages: 10,
       maxDepth: 1,
       maxConcurrency: 1,
-      testHooks: getTestHooks(),
     });
 
     expect(result.summary.totalPagesAttempted).toBe(4);
@@ -298,7 +292,6 @@ describe('BoundedCrawler Engine End-to-End Integration', () => {
       entryUrl,
       maxPages: 10,
       signal: controller.signal,
-      testHooks: getTestHooks(),
     });
 
     expect(result.summary.cancelled).toBe(true);
@@ -313,7 +306,6 @@ describe('BoundedCrawler Engine End-to-End Integration', () => {
       entryUrl,
       maxPages: 10,
       maxDurationMs: 100, // 100ms overall timeout
-      testHooks: getTestHooks(),
     });
 
     expect(result.summary.cancelled).toBe(true);
@@ -326,7 +318,6 @@ describe('BoundedCrawler Engine End-to-End Integration', () => {
     await expect(
       crawler.crawl({
         entryUrl: 'javascript:alert(1)',
-        testHooks: getTestHooks(),
       }),
     ).rejects.toThrowError(
       expect.objectContaining({
@@ -342,7 +333,6 @@ describe('BoundedCrawler Engine End-to-End Integration', () => {
       crawler.crawl({
         entryUrl: `http://audit-target.com:${serverPort}/`,
         authorizedOrigin: 'https://different-authorized-domain.com',
-        testHooks: getTestHooks(),
       }),
     ).rejects.toThrowError(
       expect.objectContaining({
@@ -361,7 +351,6 @@ describe('BoundedCrawler Engine End-to-End Integration', () => {
         entryUrl,
         maxPages: 3,
         maxConcurrency: 1,
-        testHooks: getTestHooks(),
       },
       p => {
         progressUpdates.push(p.pagesCrawled);

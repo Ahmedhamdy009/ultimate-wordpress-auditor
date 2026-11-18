@@ -5,16 +5,21 @@ import { BrowserManager } from '../../src/main/browser/manager.js';
 import { LayoutShiftCollector } from '../../src/main/browser/layout-shift-collector.js';
 import { DEFAULT_VIEWPORT_PROFILES } from '../../src/main/browser/viewport-profiles.js';
 import type { LayoutShiftEvent } from '../../src/main/browser/visual-types.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../support/fixture-network.js';
 
 describe('Layout Shift & Stability Measurement Suite', () => {
   let fixtureServer: http.Server;
   let fixturePort: number;
   let manager: BrowserManager;
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
-  const mockLookup = async () => [{ address: '93.184.216.34', family: 4 }];
   const desktop = DEFAULT_VIEWPORT_PROFILES.find(p => p.id === 'desktop')!;
 
   beforeAll(async () => {
+    fixtureNet = installLocalFixtureNetwork();
     fixtureServer = http.createServer((req, res) => {
       const url = new URL(req.url ?? '/', `http://${req.headers.host || 'localhost'}`);
 
@@ -133,10 +138,6 @@ describe('Layout Shift & Stability Measurement Suite', () => {
         authorizedOrigin: `http://audit-target.test:${fixturePort}`,
         thirdPartyPolicy: 'ALLOW_PUBLIC_SUBRESOURCES',
       },
-      testHooks: {
-        lookupFn: mockLookup,
-        pinnedIpOverride: '127.0.0.1',
-      },
     });
     await manager.launch();
   });
@@ -148,6 +149,7 @@ describe('Layout Shift & Stability Measurement Suite', () => {
     if (fixtureServer) {
       await new Promise(resolve => fixtureServer.close(resolve));
     }
+    fixtureNet?.restore();
   });
 
   it('1. records zero layout shifts and emits no findings on a static page', async () => {

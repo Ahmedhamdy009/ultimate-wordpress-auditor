@@ -8,6 +8,10 @@ import {
   LayoutShiftCollector,
 } from '../../src/main/browser/layout-shift-collector.js';
 import { DEFAULT_VIEWPORT_PROFILES } from '../../src/main/browser/viewport-profiles.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../support/fixture-network.js';
 import type {
   RawLcpEntry,
   RawLayoutShiftEntry,
@@ -805,9 +809,12 @@ describe('PerformanceCollector & Lab Web Vitals Suite (Batch 7.3.1)', () => {
   describe('8. Real Chromium Session End-to-End Verification', () => {
     let server: http.Server;
     let serverPort: number;
+    let serverOrigin: string;
     let browserManager: BrowserManager;
+    let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
     beforeAll(async () => {
+      fixtureNet = installLocalFixtureNetwork();
       server = http.createServer((req, res) => {
         if (req.url === '/cls') {
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -868,17 +875,14 @@ describe('PerformanceCollector & Lab Web Vitals Suite (Batch 7.3.1)', () => {
           resolve();
         });
       });
+      serverOrigin = `http://perf-fixture.test:${serverPort}`;
 
       browserManager = new BrowserManager({
         headless: true,
         maxConcurrentPages: 1,
         scopePolicy: {
-          authorizedOrigin: `http://127.0.0.1:${serverPort}`,
+          authorizedOrigin: serverOrigin,
           thirdPartyPolicy: 'SAME_ORIGIN_ONLY',
-        },
-        testHooks: {
-          lookupFn: async () => [{ address: '127.0.0.1', family: 4 }],
-          allowLoopbackInTests: true,
         },
       });
 
@@ -892,6 +896,7 @@ describe('PerformanceCollector & Lab Web Vitals Suite (Batch 7.3.1)', () => {
       if (server) {
         await new Promise<void>(resolve => server.close(() => resolve()));
       }
+      fixtureNet?.restore();
     });
 
     it('collects empirical Navigation, Paint, LCP, and Long-Task metrics from real Chromium', async () => {
@@ -900,7 +905,7 @@ describe('PerformanceCollector & Lab Web Vitals Suite (Batch 7.3.1)', () => {
         const liveCollector = new PerformanceCollector({ settleTimeoutMs: 600 });
         await liveCollector.installScript(pageHandle.page);
 
-        await pageHandle.page.goto(`http://127.0.0.1:${serverPort}/`, {
+        await pageHandle.page.goto(`${serverOrigin}/`, {
           waitUntil: 'load',
           timeout: 10000,
         });
@@ -945,7 +950,7 @@ describe('PerformanceCollector & Lab Web Vitals Suite (Batch 7.3.1)', () => {
           await perfCollector.installScript(pageHandle.page);
           await pageHandle.page.addInitScript(LAYOUT_SHIFT_INIT_SCRIPT);
 
-          await pageHandle.page.goto(`http://127.0.0.1:${serverPort}/cls`, { waitUntil: 'load' });
+          await pageHandle.page.goto(`${serverOrigin}/cls`, { waitUntil: 'load' });
 
           const observerInfo = await pageHandle.page.evaluate(() => {
             const win = window as unknown as Record<string, unknown>;
@@ -977,7 +982,7 @@ describe('PerformanceCollector & Lab Web Vitals Suite (Batch 7.3.1)', () => {
           const perfCollector = new PerformanceCollector({ settleTimeoutMs: 150 });
           await perfCollector.installScript(pageHandle.page);
 
-          await pageHandle.page.goto(`http://127.0.0.1:${serverPort}/cls`, { waitUntil: 'load' });
+          await pageHandle.page.goto(`${serverOrigin}/cls`, { waitUntil: 'load' });
 
           const observerInfo = await pageHandle.page.evaluate(() => {
             const win = window as unknown as Record<string, unknown>;
@@ -1003,7 +1008,7 @@ describe('PerformanceCollector & Lab Web Vitals Suite (Batch 7.3.1)', () => {
         try {
           const perfCollector = new PerformanceCollector({ settleTimeoutMs: 100 });
           await perfCollector.installScript(pageHandle.page);
-          await pageHandle.page.goto(`http://127.0.0.1:${serverPort}/cls`, { waitUntil: 'load' });
+          await pageHandle.page.goto(`${serverOrigin}/cls`, { waitUntil: 'load' });
 
           const controller = new AbortController();
           controller.abort();
@@ -1025,7 +1030,7 @@ describe('PerformanceCollector & Lab Web Vitals Suite (Batch 7.3.1)', () => {
         const pageHandle = await browserManager.acquirePage();
         const perfCollector = new PerformanceCollector({ settleTimeoutMs: 100 });
         await perfCollector.installScript(pageHandle.page);
-        await pageHandle.page.goto(`http://127.0.0.1:${serverPort}/`, { waitUntil: 'load' });
+        await pageHandle.page.goto(`${serverOrigin}/`, { waitUntil: 'load' });
 
         // Close page before collecting
         await pageHandle.page.close();
@@ -1047,7 +1052,7 @@ describe('PerformanceCollector & Lab Web Vitals Suite (Batch 7.3.1)', () => {
           await perfCollector.installScript(pageHandle.page);
           await layoutCollector.installScript(pageHandle.page);
 
-          await pageHandle.page.goto(`http://127.0.0.1:${serverPort}/cls`, { waitUntil: 'load' });
+          await pageHandle.page.goto(`${serverOrigin}/cls`, { waitUntil: 'load' });
 
           // 1. PerformanceCollector collects first
           const perfResult = await perfCollector.collectMetrics(pageHandle.page);
@@ -1065,7 +1070,7 @@ describe('PerformanceCollector & Lab Web Vitals Suite (Batch 7.3.1)', () => {
           const layoutResult = await layoutCollector.collectMetrics(
             pageHandle.page,
             DEFAULT_VIEWPORT_PROFILES[0],
-            `http://127.0.0.1:${serverPort}/`,
+            `${serverOrigin}/`,
           );
 
           // LayoutShiftCollector must still receive the layout shifts without premature disconnect
@@ -1086,13 +1091,13 @@ describe('PerformanceCollector & Lab Web Vitals Suite (Batch 7.3.1)', () => {
           await layoutCollector.installScript(pageHandle.page);
           await perfCollector.installScript(pageHandle.page);
 
-          await pageHandle.page.goto(`http://127.0.0.1:${serverPort}/cls`, { waitUntil: 'load' });
+          await pageHandle.page.goto(`${serverOrigin}/cls`, { waitUntil: 'load' });
 
           // 1. LayoutShiftCollector collects first
           const layoutResult = await layoutCollector.collectMetrics(
             pageHandle.page,
             DEFAULT_VIEWPORT_PROFILES[0],
-            `http://127.0.0.1:${serverPort}/`,
+            `${serverOrigin}/`,
           );
           expect(layoutResult.metrics.isSupported).toBe(true);
 

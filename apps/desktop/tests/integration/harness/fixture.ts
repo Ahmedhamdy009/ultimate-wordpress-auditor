@@ -81,6 +81,7 @@ import net from 'node:net';
 import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 
 // Boot the production desktop application
 import './out/main/index.js';
@@ -1005,12 +1006,19 @@ async function executeScenario(scenario, params) {
     }
 
     case 'TEST_BATCH_7_4_4_GUI_FLOW': {
-      const { getActiveDatabaseConnection } = await import('./out/main/index.js');
-      const conn = getActiveDatabaseConnection();
-      if (!conn) {
-        throw new Error('Active SQLite DatabaseConnection not available');
-      }
-      const db = conn.getRawDb();
+      const req = createRequire(import.meta.url);
+      const Database = req('better-sqlite3');
+      const dbPath = path.join(app.getPath('userData'), 'database', 'auditor.db');
+      const nativeBinding = path.join(
+        import.meta.dirname,
+        'out',
+        'main',
+        'native',
+        \`electron-v\${process.versions.modules}-\${process.platform}-\${process.arch}\`,
+        'better_sqlite3.node',
+      );
+      const db = new Database(dbPath, { nativeBinding });
+      try {
       const nowIso = '2026-11-16T10:00:00.000Z';
       const projId = 'aaaaaaaa-1111-4111-8111-111111111101';
       const siteId = 'bbbbbbbb-1111-4111-8111-111111111101';
@@ -1233,6 +1241,9 @@ async function executeScenario(scenario, params) {
         '[]',
         '2026-10-01T10:00:05.000Z',
       );
+      } finally {
+        db.close();
+      }
 
       return await mainWindow.webContents.executeJavaScript(\`
         (async () => {

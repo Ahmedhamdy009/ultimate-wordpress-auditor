@@ -99,7 +99,7 @@ export class BoundedCrawler {
       allowedHosts: [normalizedEntry.hostname],
       ...config.clientOptions,
     };
-    const client = new SafeHttpClient(clientOptions, config.testHooks);
+    const client = new SafeHttpClient(clientOptions);
 
     // 4. Initialize Queue and State
     const queue = new CrawlQueue();

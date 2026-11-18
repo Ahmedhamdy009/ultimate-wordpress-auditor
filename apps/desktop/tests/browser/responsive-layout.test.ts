@@ -4,19 +4,23 @@ import type net from 'node:net';
 import { BrowserManager } from '../../src/main/browser/manager.js';
 import { ResponsiveLayoutAnalyzer } from '../../src/main/browser/responsive-analyzer.js';
 import { DEFAULT_VIEWPORT_PROFILES } from '../../src/main/browser/viewport-profiles.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../support/fixture-network.js';
 
 describe('Responsive Layout Analyzer Suite', () => {
   let fixtureServer: http.Server;
   let fixturePort: number;
   let manager: BrowserManager;
-
-  const mockLookup = async () => [{ address: '93.184.216.34', family: 4 }];
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
   const smallMobile = DEFAULT_VIEWPORT_PROFILES.find(p => p.id === 'small-mobile')!;
   const standardMobile = DEFAULT_VIEWPORT_PROFILES.find(p => p.id === 'standard-mobile')!;
   const largeDesktop = DEFAULT_VIEWPORT_PROFILES.find(p => p.id === 'large-desktop')!;
 
   beforeAll(async () => {
+    fixtureNet = installLocalFixtureNetwork();
     fixtureServer = http.createServer((req, res) => {
       const url = new URL(req.url ?? '/', `http://${req.headers.host || 'localhost'}`);
 
@@ -186,10 +190,6 @@ describe('Responsive Layout Analyzer Suite', () => {
         authorizedOrigin: `http://audit-target.test:${fixturePort}`,
         thirdPartyPolicy: 'ALLOW_PUBLIC_SUBRESOURCES',
       },
-      testHooks: {
-        lookupFn: mockLookup,
-        pinnedIpOverride: '127.0.0.1',
-      },
     });
     await manager.launch();
   });
@@ -201,6 +201,7 @@ describe('Responsive Layout Analyzer Suite', () => {
     if (fixtureServer) {
       await new Promise(resolve => fixtureServer.close(resolve));
     }
+    fixtureNet?.restore();
   });
 
   it('1. correctly analyzes a clean responsive page without false positives', async () => {

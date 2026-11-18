@@ -1,7 +1,7 @@
 import net from 'node:net';
 import type { BrowserContext, Page, Route, Request } from 'playwright-core';
 import { isIpAllowedForScan } from '@auditor/shared';
-import type { BrowserProxyTestHooks, BrowserScopePolicy } from './types.js';
+import type { BrowserScopePolicy } from './types.js';
 
 export interface InterceptionStats {
   requestsEvaluated: number;
@@ -12,7 +12,6 @@ export interface InterceptionStats {
 
 export class BrowserScopeInterceptor {
   private readonly policy: BrowserScopePolicy;
-  private readonly testHooks?: BrowserProxyTestHooks;
   private readonly authHostname: string;
 
   private requestsEvaluated = 0;
@@ -20,9 +19,8 @@ export class BrowserScopeInterceptor {
   private requestsBlocked = 0;
   private readonly blockedReasons: Record<string, number> = {};
 
-  constructor(policy: BrowserScopePolicy, testHooks?: BrowserProxyTestHooks) {
+  constructor(policy: BrowserScopePolicy) {
     this.policy = policy;
-    this.testHooks = testHooks;
 
     try {
       this.authHostname = new URL(policy.authorizedOrigin).hostname.toLowerCase();
@@ -101,19 +99,19 @@ export class BrowserScopeInterceptor {
     }
 
     // 5. SSRF / Localhost / Prohibited IP ranges check
-    if (!this.testHooks?.allowLoopbackInTests) {
-      if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
-        this.block(route, 'ERR_SSRF_LOCALHOST_BLOCKED');
-        return;
-      }
+    const unbracketedHost =
+      hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
+    if (unbracketedHost === 'localhost' || unbracketedHost.endsWith('.localhost')) {
+      this.block(route, 'ERR_SSRF_LOCALHOST_BLOCKED');
+      return;
+    }
 
-      const isIpLiteral = net.isIP(hostname) !== 0;
-      if (isIpLiteral) {
-        const ipCheck = isIpAllowedForScan(hostname);
-        if (!ipCheck.allowed) {
-          this.block(route, 'ERR_SSRF_PROHIBITED_IP');
-          return;
-        }
+    const isIpLiteral = net.isIP(unbracketedHost) !== 0;
+    if (isIpLiteral) {
+      const ipCheck = isIpAllowedForScan(unbracketedHost);
+      if (!ipCheck.allowed) {
+        this.block(route, 'ERR_SSRF_PROHIBITED_IP');
+        return;
       }
     }
 
@@ -185,14 +183,13 @@ export class BrowserScopeInterceptor {
 }
 
 /**
- * Attaches scope interception to a page or browser context with given policy and test hooks.
+ * Attaches scope interception to a page or browser context with given policy.
  */
 export async function setupBrowserScopeInterception(
   target: Page | BrowserContext,
   policy: BrowserScopePolicy,
-  testHooks?: BrowserProxyTestHooks,
 ): Promise<BrowserScopeInterceptor> {
-  const interceptor = new BrowserScopeInterceptor(policy, testHooks);
+  const interceptor = new BrowserScopeInterceptor(policy);
   await interceptor.attach(target);
   return interceptor;
 }

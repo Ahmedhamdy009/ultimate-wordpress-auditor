@@ -4,16 +4,21 @@ import type net from 'node:net';
 import { BrowserManager } from '../../src/main/browser/manager.js';
 import { ResponsiveLayoutAnalyzer } from '../../src/main/browser/responsive-analyzer.js';
 import { DEFAULT_VIEWPORT_PROFILES } from '../../src/main/browser/viewport-profiles.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../support/fixture-network.js';
 
 describe('Mobile Viewport Measurement Accuracy Suite (Real Chromium Emulation)', () => {
   let fixtureServer: http.Server;
   let fixturePort: number;
   let manager: BrowserManager;
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
-  const mockLookup = async () => [{ address: '93.184.216.34', family: 4 }];
   const smallMobile = DEFAULT_VIEWPORT_PROFILES.find(p => p.id === 'small-mobile')!;
 
   beforeAll(async () => {
+    fixtureNet = installLocalFixtureNetwork();
     fixtureServer = http.createServer((req, res) => {
       const url = new URL(req.url ?? '/', `http://${req.headers.host || 'localhost'}`);
 
@@ -150,10 +155,6 @@ describe('Mobile Viewport Measurement Accuracy Suite (Real Chromium Emulation)',
         authorizedOrigin: `http://audit-target.test:${fixturePort}`,
         thirdPartyPolicy: 'ALLOW_PUBLIC_SUBRESOURCES',
       },
-      testHooks: {
-        lookupFn: mockLookup,
-        pinnedIpOverride: '127.0.0.1',
-      },
     });
     await manager.launch();
   });
@@ -165,6 +166,7 @@ describe('Mobile Viewport Measurement Accuracy Suite (Real Chromium Emulation)',
     if (fixtureServer) {
       await new Promise(resolve => fixtureServer.close(resolve));
     }
+    fixtureNet?.restore();
   });
 
   it('1. correctly measures a responsive page with 320px mobile emulation (0 overflow)', async () => {

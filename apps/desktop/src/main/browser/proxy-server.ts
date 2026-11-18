@@ -6,14 +6,12 @@ import {
   BROWSER_ERROR_CODES,
   type BrowserProxyOptions,
   type BrowserProxyStats,
-  type BrowserProxyTestHooks,
   type BrowserScopePolicy,
 } from './types.js';
 import { BrowserError } from './errors.js';
 
 export class BrowserProxyServer {
-  private readonly options: Required<Omit<BrowserProxyOptions, 'scopePolicy' | 'testHooks'>>;
-  private readonly testHooks?: BrowserProxyTestHooks;
+  private readonly options: Required<Omit<BrowserProxyOptions, 'scopePolicy'>>;
   private scopePolicy?: BrowserScopePolicy;
 
   private server: http.Server | null = null;
@@ -33,7 +31,6 @@ export class BrowserProxyServer {
       connectTimeoutMs: options.connectTimeoutMs ?? 5000,
     };
     this.scopePolicy = options.scopePolicy;
-    this.testHooks = options.testHooks;
   }
 
   public updateScopePolicy(policy: BrowserScopePolicy): void {
@@ -146,9 +143,17 @@ export class BrowserProxyServer {
     clientSocket.once('close', () => this.openSockets.delete(clientSocket));
 
     const authority = req.url ?? '';
-    const colonIndex = authority.lastIndexOf(':');
-    const hostname = colonIndex !== -1 ? authority.slice(0, colonIndex) : authority;
-    const port = colonIndex !== -1 ? parseInt(authority.slice(colonIndex + 1), 10) : 443;
+    let hostname: string;
+    let port: number;
+    try {
+      const parsedAuthority = new URL(`https://${authority}`);
+      hostname = parsedAuthority.hostname;
+      port = parsedAuthority.port ? parseInt(parsedAuthority.port, 10) : 443;
+    } catch {
+      const colonIndex = authority.lastIndexOf(':');
+      hostname = colonIndex !== -1 ? authority.slice(0, colonIndex) : authority;
+      port = colonIndex !== -1 ? parseInt(authority.slice(colonIndex + 1), 10) : 443;
+    }
 
     // 1. Scope and origin policy check
     if (!this.isDestinationAllowed(hostname, port, 'https')) {
@@ -166,17 +171,8 @@ export class BrowserProxyServer {
     // 2. DNS resolution and SSRF IP validation
     let pinnedIp: string;
     try {
-      if (
-        this.testHooks?.allowLoopbackInTests &&
-        (hostname === '127.0.0.1' || hostname === 'localhost')
-      ) {
-        pinnedIp = '127.0.0.1';
-      } else {
-        const dnsResult = await resolveAndValidateDns(hostname, {
-          lookupFn: this.testHooks?.lookupFn,
-        });
-        pinnedIp = this.testHooks?.pinnedIpOverride ?? dnsResult.pinnedIp;
-      }
+      const dnsResult = await resolveAndValidateDns(hostname);
+      pinnedIp = dnsResult.pinnedIp;
     } catch {
       this.connectTunnelsBlocked++;
       this.requestsBlocked++;
@@ -291,17 +287,8 @@ export class BrowserProxyServer {
     // 2. DNS validation & socket IP pinning
     let pinnedIp: string;
     try {
-      if (
-        this.testHooks?.allowLoopbackInTests &&
-        (hostname === '127.0.0.1' || hostname === 'localhost')
-      ) {
-        pinnedIp = '127.0.0.1';
-      } else {
-        const dnsResult = await resolveAndValidateDns(hostname, {
-          lookupFn: this.testHooks?.lookupFn,
-        });
-        pinnedIp = this.testHooks?.pinnedIpOverride ?? dnsResult.pinnedIp;
-      }
+      const dnsResult = await resolveAndValidateDns(hostname);
+      pinnedIp = dnsResult.pinnedIp;
     } catch {
       this.requestsBlocked++;
       clientRes.writeHead(403, { 'Content-Type': 'text/plain' });
@@ -405,18 +392,18 @@ export class BrowserProxyServer {
    */
   private isDestinationAllowed(hostname: string, _port: number, _scheme: string): boolean {
     const cleanHost = hostname.trim().toLowerCase();
+    const unbracketedHost =
+      cleanHost.startsWith('[') && cleanHost.endsWith(']') ? cleanHost.slice(1, -1) : cleanHost;
 
     // 1. IP range check (blocks loopback, private, metadata, link-local)
-    if (!this.testHooks?.allowLoopbackInTests) {
-      if (cleanHost === 'localhost' || cleanHost.endsWith('.localhost')) {
+    if (unbracketedHost === 'localhost' || unbracketedHost.endsWith('.localhost')) {
+      return false;
+    }
+    const isIpLiteral = net.isIP(unbracketedHost) !== 0;
+    if (isIpLiteral) {
+      const ipCheck = isIpAllowedForScan(unbracketedHost);
+      if (!ipCheck.allowed) {
         return false;
-      }
-      const isIpLiteral = net.isIP(cleanHost) !== 0;
-      if (isIpLiteral) {
-        const ipCheck = isIpAllowedForScan(cleanHost);
-        if (!ipCheck.allowed) {
-          return false;
-        }
       }
     }
 

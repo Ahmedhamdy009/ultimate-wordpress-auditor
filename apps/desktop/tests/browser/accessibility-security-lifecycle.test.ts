@@ -20,14 +20,17 @@ import { generateJsonReport } from '../../src/main/reports/json-generator.js';
 import { generateHtmlReport } from '../../src/main/reports/html-generator.js';
 import { AccessibilityAnalyzer } from '../../src/main/browser/accessibility-analyzer.js';
 import type { ReportModel } from '../../src/main/reports/types.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../support/fixture-network.js';
 
 describe('Accessibility Engine — Security, Privacy & Lifecycle Resilience Suite', () => {
   let fixtureServer: http.Server;
   let fixturePort: number;
   let manager: BrowserManager;
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
   const interceptedRequests: string[] = [];
-
-  const mockLookup = async () => [{ address: '93.184.216.34', family: 4 }];
 
   beforeAll(async () => {
     fixtureServer = http.createServer((req, res) => {
@@ -189,11 +192,8 @@ describe('Accessibility Engine — Security, Privacy & Lifecycle Resilience Suit
         authorizedOrigin: `http://audit-target.test:${fixturePort}`,
         thirdPartyPolicy: 'ALLOW_PUBLIC_SUBRESOURCES',
       },
-      testHooks: {
-        lookupFn: mockLookup,
-        pinnedIpOverride: '127.0.0.1',
-      },
     });
+    fixtureNet = installLocalFixtureNetwork();
     await manager.launch();
   });
 
@@ -205,6 +205,7 @@ describe('Accessibility Engine — Security, Privacy & Lifecycle Resilience Suit
     if (fixtureServer) {
       await new Promise(resolve => fixtureServer.close(resolve));
     }
+    fixtureNet?.restore();
   });
 
   it('1. strictly redacts emails, phones, payment cards, passwords, names, and tokens from HTML snippets', () => {

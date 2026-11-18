@@ -3,15 +3,19 @@ import http from 'node:http';
 import type net from 'node:net';
 import { BrowserManager } from '../../src/main/browser/manager.js';
 import { RuntimeResourceAuditor } from '../../src/main/browser/runtime-auditor.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../support/fixture-network.js';
 
 describe('Evidence-Based Audit: Promise Rejections & Synchronous Exceptions', () => {
   let fixtureServer: http.Server;
   let fixturePort: number;
   let manager: BrowserManager;
-
-  const mockLookup = async () => [{ address: '93.184.216.34', family: 4 }];
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
   beforeAll(async () => {
+    fixtureNet = installLocalFixtureNetwork();
     fixtureServer = http.createServer((req, res) => {
       const url = new URL(req.url ?? '/', `http://${req.headers.host || 'localhost'}`);
 
@@ -78,10 +82,6 @@ describe('Evidence-Based Audit: Promise Rejections & Synchronous Exceptions', ()
       scopePolicy: {
         authorizedOrigin: `http://audit-target.test:${fixturePort}`,
       },
-      testHooks: {
-        lookupFn: mockLookup,
-        pinnedIpOverride: '127.0.0.1',
-      },
     });
 
     await manager.launch();
@@ -94,6 +94,7 @@ describe('Evidence-Based Audit: Promise Rejections & Synchronous Exceptions', ()
     if (fixtureServer) {
       await new Promise<void>(resolve => fixtureServer.close(() => resolve()));
     }
+    fixtureNet?.restore();
   });
 
   it('1. captures an uncaught synchronous JavaScript exception as JS_RUNTIME_ERROR', async () => {

@@ -8,6 +8,10 @@ import { SiteRepository } from '../../../src/main/db/repositories/site.repositor
 import { ScanRunRepository } from '../../../src/main/db/repositories/scan-run.repository.js';
 import { FindingRepository } from '../../../src/main/db/repositories/finding.repository.js';
 import { ScanOrchestrator } from '../../../src/main/scanner/orchestrator/orchestrator.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../../support/fixture-network.js';
 
 describe('Browser Coverage Prioritization & Exclusion Suite', () => {
   let server: http.Server;
@@ -19,11 +23,11 @@ describe('Browser Coverage Prioritization & Exclusion Suite', () => {
   let findingRepo: FindingRepository;
   let orchestrator: ScanOrchestrator;
   let siteId: string;
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
   const auditedBrowserUrls: string[] = [];
 
-  const mockPublicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
-
   beforeAll(async () => {
+    fixtureNet = installLocalFixtureNetwork();
     server = http.createServer((req, res) => {
       const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
 
@@ -70,6 +74,7 @@ describe('Browser Coverage Prioritization & Exclusion Suite', () => {
   });
 
   afterAll(async () => {
+    fixtureNet?.restore();
     if (server) {
       await new Promise(resolve => server.close(resolve));
     }
@@ -125,10 +130,6 @@ describe('Browser Coverage Prioritization & Exclusion Suite', () => {
     });
 
     orchestrator = new ScanOrchestrator(scanRunRepo, siteRepo, findingRepo, {
-      testHooks: {
-        lookupFn: mockPublicLookup,
-        pinnedIpOverride: '127.0.0.1',
-      },
       browserManagerFactory: mockBrowserManagerFactory as unknown as (
         opts: unknown,
       ) => import('../../../src/main/browser/manager.js').BrowserManager,

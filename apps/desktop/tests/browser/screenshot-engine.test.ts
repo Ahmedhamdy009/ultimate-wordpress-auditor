@@ -7,17 +7,22 @@ import crypto from 'node:crypto';
 import { BrowserManager } from '../../src/main/browser/manager.js';
 import { ScreenshotManager } from '../../src/main/browser/screenshot-manager.js';
 import { DEFAULT_VIEWPORT_PROFILES } from '../../src/main/browser/viewport-profiles.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../support/fixture-network.js';
 
 describe('Screenshot Engine & Storage Security Suite', () => {
   let fixtureServer: http.Server;
   let fixturePort: number;
   let manager: BrowserManager;
   let testStorageDir: string;
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
-  const mockLookup = async () => [{ address: '93.184.216.34', family: 4 }];
   const desktop = DEFAULT_VIEWPORT_PROFILES.find(p => p.id === 'desktop')!;
 
   beforeAll(async () => {
+    fixtureNet = installLocalFixtureNetwork();
     testStorageDir = path.resolve('D:\\ahmed\\.tmp\\test-screenshots-' + crypto.randomUUID());
     fs.mkdirSync(testStorageDir, { recursive: true });
 
@@ -66,10 +71,6 @@ describe('Screenshot Engine & Storage Security Suite', () => {
         authorizedOrigin: `http://audit-target.test:${fixturePort}`,
         thirdPartyPolicy: 'ALLOW_PUBLIC_SUBRESOURCES',
       },
-      testHooks: {
-        lookupFn: mockLookup,
-        pinnedIpOverride: '127.0.0.1',
-      },
     });
     await manager.launch();
   });
@@ -81,6 +82,7 @@ describe('Screenshot Engine & Storage Security Suite', () => {
     if (fixtureServer) {
       await new Promise(resolve => fixtureServer.close(resolve));
     }
+    fixtureNet?.restore();
     if (fs.existsSync(testStorageDir)) {
       try {
         fs.rmSync(testStorageDir, { recursive: true, force: true });

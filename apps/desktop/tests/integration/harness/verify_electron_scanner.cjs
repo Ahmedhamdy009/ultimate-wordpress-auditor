@@ -1,6 +1,9 @@
 /* eslint-disable @typescript-eslint/no-require-imports, no-undef */
 const http = require('node:http');
 const https = require('node:https');
+const dns = require('node:dns');
+const net = require('node:net');
+const tls = require('node:tls');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -48,11 +51,45 @@ async function main() {
   await new Promise(resolve => httpServer.listen(0, '127.0.0.1', resolve));
   const httpPort = httpServer.address().port;
 
+  // Isolated test-only network shims so production SafeHttpClient runs without test hooks
+  const originalLookup = dns.promises.lookup.bind(dns.promises);
+  const originalCreateConnection = net.createConnection;
+  const originalTlsConnect = tls.connect;
+
+  dns.promises.lookup = async (hostname, options) => {
+    if (hostname === 'audit-target.com' && options && options.all === true) {
+      return [{ address: '93.184.216.34', family: 4 }];
+    }
+    return originalLookup(hostname, options);
+  };
+
+  net.createConnection = (...args) => {
+    const firstArg = args[0];
+    if (firstArg && typeof firstArg === 'object' && firstArg.host === '93.184.216.34') {
+      return originalCreateConnection.call(
+        net,
+        { ...firstArg, host: '127.0.0.1' },
+        ...args.slice(1),
+      );
+    }
+    return originalCreateConnection.apply(net, args);
+  };
+
+  let activeTestCa = null;
+  tls.connect = (...args) => {
+    const firstArg = args[0];
+    if (activeTestCa && firstArg && typeof firstArg === 'object') {
+      return originalTlsConnect.call(
+        tls,
+        { ...firstArg, ca: firstArg.ca ?? activeTestCa },
+        ...args.slice(1),
+      );
+    }
+    return originalTlsConnect.apply(tls, args);
+  };
+
   try {
-    const httpRes = await client.get(`http://audit-target.com:${httpPort}/test.html`, {
-      lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
-      pinnedIpOverride: '127.0.0.1',
-    });
+    const httpRes = await client.get(`http://audit-target.com:${httpPort}/test.html`);
 
     results.steps.push({
       name: 'http_pinned_get',
@@ -81,11 +118,8 @@ async function main() {
 
   try {
     // 4a. Trusted CA verification succeeds
-    const httpsRes = await client.get(`https://audit-target.com:${httpsPort}/secure.html`, {
-      lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
-      pinnedIpOverride: '127.0.0.1',
-      ca: caCert,
-    });
+    activeTestCa = caCert;
+    const httpsRes = await client.get(`https://audit-target.com:${httpsPort}/secure.html`);
 
     results.steps.push({
       name: 'https_tls_trusted_ca',
@@ -93,6 +127,7 @@ async function main() {
       success: httpsRes.statusCode === 200 && httpsRes.text().includes('Electron Main HTTPS OK'),
     });
   } finally {
+    activeTestCa = null;
     await new Promise(resolve => httpsServer.close(resolve));
   }
 
@@ -109,10 +144,7 @@ async function main() {
   const selfsignedPort = selfsignedServer.address().port;
 
   try {
-    await client.get(`https://audit-target.com:${selfsignedPort}/untrusted.html`, {
-      lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
-      pinnedIpOverride: '127.0.0.1',
-    });
+    await client.get(`https://audit-target.com:${selfsignedPort}/untrusted.html`);
     results.steps.push({ name: 'https_reject_selfsigned', rejected: false });
   } catch (err) {
     results.steps.push({

@@ -109,27 +109,6 @@ export interface BrowserScopePolicy {
   readonly allowWebSockets?: boolean;
 }
 
-export interface BrowserProxyTestHooks {
-  /**
-   * Custom DNS lookup function for mocking or testing.
-   */
-  readonly lookupFn?: (
-    hostname: string,
-    options: { all: true; verbatim: true },
-  ) => Promise<Array<{ address: string; family: number }>>;
-
-  /**
-   * IP override for pinned socket connection in tests (allows pointing test domain to test server).
-   */
-  readonly pinnedIpOverride?: string;
-
-  /**
-   * Explicit test-only flag to allow loopback addresses for local fixture servers.
-   * MUST be false or undefined in production.
-   */
-  readonly allowLoopbackInTests?: boolean;
-}
-
 export interface BrowserProxyOptions {
   /**
    * Listen address for local proxy server.
@@ -153,11 +132,6 @@ export interface BrowserProxyOptions {
    * Default: 5000 ms.
    */
   readonly connectTimeoutMs?: number;
-
-  /**
-   * Test-only hooks for dependency injection.
-   */
-  readonly testHooks?: BrowserProxyTestHooks;
 }
 
 export interface BrowserProxyStats {
@@ -228,11 +202,6 @@ export interface BrowserManagerOptions {
    * Proxy server options.
    */
   readonly proxyOptions?: BrowserProxyOptions;
-
-  /**
-   * Test hooks for proxy and network layers.
-   */
-  readonly testHooks?: BrowserProxyTestHooks;
 }
 
 export interface AcquirePageOptions {

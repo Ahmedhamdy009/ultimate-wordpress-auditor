@@ -26,20 +26,13 @@ import {
 import {
   validateTargetUrlSync,
   validateTargetUrlAsync,
-  type ValidateTargetOptions,
 } from '../scanner/validator/target-validator.js';
 
 // --- Scan Run Handler Factories ---
 
 export interface ScanCreateHandlerOptions {
-  readonly validateTarget?: (url: string, options?: ValidateTargetOptions) => Promise<unknown>;
   readonly siteService?: ISiteService;
-  readonly lookupFn?: (
-    hostname: string,
-    options: { all: true; verbatim: true },
-  ) => Promise<Array<{ address: string; family: number }>>;
   readonly timeoutMs?: number;
-  readonly allowPrivateLoopback?: boolean;
 }
 
 export function createScanCreateHandler(
@@ -47,30 +40,6 @@ export function createScanCreateHandler(
   orchestrator?: IScanOrchestrator,
   options?: ScanCreateHandlerOptions,
 ): IpcChannelHandler<typeof IPC_CHANNELS.SCAN_CREATE> {
-  const effectiveLookupFn =
-    options?.lookupFn ??
-    (
-      orchestrator as unknown as {
-        options?: { testHooks?: { lookupFn?: ScanCreateHandlerOptions['lookupFn'] } };
-      }
-    )?.options?.testHooks?.lookupFn;
-  const effectiveAllowPrivateLoopback =
-    options?.allowPrivateLoopback ??
-    Boolean(
-      (orchestrator as unknown as { options?: { testHooks?: { pinnedIpOverride?: string } } })
-        ?.options?.testHooks?.pinnedIpOverride,
-    );
-
-  const validator =
-    options?.validateTarget ??
-    ((url: string, opts?: ValidateTargetOptions) =>
-      validateTargetUrlAsync(url, {
-        signal: opts?.signal,
-        lookupFn: effectiveLookupFn,
-        timeoutMs: options?.timeoutMs,
-        allowPrivateLoopback: effectiveAllowPrivateLoopback,
-      }));
-
   return async (request, context): Promise<ScanRunDTO> => {
     if (context.signal.aborted) {
       throw new IPCError(
@@ -121,9 +90,7 @@ export function createScanCreateHandler(
 
     // Pre-flight synchronous validation + strict DNS resolution strictly awaited BEFORE creating any scan record
     if (targetUrl) {
-      validateTargetUrlSync(targetUrl, {
-        allowPrivateLoopback: effectiveAllowPrivateLoopback,
-      });
+      validateTargetUrlSync(targetUrl);
 
       if (site && request.targetUrl?.trim()) {
         const siteOrigin = new URL(site.baseUrl).origin.toLowerCase();
@@ -136,7 +103,10 @@ export function createScanCreateHandler(
         }
       }
 
-      await validator(targetUrl, { signal: context.signal });
+      await validateTargetUrlAsync(targetUrl, {
+        signal: context.signal,
+        timeoutMs: options?.timeoutMs,
+      });
     }
 
     if (orchestrator) {

@@ -11,8 +11,6 @@ export interface PinnedConnectionOptions {
   readonly isHttps: boolean;
   readonly connectTimeoutMs?: number;
   readonly signal?: AbortSignal;
-  readonly rejectUnauthorized?: boolean;
-  readonly ca?: string | Buffer | Array<string | Buffer>;
 }
 
 /**
@@ -28,8 +26,7 @@ export function createPinnedSocket(
   options: PinnedConnectionOptions,
   callback: (err: Error | null, socket?: stream.Duplex) => void,
 ): void {
-  const { hostname, pinnedIp, port, isHttps, connectTimeoutMs = 5000, signal, ca } = options;
-  const rejectUnauthorized = options.rejectUnauthorized !== false;
+  const { hostname, pinnedIp, port, isHttps, connectTimeoutMs = 5000, signal } = options;
 
   if (signal?.aborted) {
     callback(
@@ -138,12 +135,8 @@ export function createPinnedSocket(
         socket: rawSocket,
         // RFC 6066: Literal IPv4/IPv6 addresses are forbidden in TLS SNI extension
         servername: isIpLiteral ? undefined : hostname,
-        rejectUnauthorized,
-        ca: Array.isArray(ca) ? [...ca] : ca,
+        rejectUnauthorized: true,
         checkServerIdentity: (_certHost, cert) => {
-          if (!rejectUnauthorized) {
-            return undefined;
-          }
           // Verify certificate against original DNS hostname or IP literal
           return tls.checkServerIdentity(cleanHost, cert);
         },

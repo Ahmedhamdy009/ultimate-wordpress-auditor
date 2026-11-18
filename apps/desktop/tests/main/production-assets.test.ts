@@ -48,6 +48,54 @@ describe('Batch 5.1 — Production Asset Pipeline & Main Process Bundling', () =
         /from\s+["']@auditor\/shared["']|require\(["']@auditor\/shared["']\)/;
       expect(content).not.toMatch(externalImportPattern);
     });
+
+    it('excludes test-only hooks, globals, and SSRF bypass identifiers from production bundles', () => {
+      const forbiddenTokens = [
+        '__activeOrchestrator',
+        '__activeDatabaseConnection',
+        'testHooks',
+        'pinnedIpOverride',
+        'allowLoopbackInTests',
+        'allowPrivateLoopback',
+        'lookupFn',
+        'getActiveOrchestrator',
+        'getActiveDatabaseConnection',
+        'resetMainProcessLifecycleForTesting',
+      ];
+
+      const filesToInspect: string[] = [
+        path.join(OUT_MAIN_DIR, 'index.js'),
+        path.join(OUT_MAIN_DIR, 'cli.js'),
+        path.join(DESKTOP_ROOT, 'out', 'preload', 'index.cjs'),
+      ];
+
+      const rendererDir = path.join(DESKTOP_ROOT, 'out', 'renderer');
+      if (fs.existsSync(rendererDir)) {
+        const stack = [rendererDir];
+        while (stack.length > 0) {
+          const dir = stack.pop()!;
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const fullPath = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+              stack.push(fullPath);
+            } else if (/\.(js|mjs|cjs|html)$/i.test(entry.name)) {
+              filesToInspect.push(fullPath);
+            }
+          }
+        }
+      }
+
+      for (const filePath of filesToInspect) {
+        expect(fs.existsSync(filePath)).toBe(true);
+        const content = fs.readFileSync(filePath, 'utf-8');
+        for (const token of forbiddenTokens) {
+          expect(
+            content,
+            `Unexpected forbidden test token "${token}" in ${filePath}`,
+          ).not.toContain(token);
+        }
+      }
+    });
   });
 
   describe('2. Native SQLite Addon Pipeline & Assets', () => {

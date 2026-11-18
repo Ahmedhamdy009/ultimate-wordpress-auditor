@@ -9,8 +9,11 @@ import { ScanRunRepository } from '../../../src/main/db/repositories/scan-run.re
 import { FindingRepository } from '../../../src/main/db/repositories/finding.repository.js';
 import { ScanOrchestrator } from '../../../src/main/scanner/orchestrator/orchestrator.js';
 import { SCAN_ORCHESTRATOR_ERROR_CODES } from '../../../src/main/scanner/orchestrator/errors.js';
-import type { SafeHttpClientTestHooks } from '../../../src/main/scanner/client/types.js';
 import type { BoundedCrawler } from '../../../src/main/scanner/crawler/crawler.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../../support/fixture-network.js';
 import type { BrowserManager, ManagedPage } from '../../../src/main/browser/browser-manager.js';
 import {
   type VisualAuditor,
@@ -33,11 +36,10 @@ describe('ScanOrchestrator Production Timeout Remediation & Invariant Suite', ()
   let orchestrator: ScanOrchestrator;
   let siteId: string;
   let projectId: string;
-  let testHooks: SafeHttpClientTestHooks;
-
-  const mockPublicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
   beforeAll(async () => {
+    fixtureNet = installLocalFixtureNetwork();
     server = http.createServer((req, res) => {
       const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
 
@@ -74,14 +76,10 @@ describe('ScanOrchestrator Production Timeout Remediation & Invariant Suite', ()
         resolve();
       });
     });
-
-    testHooks = {
-      lookupFn: mockPublicLookup,
-      pinnedIpOverride: '127.0.0.1',
-    };
   });
 
   afterAll(async () => {
+    fixtureNet?.restore();
     await new Promise<void>(resolve => {
       server.close(() => resolve());
     });
@@ -107,12 +105,7 @@ describe('ScanOrchestrator Production Timeout Remediation & Invariant Suite', ()
     });
     siteId = site.id;
 
-    orchestrator = new ScanOrchestrator(connection, {
-      testHooks,
-      clientOptions: {
-        allowPrivateLoopback: true,
-      },
-    });
+    orchestrator = new ScanOrchestrator(connection);
   });
 
   afterEach(async () => {
@@ -172,8 +165,6 @@ describe('ScanOrchestrator Production Timeout Remediation & Invariant Suite', ()
     };
 
     const orchestratorWithAudit = new ScanOrchestrator(connection, {
-      testHooks,
-      clientOptions: { allowPrivateLoopback: true },
       browserManagerFactory: mockBrowserManagerFactory,
       visualAuditorFactory: (mgr, opts) => {
         // Verify orchestrator passes captureScreenshots: false when config disables it
@@ -250,8 +241,6 @@ describe('ScanOrchestrator Production Timeout Remediation & Invariant Suite', ()
       }) as unknown as VisualAuditor;
 
     const customOrchestrator = new ScanOrchestrator(connection, {
-      testHooks,
-      clientOptions: { allowPrivateLoopback: true },
       browserManagerFactory: mockBrowserManagerFactory,
       visualAuditorFactory: mockVisualAuditorFactory,
     });
@@ -489,8 +478,6 @@ describe('ScanOrchestrator Production Timeout Remediation & Invariant Suite', ()
     } as unknown as AccessibilityAuditor;
 
     const lifecycleOrchestrator = new ScanOrchestrator(connection, {
-      testHooks,
-      clientOptions: { allowPrivateLoopback: true },
       browserManagerFactory: mockBrowserManagerFactory,
       accessibilityAuditorFactory: () => mockA11yAuditor,
     });
@@ -560,8 +547,6 @@ describe('ScanOrchestrator Production Timeout Remediation & Invariant Suite', ()
     } as unknown as AccessibilityAuditor;
 
     const budgetOrchestrator = new ScanOrchestrator(connection, {
-      testHooks,
-      clientOptions: { allowPrivateLoopback: true },
       browserManagerFactory: mockBrowserManagerFactory,
       accessibilityAuditorFactory: () => mockA11yAuditor,
     });
@@ -652,8 +637,6 @@ describe('ScanOrchestrator Production Timeout Remediation & Invariant Suite', ()
     } as unknown as VisualAuditor;
 
     const metricsOrchestrator = new ScanOrchestrator(connection, {
-      testHooks,
-      clientOptions: { allowPrivateLoopback: true },
       browserManagerFactory: mockBrowserManagerFactory,
       accessibilityAuditorFactory: () => mockA11yAuditor,
       visualAuditorFactory: () => mockVisualAuditor,
@@ -768,8 +751,6 @@ describe('ScanOrchestrator Production Timeout Remediation & Invariant Suite', ()
     } as unknown as VisualAuditor;
 
     const a11yOrchestrator = new ScanOrchestrator(connection, {
-      testHooks,
-      clientOptions: { allowPrivateLoopback: true },
       browserManagerFactory: mockBrowserManagerFactory,
       accessibilityAuditorFactory: () => mockA11yAuditor,
       visualAuditorFactory: () => mockVisualAuditor,
@@ -912,8 +893,6 @@ describe('ScanOrchestrator Production Timeout Remediation & Invariant Suite', ()
     } as unknown as VisualAuditor;
 
     const timeoutOrchestrator = new ScanOrchestrator(connection, {
-      testHooks,
-      clientOptions: { allowPrivateLoopback: true },
       browserManagerFactory: mockBrowserManagerFactory,
       accessibilityAuditorFactory: () =>
         ({

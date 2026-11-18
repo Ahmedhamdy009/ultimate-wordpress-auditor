@@ -5,24 +5,27 @@ import { SCANNER_CLIENT_ERROR_CODES } from '../../../src/main/scanner/client/typ
 import { RobotsEngine } from '../../../src/main/scanner/seo/robots-engine.js';
 import { SitemapEngine } from '../../../src/main/scanner/seo/sitemap-engine.js';
 import type { CrawledPageResult } from '../../../src/main/scanner/crawler/types.js';
+import {
+  installLocalFixtureNetwork,
+  type LocalFixtureNetworkHandle,
+} from '../../support/fixture-network.js';
 
 describe('DEF-008: RobotsEngine & SitemapEngine over real SafeHttpClient', () => {
   let server: http.Server;
   let port = 0;
   let origin = '';
   let serveMissing404 = false;
-
-  const testHooks = {
-    lookupFn: async (hostname: string) => {
-      if (hostname === 'seo-fixture.test') {
-        return [{ address: '93.184.216.34', family: 4 }];
-      }
-      throw new Error(`Unexpected hostname: ${hostname}`);
-    },
-    pinnedIpOverride: '127.0.0.1',
-  };
+  let fixtureNet: LocalFixtureNetworkHandle | null = null;
 
   beforeAll(async () => {
+    fixtureNet = installLocalFixtureNetwork({
+      lookupFn: async (hostname: string) => {
+        if (hostname === 'seo-fixture.test') {
+          return [{ address: '93.184.216.34', family: 4 }];
+        }
+        throw new Error(`Unexpected hostname: ${hostname}`);
+      },
+    });
     server = http.createServer((req, res) => {
       const url = new URL(req.url || '/', `http://seo-fixture.test:${port}`);
       if (!serveMissing404 && url.pathname === '/robots.txt') {
@@ -54,12 +57,13 @@ describe('DEF-008: RobotsEngine & SitemapEngine over real SafeHttpClient', () =>
   });
 
   afterAll(async () => {
+    fixtureNet?.restore();
     await new Promise<void>(resolve => server.close(() => resolve()));
   });
 
   it('preserves fail-closed HTML-only default on SafeHttpClient without allowedMediaEssences', async () => {
     serveMissing404 = false;
-    const client = new SafeHttpClient({}, testHooks);
+    const client = new SafeHttpClient({});
     await expect(client.request({ url: `${origin}/robots.txt`, method: 'GET' })).rejects.toThrow(
       expect.objectContaining({ code: SCANNER_CLIENT_ERROR_CODES.ERR_NON_HTML_CONTENT_TYPE }),
     );
@@ -70,7 +74,7 @@ describe('DEF-008: RobotsEngine & SitemapEngine over real SafeHttpClient', () =>
 
   it('fetches and parses real text/plain robots.txt and application/xml sitemap.xml without false missing findings', async () => {
     serveMissing404 = false;
-    const client = new SafeHttpClient({}, testHooks);
+    const client = new SafeHttpClient({});
     const robotsEngine = new RobotsEngine();
     const sitemapEngine = new SitemapEngine();
 
@@ -125,7 +129,7 @@ describe('DEF-008: RobotsEngine & SitemapEngine over real SafeHttpClient', () =>
 
   it('handles 404 text/html responses cleanly as missing robots.txt and sitemap.xml', async () => {
     serveMissing404 = true;
-    const client = new SafeHttpClient({}, testHooks);
+    const client = new SafeHttpClient({});
     const robotsEngine = new RobotsEngine();
     const sitemapEngine = new SitemapEngine();
 

@@ -242,4 +242,91 @@ describe('Migration 004: Historical Comparison, Lineage, and OCC User Triage', (
 
     freshConn.close();
   });
+
+  it('enforces ON DELETE RESTRICT foreign key constraint when attempting direct SQL deletion of referenced site', () => {
+    const rawDb = connection.getRawDb();
+    const projectId = crypto.randomUUID();
+    const siteId = crypto.randomUUID();
+    const fingerprint = 'c'.repeat(64);
+    const now = new Date().toISOString();
+
+    // 1. Create project and site
+    rawDb
+      .prepare('INSERT INTO projects (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)')
+      .run(projectId, 'FK Test Project', now, now);
+
+    rawDb
+      .prepare(
+        'INSERT INTO sites (id, project_id, name, base_url, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      )
+      .run(siteId, projectId, 'FK Test Site', 'https://fk-test.example.com', now, now);
+
+    // 2. Insert triage state and event referencing siteId
+    const eventId = crypto.randomUUID();
+    rawDb
+      .prepare(
+        `INSERT INTO finding_triage_events (
+          id, site_id, finding_fingerprint, revision, status, previous_status,
+          reason, created_by, created_at
+        ) VALUES (?, ?, ?, 1, 'accepted_risk', 'active', 'FK restriction test reason', 'tester', ?)`,
+      )
+      .run(eventId, siteId, fingerprint, now);
+
+    rawDb
+      .prepare(
+        `INSERT INTO finding_triage (
+          site_id, finding_fingerprint, revision, status, reason, updated_by, updated_at
+        ) VALUES (?, ?, 1, 'accepted_risk', 'FK restriction test reason', 'tester', ?)`,
+      )
+      .run(siteId, fingerprint, now);
+
+    // 3. Attempt direct SQL deletion of referenced site -> Must fail with FOREIGN KEY constraint failed
+    expect(() => {
+      rawDb.prepare('DELETE FROM sites WHERE id = ?').run(siteId);
+    }).toThrow(/FOREIGN KEY constraint failed/);
+
+    // 4. Verify site is still present in sites table
+    const siteRow = rawDb.prepare('SELECT id, name FROM sites WHERE id = ?').get(siteId);
+    expect(siteRow).toBeDefined();
+
+    // 5. Verify triage state and events remain completely intact
+    const triageRow = rawDb
+      .prepare('SELECT * FROM finding_triage WHERE site_id = ? AND finding_fingerprint = ?')
+      .get(siteId, fingerprint);
+    expect(triageRow).toBeDefined();
+
+    const eventRow = rawDb
+      .prepare('SELECT * FROM finding_triage_events WHERE id = ?')
+      .get(eventId);
+    expect(eventRow).toBeDefined();
+
+    // 6. Test isolated ON DELETE RESTRICT with finding_triage_events alone
+    const siteOnlyEventId = crypto.randomUUID();
+    const eventOnlyId = crypto.randomUUID();
+    rawDb
+      .prepare(
+        'INSERT INTO sites (id, project_id, name, base_url, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      )
+      .run(
+        siteOnlyEventId,
+        projectId,
+        'Site Only Event',
+        'https://event-only.example.com',
+        now,
+        now,
+      );
+
+    rawDb
+      .prepare(
+        `INSERT INTO finding_triage_events (
+          id, site_id, finding_fingerprint, revision, status, previous_status,
+          reason, created_by, created_at
+        ) VALUES (?, ?, ?, 1, 'accepted_risk', 'active', 'Event only reason', 'tester', ?)`,
+      )
+      .run(eventOnlyId, siteOnlyEventId, fingerprint, now);
+
+    expect(() => {
+      rawDb.prepare('DELETE FROM sites WHERE id = ?').run(siteOnlyEventId);
+    }).toThrow(/FOREIGN KEY constraint failed/);
+  });
 });

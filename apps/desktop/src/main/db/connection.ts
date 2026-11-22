@@ -1101,8 +1101,10 @@ export class DatabaseConnection {
 
       // Performance and journal pragmas for file-backed storage only
       if (this.targetPath !== ':memory:') {
-        this.db.pragma('journal_mode = WAL');
-        this.db.pragma('synchronous = NORMAL');
+        if (!this.options.readonly) {
+          this.db.pragma('journal_mode = WAL');
+          this.db.pragma('synchronous = NORMAL');
+        }
         this.db.pragma('cache_size = -64000'); // 64 MB page cache
       }
 

@@ -5,6 +5,7 @@
  */
 
 import type { CrawledPageResult } from '../crawler/types.js';
+import type { RuleExecutionRecord } from '@auditor/shared';
 import type {
   AnalyzerContext,
   AnalyzerFinding,
@@ -31,6 +32,7 @@ export class SecurityHeadersAnalyzer implements PageAnalyzer<SecurityAuditData> 
     _context: AnalyzerContext,
   ): PageAnalysisResult<SecurityAuditData> {
     const findings: AnalyzerFinding[] = [];
+    const ruleExecutions: RuleExecutionRecord[] = [];
     const headers = page.headers || {};
     const url = page.requestedUrl;
     const isHttps = url.startsWith('https:');
@@ -64,6 +66,13 @@ export class SecurityHeadersAnalyzer implements PageAnalyzer<SecurityAuditData> 
             'https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security',
           ],
         });
+        ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_MISSING', outcome: 'WITH_FINDINGS' });
+        ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_MALFORMED', outcome: 'SKIPPED', skipReason: 'NO_MATCHING_ELEMENTS' });
+        ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_WEAK', outcome: 'SKIPPED', skipReason: 'NO_MATCHING_ELEMENTS' });
+        ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_NO_SUBDOMAINS', outcome: 'SKIPPED', skipReason: 'NO_MATCHING_ELEMENTS' });
+        ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_INELIGIBLE', outcome: 'SKIPPED', skipReason: 'NO_MATCHING_ELEMENTS' });
+        ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_ELIGIBLE', outcome: 'SKIPPED', skipReason: 'NO_MATCHING_ELEMENTS' });
+        ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_NOT_DECLARED', outcome: 'SKIPPED', skipReason: 'NO_MATCHING_ELEMENTS' });
       } else {
         interface ParsedHsts {
           isValid: boolean;
@@ -236,6 +245,7 @@ export class SecurityHeadersAnalyzer implements PageAnalyzer<SecurityAuditData> 
           return result;
         };
 
+        ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_MISSING', outcome: 'CLEAN' });
         const parsedHsts = parseHstsDirectives(hsts);
 
         if (!parsedHsts.isValid) {
@@ -256,55 +266,66 @@ export class SecurityHeadersAnalyzer implements PageAnalyzer<SecurityAuditData> 
               'https://datatracker.ietf.org/doc/html/rfc6797#section-6.1',
             ],
           });
-        }
+          ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_MALFORMED', outcome: 'WITH_FINDINGS' });
+          ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_WEAK', outcome: 'SKIPPED', skipReason: 'MALFORMED_HEADER' });
+          ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_NO_SUBDOMAINS', outcome: 'SKIPPED', skipReason: 'MALFORMED_HEADER' });
+          ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_INELIGIBLE', outcome: 'SKIPPED', skipReason: 'MALFORMED_HEADER' });
+          ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_ELIGIBLE', outcome: 'SKIPPED', skipReason: 'MALFORMED_HEADER' });
+          ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_NOT_DECLARED', outcome: 'SKIPPED', skipReason: 'MALFORMED_HEADER' });
+        } else {
+          ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_MALFORMED', outcome: 'CLEAN' });
+          const maxAgeSeconds = parsedHsts.maxAgeSeconds;
+          const hasIncludeSubDomains = parsedHsts.hasIncludeSubDomains;
+          const hasPreload = parsedHsts.hasPreload;
 
-        const maxAgeSeconds = parsedHsts.maxAgeSeconds;
-        const hasIncludeSubDomains = parsedHsts.hasIncludeSubDomains;
-        const hasPreload = parsedHsts.hasPreload;
+          if (maxAgeSeconds !== null) {
+            if (maxAgeSeconds < 10368000) {
+              // Under 120 days: internal analyzer heuristic for short duration
+              findings.push({
+                ruleId: 'SEC_HEADER_HSTS_WEAK',
+                category: 'security',
+                title: `HSTS max-age Directive Too Short (${Math.round(maxAgeSeconds / 86400)} days)`,
+                description: `The HSTS max-age duration is ${maxAgeSeconds}s (~${Math.round(maxAgeSeconds / 86400)} days). The scanner flags max-age under 120 days (10,368,000s) as an internal heuristic for short HSTS protection. Note: While RFC 6797 does not dictate a minimum duration, standard production guidance recommends at least 1 year (31,536,000s) once HTTPS configuration is stable.`,
+                severity: 'low',
+                confidence: 'confirmed',
+                status: 'confirmed',
+                targetUrl: url,
+                evidence: { rawHeader: hsts, maxAgeSeconds, thresholdSeconds: 10368000 },
+                remediation:
+                  'Increase max-age to at least 31536000 (1 year) once HTTPS deployment is permanent.',
+                references: [
+                  'https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security',
+                ],
+              });
+              ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_WEAK', outcome: 'WITH_FINDINGS' });
+            } else {
+              ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_WEAK', outcome: 'CLEAN' });
+            }
+          }
 
-        if (maxAgeSeconds !== null) {
-          if (maxAgeSeconds < 10368000) {
-            // Under 120 days: internal analyzer heuristic for short duration
+          if (!hasIncludeSubDomains) {
             findings.push({
-              ruleId: 'SEC_HEADER_HSTS_WEAK',
+              ruleId: 'SEC_HEADER_HSTS_NO_SUBDOMAINS',
               category: 'security',
-              title: `HSTS max-age Directive Too Short (${Math.round(maxAgeSeconds / 86400)} days)`,
-              description: `The HSTS max-age duration is ${maxAgeSeconds}s (~${Math.round(maxAgeSeconds / 86400)} days). The scanner flags max-age under 120 days (10,368,000s) as an internal heuristic for short HSTS protection. Note: While RFC 6797 does not dictate a minimum duration, standard production guidance recommends at least 1 year (31,536,000s) once HTTPS configuration is stable.`,
-              severity: 'low',
+              title: 'HSTS Header Missing includeSubDomains Directive',
+              description: `The Strict-Transport-Security header does not specify the 'includeSubDomains' directive. Subdomains of ${url} are not automatically protected by this HSTS policy and must declare their own independent transport security configuration.`,
+              severity: 'info',
               confidence: 'confirmed',
               status: 'confirmed',
               targetUrl: url,
-              evidence: { rawHeader: hsts, maxAgeSeconds, thresholdSeconds: 10368000 },
+              evidence: { rawHeader: hsts },
               remediation:
-                'Increase max-age to at least 31536000 (1 year) once HTTPS deployment is permanent.',
+                'Evaluate whether all subdomains support HTTPS, and if so, append "; includeSubDomains" to the HSTS header.',
               references: [
                 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security',
               ],
             });
+            ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_NO_SUBDOMAINS', outcome: 'WITH_FINDINGS' });
+          } else {
+            ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_NO_SUBDOMAINS', outcome: 'CLEAN' });
           }
-        }
 
-        if (!hasIncludeSubDomains) {
-          findings.push({
-            ruleId: 'SEC_HEADER_HSTS_NO_SUBDOMAINS',
-            category: 'security',
-            title: 'HSTS Header Missing includeSubDomains Directive',
-            description: `The Strict-Transport-Security header does not specify the 'includeSubDomains' directive. Subdomains of ${url} are not automatically protected by this HSTS policy and must declare their own independent transport security configuration.`,
-            severity: 'info',
-            confidence: 'confirmed',
-            status: 'confirmed',
-            targetUrl: url,
-            evidence: { rawHeader: hsts },
-            remediation:
-              'Evaluate whether all subdomains support HTTPS, and if so, append "; includeSubDomains" to the HSTS header.',
-            references: [
-              'https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security',
-            ],
-          });
-        }
-
-        // Preload eligibility checks (per hstspreload.org criteria: max-age >= 31536000, includeSubDomains, preload)
-        if (parsedHsts.isValid) {
+          // Preload eligibility checks (per hstspreload.org criteria: max-age >= 31536000, includeSubDomains, preload)
           if (hasPreload) {
             if (maxAgeSeconds !== null && maxAgeSeconds < 31536000) {
               findings.push({
@@ -321,6 +342,9 @@ export class SecurityHeadersAnalyzer implements PageAnalyzer<SecurityAuditData> 
                   'Increase max-age to at least 31536000 (1 year) to satisfy hstspreload.org eligibility criteria.',
                 references: ['https://hstspreload.org/'],
               });
+              ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_INELIGIBLE', outcome: 'WITH_FINDINGS' });
+              ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_ELIGIBLE', outcome: 'SKIPPED', skipReason: 'NO_MATCHING_ELEMENTS' });
+              ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_NOT_DECLARED', outcome: 'SKIPPED', skipReason: 'NO_MATCHING_ELEMENTS' });
             } else if (
               hasIncludeSubDomains &&
               maxAgeSeconds !== null &&
@@ -340,25 +364,47 @@ export class SecurityHeadersAnalyzer implements PageAnalyzer<SecurityAuditData> 
                   'If hardcoded browser preloading is desired and not yet submitted, submit the domain at hstspreload.org.',
                 references: ['https://hstspreload.org/'],
               });
+              ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_ELIGIBLE', outcome: 'WITH_FINDINGS' });
+              ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_INELIGIBLE', outcome: 'CLEAN' });
+              ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_NOT_DECLARED', outcome: 'SKIPPED', skipReason: 'NO_MATCHING_ELEMENTS' });
+            } else {
+              ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_ELIGIBLE', outcome: 'SKIPPED', skipReason: 'NO_MATCHING_ELEMENTS' });
+              ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_INELIGIBLE', outcome: 'CLEAN' });
+              ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_NOT_DECLARED', outcome: 'SKIPPED', skipReason: 'NO_MATCHING_ELEMENTS' });
             }
-          } else if (hasIncludeSubDomains && maxAgeSeconds !== null && maxAgeSeconds >= 31536000) {
-            findings.push({
-              ruleId: 'SEC_HEADER_HSTS_PRELOAD_NOT_DECLARED',
-              category: 'security',
-              title: 'HSTS Preload Directive Not Declared',
-              description: `The HSTS policy specifies max-age >= 1 year and includeSubDomains, but does not include the 'preload' directive. If hardcoded browser preload listing is desired, the 'preload' directive can be added prior to submitting the domain to hstspreload.org.`,
-              severity: 'info',
-              confidence: 'confirmed',
-              status: 'confirmed',
-              targetUrl: url,
-              evidence: { rawHeader: hsts },
-              remediation:
-                'If browser preloading is desired, add "; preload" and submit the domain to hstspreload.org.',
-              references: ['https://hstspreload.org/'],
-            });
+          } else {
+            ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_ELIGIBLE', outcome: 'SKIPPED', skipReason: 'NO_MATCHING_ELEMENTS' });
+            ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_INELIGIBLE', outcome: 'SKIPPED', skipReason: 'NO_MATCHING_ELEMENTS' });
+            if (hasIncludeSubDomains && maxAgeSeconds !== null && maxAgeSeconds >= 31536000) {
+              findings.push({
+                ruleId: 'SEC_HEADER_HSTS_PRELOAD_NOT_DECLARED',
+                category: 'security',
+                title: 'HSTS Preload Directive Not Declared',
+                description: `The HSTS policy specifies max-age >= 1 year and includeSubDomains, but does not include the 'preload' directive. If hardcoded browser preload listing is desired, the 'preload' directive can be added prior to submitting the domain to hstspreload.org.`,
+                severity: 'info',
+                confidence: 'confirmed',
+                status: 'confirmed',
+                targetUrl: url,
+                evidence: { rawHeader: hsts },
+                remediation:
+                  'If browser preloading is desired, add "; preload" and submit the domain to hstspreload.org.',
+                references: ['https://hstspreload.org/'],
+              });
+              ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_NOT_DECLARED', outcome: 'WITH_FINDINGS' });
+            } else {
+              ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_NOT_DECLARED', outcome: 'SKIPPED', skipReason: 'NO_MATCHING_ELEMENTS' });
+            }
           }
         }
       }
+    } else {
+      ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_MISSING', outcome: 'SKIPPED', skipReason: 'INAPPLICABLE_SCHEME' });
+      ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_MALFORMED', outcome: 'SKIPPED', skipReason: 'INAPPLICABLE_SCHEME' });
+      ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_WEAK', outcome: 'SKIPPED', skipReason: 'INAPPLICABLE_SCHEME' });
+      ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_NO_SUBDOMAINS', outcome: 'SKIPPED', skipReason: 'INAPPLICABLE_SCHEME' });
+      ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_INELIGIBLE', outcome: 'SKIPPED', skipReason: 'INAPPLICABLE_SCHEME' });
+      ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_ELIGIBLE', outcome: 'SKIPPED', skipReason: 'INAPPLICABLE_SCHEME' });
+      ruleExecutions.push({ ruleId: 'SEC_HEADER_HSTS_PRELOAD_NOT_DECLARED', outcome: 'SKIPPED', skipReason: 'INAPPLICABLE_SCHEME' });
     }
 
     // Helper to parse CSP directives into directive name -> tokens map
@@ -816,6 +862,7 @@ export class SecurityHeadersAnalyzer implements PageAnalyzer<SecurityAuditData> 
     return {
       findings,
       data,
+      ruleExecutions,
     };
   }
 }

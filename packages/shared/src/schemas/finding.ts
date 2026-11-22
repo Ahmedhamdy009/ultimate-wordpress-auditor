@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { IDENTITY_TIERS, type IdentityTier } from '../identity/types.js';
 
 /**
  * Standard finding schema and status definitions according to ARCHITECTURE.md.
@@ -124,6 +125,8 @@ export interface FindingDTO {
   remediation: string | null;
   references: string[] | null;
   createdAt: string;
+  fingerprint?: string;
+  identityTier?: IdentityTier;
 }
 
 export const FindingDTOSchema = z.object({
@@ -141,6 +144,8 @@ export const FindingDTOSchema = z.object({
   remediation: z.string().max(10000).nullable(),
   references: z.array(z.string().max(2048)).nullable(),
   createdAt: z.string().datetime({ message: 'Invalid UTC ISO datetime' }),
+  fingerprint: z.string().min(1).max(128).optional(),
+  identityTier: z.enum(IDENTITY_TIERS).optional(),
 });
 
 export const CreateFindingRequestSchema = z.object({
@@ -159,6 +164,8 @@ export const CreateFindingRequestSchema = z.object({
     .nullable(),
   remediation: z.string().trim().max(10000).optional().nullable(),
   references: z.array(z.string().trim().max(2048)).optional().nullable(),
+  fingerprint: z.string().trim().min(1).max(128).optional(),
+  identityTier: z.enum(IDENTITY_TIERS).optional(),
 });
 
 export type CreateFindingRequest = z.input<typeof CreateFindingRequestSchema>;

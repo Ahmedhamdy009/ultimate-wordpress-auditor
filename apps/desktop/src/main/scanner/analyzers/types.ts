@@ -4,7 +4,7 @@
  * and CrawledPageResult / CrawlResult models.
  */
 
-import type { FindingSeverity, FindingConfidence, FindingStatus } from '@auditor/shared';
+import type { FindingSeverity, FindingConfidence, FindingStatus, RuleExecutionRecord, SiteExecutionRecord } from '@auditor/shared';
 import type { CrawledPageResult, CrawlResult } from '../crawler/types.js';
 import type { SafeHttpClient } from '../client/http-client.js';
 
@@ -33,11 +33,13 @@ export interface AnalyzerFinding {
 export interface PageAnalysisResult<T = unknown> {
   readonly findings: readonly AnalyzerFinding[];
   readonly data?: T;
+  readonly ruleExecutions?: readonly RuleExecutionRecord[];
 }
 
 export interface SiteAnalysisResult<T = unknown> {
   readonly findings: readonly AnalyzerFinding[];
   readonly data?: T;
+  readonly siteExecutions?: readonly SiteExecutionRecord[];
 }
 
 export interface PageAnalyzer<T = unknown> {

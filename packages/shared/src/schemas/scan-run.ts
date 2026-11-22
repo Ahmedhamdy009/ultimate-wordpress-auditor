@@ -1,4 +1,14 @@
 import { z } from 'zod';
+import type { RuleCatalogMetadata, SiteExecutionRecord } from '../rules/types.js';
+import type { UrlTelemetryTruncationRecord, CrawlTerminationConditions } from '../telemetry/types.js';
+
+export {
+  LevelCFallbackSummarySchema,
+  createLevelCFallback,
+  LEVEL_C_WARNING_STANDARD,
+  LEVEL_C_WARNING_INVALID_COUNTERS,
+} from '../telemetry/level-c-summary.js';
+export type { LevelCFallbackSummary } from '../telemetry/level-c-summary.js';
 
 export const SCAN_RUN_STATUSES = [
   'pending',
@@ -111,6 +121,50 @@ export const PageScreenshotRecordSchema = z.object({
 export type ResourceBytesByType = Record<string, number>;
 export const ResourceBytesByTypeSchema = z.record(z.string(), z.number().min(0));
 
+export const UrlTelemetryTruncationRecordSchema = z.object({
+  isTruncated: z.boolean(),
+  crawledUrlsTotal: z.number().int().min(0),
+  crawledUrlsPersisted: z.number().int().min(0),
+  crawledUrlsOmitted: z.number().int().min(0),
+  browserAuditedUrlsTotal: z.number().int().min(0),
+  browserAuditedUrlsPersisted: z.number().int().min(0),
+  browserAuditedUrlsOmitted: z.number().int().min(0),
+  serializedBytes: z.number().int().min(0),
+  budgetBytes: z.number().int().min(0),
+});
+
+export const RuleCatalogMetadataSchema = z.object({
+  registryVersion: z.string().min(1).max(50),
+  admittedCount: z.number().int().min(0),
+  omittedCount: z.number().int().min(0),
+  unrecordedOmittedCount: z.number().int().min(0),
+  isCatalogTruncated: z.boolean(),
+  isOmissionIdentityTruncated: z.boolean(),
+  firstOmittedRuleId: z.string().min(1).max(64).optional(),
+  lastRecordedOmittedRuleId: z.string().min(1).max(64).optional(),
+  omittedRuleIds: z.array(z.string().min(1).max(64)).max(50),
+});
+
+export const SiteExecutionRecordSchema = z.object({
+  ruleId: z.string().min(1).max(64),
+  outcome: z.enum(['CLEAN', 'WITH_FINDINGS', 'SKIPPED', 'FAILED']),
+  skipReason: z.string().optional(),
+  failureCode: z.string().optional(),
+});
+
+export const CrawlTerminationConditionsSchema = z.object({
+  naturalQueueDrained: z.boolean(),
+  wasCancelled: z.boolean(),
+  wasTimedOut: z.boolean(),
+  wasPageLimitHit: z.boolean(),
+  discardedQueueCount: z.number().int().min(0),
+  urlsSkippedLimits: z.number().int().min(0),
+  httpErrorPagesCount: z.number().int().min(0),
+  networkFetchErrorPagesCount: z.number().int().min(0),
+  totalPagesAttempted: z.number().int().min(0),
+  activeWorkersAtFinish: z.number().int().min(0),
+});
+
 export interface ScanRunSummaryDTO {
   totalFindings: number;
   criticalCount: number;
@@ -146,6 +200,13 @@ export interface ScanRunSummaryDTO {
   pageScreenshots?: PageScreenshotRecord[];
   resourceBytesByType?: ResourceBytesByType;
   completedEngines?: string[];
+  crawledUrls?: string[];
+  browserAuditedUrls?: string[];
+  urlTelemetryTruncation?: UrlTelemetryTruncationRecord;
+  ruleCatalog?: string[];
+  ruleCatalogMetadata?: RuleCatalogMetadata;
+  siteLevelExecutions?: SiteExecutionRecord[];
+  crawlScopeClosure?: CrawlTerminationConditions;
 }
 
 export const ScanRunSummaryDTOSchema = z.object({
@@ -183,6 +244,13 @@ export const ScanRunSummaryDTOSchema = z.object({
   pageScreenshots: z.array(PageScreenshotRecordSchema).max(500).optional(),
   resourceBytesByType: ResourceBytesByTypeSchema.optional(),
   completedEngines: z.array(z.string().min(1).max(100)).max(50).optional(),
+  crawledUrls: z.array(z.string().min(1).max(2048)).max(5000).optional(),
+  browserAuditedUrls: z.array(z.string().min(1).max(2048)).max(5000).optional(),
+  urlTelemetryTruncation: UrlTelemetryTruncationRecordSchema.optional(),
+  ruleCatalog: z.array(z.string().min(1).max(64)).max(200).optional(),
+  ruleCatalogMetadata: RuleCatalogMetadataSchema.optional(),
+  siteLevelExecutions: z.array(SiteExecutionRecordSchema).max(100).optional(),
+  crawlScopeClosure: CrawlTerminationConditionsSchema.optional(),
 });
 
 export interface ScanRunErrorDTO {

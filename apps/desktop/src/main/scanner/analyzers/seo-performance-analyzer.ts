@@ -4,7 +4,7 @@
  * and lightweight static resource/performance metrics without browser rendering.
  */
 
-import { normalizeCrawlUrl } from '@auditor/shared';
+import { normalizeCrawlUrl, type RuleExecutionRecord } from '@auditor/shared';
 import { redactUrl } from '../../browser/redactor.js';
 import { validateHreflangTag } from '../parser/hreflang-validator.js';
 import type { CrawledPageResult } from '../crawler/types.js';
@@ -45,6 +45,7 @@ export class SeoPerformanceAnalyzer implements PageAnalyzer<SeoPerformanceData> 
     context: AnalyzerContext,
   ): PageAnalysisResult<SeoPerformanceData> {
     const findings: AnalyzerFinding[] = [];
+    const ruleExecutions: RuleExecutionRecord[] = [];
     const url = redactUrl(page.requestedUrl);
     const parsedDoc = page.parsedDocument;
 
@@ -203,7 +204,12 @@ export class SeoPerformanceAnalyzer implements PageAnalyzer<SeoPerformanceData> 
             'https://developer.mozilla.org/en-US/docs/Web/HTML/Element/Heading_Elements',
           ],
         });
-      } else if (h1Count > 1) {
+        ruleExecutions.push({ ruleId: 'SEO_H1_MISSING', outcome: 'WITH_FINDINGS' });
+        ruleExecutions.push({ ruleId: 'SEO_H1_MULTIPLE', outcome: 'SKIPPED', skipReason: 'NO_MATCHING_ELEMENTS' });
+      } else if (h1Count === 1) {
+        ruleExecutions.push({ ruleId: 'SEO_H1_MISSING', outcome: 'CLEAN' });
+        ruleExecutions.push({ ruleId: 'SEO_H1_MULTIPLE', outcome: 'CLEAN' });
+      } else {
         findings.push({
           ruleId: 'SEO_H1_MULTIPLE',
           category: 'technical-seo',
@@ -220,6 +226,8 @@ export class SeoPerformanceAnalyzer implements PageAnalyzer<SeoPerformanceData> 
             'https://developer.mozilla.org/en-US/docs/Web/HTML/Element/Heading_Elements',
           ],
         });
+        ruleExecutions.push({ ruleId: 'SEO_H1_MISSING', outcome: 'CLEAN' });
+        ruleExecutions.push({ ruleId: 'SEO_H1_MULTIPLE', outcome: 'WITH_FINDINGS' });
       }
 
       // D. Heading Hierarchy Gaps
@@ -401,10 +409,11 @@ export class SeoPerformanceAnalyzer implements PageAnalyzer<SeoPerformanceData> 
       }
 
       // I. Open Graph & Twitter Cards
-      const ogKeys = Object.keys(meta.openGraph);
-      const hasOgTitle = Boolean(meta.openGraph['title']);
-      const hasOgImage = Boolean(meta.openGraph['image']);
-      const hasOgDesc = Boolean(meta.openGraph['description']);
+      const openGraph = meta.openGraph || {};
+      const ogKeys = Object.keys(openGraph);
+      const hasOgTitle = Boolean(openGraph['title']);
+      const hasOgImage = Boolean(openGraph['image']);
+      const hasOgDesc = Boolean(openGraph['description']);
 
       if (ogKeys.length > 0 && (!hasOgTitle || !hasOgImage || !hasOgDesc)) {
         findings.push({
@@ -429,7 +438,8 @@ export class SeoPerformanceAnalyzer implements PageAnalyzer<SeoPerformanceData> 
         });
       }
 
-      if (Object.keys(meta.twitterCard).length === 0) {
+      const twitterCard = meta.twitterCard || {};
+      if (Object.keys(twitterCard).length === 0) {
         findings.push({
           ruleId: 'SEO_TWITTER_CARD_MISSING',
           category: 'technical-seo',
@@ -618,8 +628,9 @@ export class SeoPerformanceAnalyzer implements PageAnalyzer<SeoPerformanceData> 
       }
 
       // Resource counts
-      scriptCount = parsedDoc.resources.filter(r => r.type === 'script').length;
-      stylesheetCount = parsedDoc.resources.filter(r => r.type === 'stylesheet').length;
+      const docResources = parsedDoc.resources || [];
+      scriptCount = docResources.filter(r => r.type === 'script').length;
+      stylesheetCount = docResources.filter(r => r.type === 'stylesheet').length;
 
       // ==========================================
       // 2. Static Performance Indicators
@@ -709,6 +720,9 @@ export class SeoPerformanceAnalyzer implements PageAnalyzer<SeoPerformanceData> 
           references: ['https://web.dev/articles/optimize-cls#images-without-dimensions'],
         });
       }
+    } else {
+      ruleExecutions.push({ ruleId: 'SEO_H1_MISSING', outcome: 'SKIPPED', skipReason: 'NON_HTML_DOCUMENT' });
+      ruleExecutions.push({ ruleId: 'SEO_H1_MULTIPLE', outcome: 'SKIPPED', skipReason: 'NON_HTML_DOCUMENT' });
     }
 
     const data: SeoPerformanceData = {
@@ -735,6 +749,7 @@ export class SeoPerformanceAnalyzer implements PageAnalyzer<SeoPerformanceData> 
     return {
       findings,
       data,
+      ruleExecutions,
     };
   }
 }

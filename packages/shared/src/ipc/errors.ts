@@ -49,6 +49,7 @@ export const IPC_ERROR_CODES = {
   EVIDENCE_TOO_LARGE: 'ERR_EVIDENCE_TOO_LARGE',
   SSRF_PROHIBITED_TARGET: 'ERR_SSRF_PROHIBITED_TARGET',
   DNS_RESOLUTION_FAILED: 'ERR_DNS_RESOLUTION_FAILED',
+  CONCURRENT_TRIAGE_CONFLICT: 'ERR_CONCURRENT_TRIAGE_CONFLICT',
 } as const;
 
 export type IPCErrorCode = (typeof IPC_ERROR_CODES)[keyof typeof IPC_ERROR_CODES];
@@ -103,6 +104,8 @@ export const SAFE_IPC_ERROR_MESSAGES: Readonly<Record<IPCErrorCode, string>> = O
   [IPC_ERROR_CODES.SSRF_PROHIBITED_TARGET]:
     'Target destination or resolved address is prohibited by security policy',
   [IPC_ERROR_CODES.DNS_RESOLUTION_FAILED]: 'DNS resolution failed for the target hostname',
+  [IPC_ERROR_CODES.CONCURRENT_TRIAGE_CONFLICT]:
+    'Triage update conflict: finding state has been modified by another operation. Please refresh.',
 });
 
 export function isAllowedIPCCode(code: unknown): code is IPCErrorCode {

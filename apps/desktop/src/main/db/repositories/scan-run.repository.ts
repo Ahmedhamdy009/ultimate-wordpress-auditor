@@ -26,6 +26,7 @@ interface ScanRunRow {
   error_json: string | null;
   created_at: string;
   updated_at: string;
+  baseline_scan_run_id?: string | null;
 }
 
 export class ScanRunRepository {
@@ -78,6 +79,7 @@ export class ScanRunRepository {
       error,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      baselineScanRunId: row.baseline_scan_run_id ?? null,
     };
   }
 
@@ -89,12 +91,14 @@ export class ScanRunRepository {
     scanType: ScanRunType;
     targetUrl: string;
     config?: Record<string, unknown>;
+    baselineScanRunId?: string | null;
   }): ScanRunDTO {
     const rawDb = this.connection.getRawDb();
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     const configJson = JSON.stringify(data.config ?? {});
     const safeTargetUrl = redactUrl(data.targetUrl);
+    const baselineScanRunId = data.baselineScanRunId ?? null;
 
     rawDb
       .prepare(
@@ -102,15 +106,17 @@ export class ScanRunRepository {
           id, site_id, scan_type, status, target_url,
           started_at, completed_at, cancelled_at, duration_ms,
           config_json, summary_json, error_json,
+          baseline_scan_run_id,
           created_at, updated_at
         ) VALUES (
           ?, ?, ?, 'pending', ?,
           NULL, NULL, NULL, NULL,
           ?, NULL, NULL,
+          ?,
           ?, ?
         )`,
       )
-      .run(id, data.siteId, data.scanType, safeTargetUrl, configJson, now, now);
+      .run(id, data.siteId, data.scanType, safeTargetUrl, configJson, baselineScanRunId, now, now);
 
     return {
       id,
@@ -127,6 +133,7 @@ export class ScanRunRepository {
       error: null,
       createdAt: now,
       updatedAt: now,
+      baselineScanRunId,
     };
   }
 

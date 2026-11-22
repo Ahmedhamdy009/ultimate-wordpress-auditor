@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import type { RuleCatalogMetadata, SiteExecutionRecord } from '../rules/types.js';
-import type { UrlTelemetryTruncationRecord, CrawlTerminationConditions } from '../telemetry/types.js';
+import type {
+  UrlTelemetryTruncationRecord,
+  CrawlTerminationConditions,
+} from '../telemetry/types.js';
 
 export {
   LevelCFallbackSummarySchema,
@@ -281,6 +284,7 @@ export interface ScanRunDTO {
   errorDetails?: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
+  baselineScanRunId?: string | null;
 }
 
 export const ScanRunDTOSchema = z.object({
@@ -298,6 +302,7 @@ export const ScanRunDTOSchema = z.object({
   error: ScanRunErrorDTOSchema.nullable(),
   createdAt: z.string().datetime({ message: 'Invalid UTC ISO datetime' }),
   updatedAt: z.string().datetime({ message: 'Invalid UTC ISO datetime' }),
+  baselineScanRunId: z.string().uuid('Invalid baseline scan run ID format').nullable().optional(),
 });
 
 export const CreateScanRunRequestSchema = z.object({
@@ -305,6 +310,7 @@ export const CreateScanRunRequestSchema = z.object({
   scanType: ScanRunTypeSchema.optional().default('full'),
   targetUrl: z.string().trim().min(1).max(2048).optional(),
   config: z.record(z.string(), z.unknown()).optional().default({}),
+  baselineScanRunId: z.string().uuid('Invalid baseline scan run ID format').optional().nullable(),
 });
 
 export type CreateScanRunRequest = z.input<typeof CreateScanRunRequestSchema>;

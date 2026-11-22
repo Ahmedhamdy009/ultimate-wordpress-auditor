@@ -23,6 +23,7 @@ interface FindingRow {
   evidence_json: string | null;
   remediation: string | null;
   references_json: string | null;
+  fingerprint?: string | null;
   created_at: string;
 }
 
@@ -39,6 +40,7 @@ export interface CreateFindingInput {
   evidence?: Record<string, unknown> | string | null;
   remediation?: string | null;
   references?: string[] | null;
+  fingerprint?: string | null;
 }
 
 export class FindingRepository {
@@ -81,6 +83,7 @@ export class FindingRepository {
       evidence,
       remediation: row.remediation,
       references,
+      fingerprint: row.fingerprint ?? undefined,
       createdAt: row.created_at,
     };
   }
@@ -101,17 +104,18 @@ export class FindingRepository {
         : null;
     const referencesJson = data.references ? JSON.stringify(data.references) : null;
     const status = data.status ?? 'potential';
+    const fingerprint = data.fingerprint ?? null;
 
     rawDb
       .prepare(
         `INSERT INTO findings (
           id, scan_run_id, rule_id, category, title, description,
           severity, confidence, status, target_url, evidence_json,
-          remediation, references_json, created_at
+          remediation, references_json, fingerprint, created_at
         ) VALUES (
           ?, ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?,
-          ?, ?, ?
+          ?, ?, ?, ?
         )`,
       )
       .run(
@@ -128,6 +132,7 @@ export class FindingRepository {
         evidenceJson,
         data.remediation ?? null,
         referencesJson,
+        fingerprint,
         now,
       );
 
@@ -145,6 +150,7 @@ export class FindingRepository {
       evidence: data.evidence ?? null,
       remediation: data.remediation ?? null,
       references: data.references ?? null,
+      fingerprint: fingerprint ?? undefined,
       createdAt: now,
     };
   }
@@ -161,11 +167,11 @@ export class FindingRepository {
       `INSERT INTO findings (
         id, scan_run_id, rule_id, category, title, description,
         severity, confidence, status, target_url, evidence_json,
-        remediation, references_json, created_at
+        remediation, references_json, fingerprint, created_at
       ) VALUES (
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
-        ?, ?, ?
+        ?, ?, ?, ?
       )`,
     );
 
@@ -183,6 +189,7 @@ export class FindingRepository {
         const referencesJson = item.references ? JSON.stringify(item.references) : null;
         const status = item.status ?? 'potential';
         const safeTargetUrl = redactUrl(item.targetUrl);
+        const fingerprint = item.fingerprint ?? null;
 
         stmt.run(
           id,
@@ -198,6 +205,7 @@ export class FindingRepository {
           evidenceJson,
           item.remediation ?? null,
           referencesJson,
+          fingerprint,
           now,
         );
 
@@ -215,6 +223,7 @@ export class FindingRepository {
           evidence: item.evidence ?? null,
           remediation: item.remediation ?? null,
           references: item.references ?? null,
+          fingerprint: fingerprint ?? undefined,
           createdAt: now,
         });
       }

@@ -72,6 +72,7 @@ export class ScanRunService implements IScanRunService {
         scanType: request.scanType ?? 'full',
         targetUrl: redactUrl(targetUrl),
         config: request.config ?? {},
+        baselineScanRunId: request.baselineScanRunId ?? null,
       });
     } catch {
       throw new IPCError('Failed to create scan run in database', IPC_ERROR_CODES.DATABASE_ERROR);

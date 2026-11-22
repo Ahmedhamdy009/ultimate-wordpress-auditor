@@ -140,6 +140,7 @@ export class FindingService implements IFindingService {
         evidence: sanitizedEvidence,
         remediation: request.remediation ?? null,
         references: request.references ?? null,
+        fingerprint: request.fingerprint ?? null,
       });
     } catch {
       throw new IPCError('Failed to persist finding in database', IPC_ERROR_CODES.DATABASE_ERROR);

@@ -38,9 +38,9 @@ describe('Migration System', () => {
       const runner = new MigrationRunner(connection);
       const result = await runner.migrate();
 
-      expect(result.appliedCount).toBe(3);
-      expect(result.currentVersion).toBe(3);
-      expect(runner.getCurrentVersion()).toBe(3);
+      expect(result.appliedCount).toBe(4);
+      expect(result.currentVersion).toBe(4);
+      expect(runner.getCurrentVersion()).toBe(4);
 
       const rawDb = connection.getRawDb();
 
@@ -76,6 +76,16 @@ describe('Migration System', () => {
       expect(migration3Row.name).toBe('003_add_csv_report_format');
       expect(migration3Row.checksum.length).toBe(64);
 
+      const migration4Row = rawDb.prepare('SELECT * FROM _migrations WHERE version = 4').get() as {
+        version: number;
+        name: string;
+        checksum: string;
+        applied_at: string;
+      };
+      expect(migration4Row).toBeDefined();
+      expect(migration4Row.name).toBe('004_historical_comparison_and_triage');
+      expect(migration4Row.checksum.length).toBe(64);
+
       // Check projects table exists
       const projectTableCheck = rawDb
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='projects'")
@@ -104,10 +114,22 @@ describe('Migration System', () => {
         .get();
       expect(reportsTableCheck).toBeDefined();
 
+      const triageTableCheck = rawDb
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='finding_triage'")
+        .get();
+      expect(triageTableCheck).toBeDefined();
+
+      const triageEventsTableCheck = rawDb
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='finding_triage_events'",
+        )
+        .get();
+      expect(triageEventsTableCheck).toBeDefined();
+
       // Check indexes
       const indexes = rawDb
         .prepare(
-          "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name IN ('projects', 'sites', 'scan_runs', 'findings', 'reports')",
+          "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name IN ('projects', 'sites', 'scan_runs', 'findings', 'reports', 'finding_triage', 'finding_triage_events')",
         )
         .all() as Array<{ name: string }>;
       const indexNames = indexes.map(i => i.name);
@@ -118,11 +140,16 @@ describe('Migration System', () => {
       expect(indexNames).toContain('idx_scan_runs_site_id');
       expect(indexNames).toContain('idx_scan_runs_status');
       expect(indexNames).toContain('idx_scan_runs_created_at');
+      expect(indexNames).toContain('idx_scan_runs_baseline_id');
       expect(indexNames).toContain('idx_findings_scan_run_id');
       expect(indexNames).toContain('idx_findings_severity');
       expect(indexNames).toContain('idx_findings_category');
+      expect(indexNames).toContain('idx_findings_scan_fingerprint');
+      expect(indexNames).toContain('idx_findings_fingerprint');
       expect(indexNames).toContain('idx_reports_scan_run_id');
       expect(indexNames).toContain('idx_reports_status');
+      expect(indexNames).toContain('idx_finding_triage_site');
+      expect(indexNames).toContain('idx_triage_events_lookup');
     });
 
     it('is idempotent on an existing database at current version', async () => {
@@ -131,11 +158,11 @@ describe('Migration System', () => {
 
       const runner = new MigrationRunner(connection);
       const firstRun = await runner.migrate();
-      expect(firstRun.appliedCount).toBe(3);
+      expect(firstRun.appliedCount).toBe(4);
 
       const secondRun = await runner.migrate();
       expect(secondRun.appliedCount).toBe(0);
-      expect(secondRun.currentVersion).toBe(3);
+      expect(secondRun.currentVersion).toBe(4);
     });
   });
 

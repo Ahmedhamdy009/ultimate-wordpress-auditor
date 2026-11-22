@@ -179,4 +179,74 @@ CREATE INDEX IF NOT EXISTS idx_reports_status
   ON reports(status);
 `.trim(),
   },
+  {
+    version: 4,
+    name: '004_historical_comparison_and_triage',
+    up: `
+ALTER TABLE scan_runs ADD COLUMN baseline_scan_run_id TEXT
+  REFERENCES scan_runs(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_scan_runs_baseline_id
+  ON scan_runs(baseline_scan_run_id);
+
+ALTER TABLE findings ADD COLUMN fingerprint TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_findings_scan_fingerprint
+  ON findings(scan_run_id, fingerprint);
+
+CREATE INDEX IF NOT EXISTS idx_findings_fingerprint
+  ON findings(fingerprint);
+
+CREATE TABLE IF NOT EXISTS finding_triage (
+  site_id TEXT NOT NULL,
+  finding_fingerprint TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL,
+  reason TEXT,
+  notes TEXT,
+  updated_by TEXT NOT NULL DEFAULT 'local_user',
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (site_id, finding_fingerprint),
+  FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE RESTRICT,
+  CHECK (status IN ('accepted_risk', 'false_positive', 'ignored', 'confirmed', 'active')),
+  CHECK (length(finding_fingerprint) = 64),
+  CHECK (revision >= 1)
+);
+
+CREATE INDEX IF NOT EXISTS idx_finding_triage_site
+  ON finding_triage(site_id, status);
+
+CREATE TABLE IF NOT EXISTS finding_triage_events (
+  id TEXT PRIMARY KEY,
+  site_id TEXT NOT NULL,
+  finding_fingerprint TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  previous_status TEXT,
+  reason TEXT,
+  notes TEXT,
+  created_by TEXT NOT NULL DEFAULT 'local_user',
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE RESTRICT,
+  CHECK (status IN ('accepted_risk', 'false_positive', 'ignored', 'confirmed', 'active')),
+  CHECK (length(finding_fingerprint) = 64),
+  CHECK (revision >= 1)
+);
+
+CREATE INDEX IF NOT EXISTS idx_triage_events_lookup
+  ON finding_triage_events(site_id, finding_fingerprint, revision ASC);
+
+CREATE TRIGGER IF NOT EXISTS trg_prevent_triage_events_update
+BEFORE UPDATE ON finding_triage_events
+BEGIN
+  SELECT RAISE(ABORT, 'finding_triage_events records are append-only and cannot be updated');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_prevent_triage_events_delete
+BEFORE DELETE ON finding_triage_events
+BEGIN
+  SELECT RAISE(ABORT, 'finding_triage_events records are append-only and cannot be deleted');
+END;
+`.trim(),
+  },
 ]);

@@ -221,7 +221,78 @@ describe('Phase 2.3 Repositories: Scan Runs, Findings & Reports', () => {
       connection.getRawDb().prepare('DELETE FROM scan_runs WHERE id = ?').run(run.id);
       expect(findingRepo.countByScanRunId(run.id)).toBe(0);
     });
+
+    it('returns projected findings with json_extract locators and excludes heavy text blobs', () => {
+      const run = scanRunRepo.create({
+        siteId: testSiteId,
+        scanType: 'full',
+        targetUrl: 'https://example.com',
+      });
+
+      const explicitFingerprint = 'a'.repeat(64);
+      findingRepo.create({
+        scanRunId: run.id,
+        ruleId: 'SEC_HEADER_CSP_MISSING',
+        category: 'security',
+        title: 'CSP Header Missing',
+        description: 'Heavy description text that should be excluded from projection',
+        severity: 'high',
+        confidence: 'confirmed',
+        targetUrl: 'https://example.com/login',
+        evidence: {
+          targetSelector: 'meta#csp',
+          lineNumber: 42,
+          heavyPayload: 'x'.repeat(10000),
+        },
+        remediation: 'Large remediation instructions...',
+        references: ['https://developer.mozilla.org'],
+        fingerprint: explicitFingerprint,
+      });
+
+      findingRepo.create({
+        scanRunId: run.id,
+        ruleId: 'A11Y_COLOR_CONTRAST',
+        category: 'accessibility',
+        title: 'Color Contrast Failure',
+        description: 'Another long description',
+        severity: 'medium',
+        confidence: 'firm',
+        targetUrl: 'https://example.com/about',
+        evidence: {
+          selector: 'div.main > p.lead',
+        },
+      });
+
+      const projected = findingRepo.listProjectedByScanRunId(run.id);
+      expect(projected).toHaveLength(2);
+
+      // First finding: explicit fingerprint, targetSelector -> selector, lineNumber extracted
+      const f1 = projected.find(p => p.ruleId === 'SEC_HEADER_CSP_MISSING');
+      expect(f1).toBeDefined();
+      expect(f1?.fingerprint).toBe(explicitFingerprint);
+      expect(f1?.selector).toBe('meta#csp');
+      expect(f1?.lineNumber).toBe(42);
+      expect(f1?.severity).toBe('high');
+      expect(f1?.confidence).toBe('confirmed');
+      expect(f1?.status).toBe('potential');
+      // Assert heavy properties do not exist on ProjectedFindingDTO
+      const f1Obj = f1 as unknown as Record<string, unknown>;
+      expect(f1Obj.description).toBeUndefined();
+      expect(f1Obj.remediation).toBeUndefined();
+      expect(f1Obj.references).toBeUndefined();
+      expect(f1Obj.evidence).toBeUndefined();
+
+      // Second finding: selector fallback, lineNumber is null, fallback fingerprint computed
+      const f2 = projected.find(p => p.ruleId === 'A11Y_COLOR_CONTRAST');
+      expect(f2).toBeDefined();
+      expect(f2?.selector).toBe('div.main > p.lead');
+      expect(f2?.lineNumber).toBeNull();
+      expect(f2?.fingerprint).toBeDefined();
+      expect(typeof f2?.fingerprint).toBe('string');
+      expect(f2?.fingerprint?.length).toBe(64);
+    });
   });
+
 
   describe('ReportRepository', () => {
     it('creates, queries, and updates reports', () => {

@@ -6,8 +6,12 @@ import {
   type FindingSeverity,
   type FindingConfidence,
   type FindingStatus,
+  type ProjectedFindingDTO,
+  computeFindingFingerprint,
 } from '@auditor/shared';
 import { redactUrl } from '../../browser/redactor.js';
+
+export type { ProjectedFindingDTO };
 
 interface FindingRow {
   id: string;
@@ -25,6 +29,21 @@ interface FindingRow {
   references_json: string | null;
   fingerprint?: string | null;
   created_at: string;
+}
+
+interface ProjectedFindingRow {
+  id: string;
+  scan_run_id: string;
+  rule_id: string;
+  category: string;
+  severity: string;
+  confidence: string;
+  status: string;
+  target_url: string;
+  fingerprint: string | null;
+  target_selector: string | null;
+  selector: string | null;
+  line_number: number | null;
 }
 
 export interface CreateFindingInput {
@@ -365,4 +384,64 @@ export class FindingRepository {
 
     return rows.map(r => this.mapRowToDTO(r));
   }
+
+  /**
+   * Retrieves lightweight projected findings for scan comparison.
+   * Omits heavy text blobs (evidence_json, remediation, references_json) while
+   * extracting structural selector and line number via SQLite json_extract.
+   */
+  public listProjectedByScanRunId(scanRunId: string): ProjectedFindingDTO[] {
+    const rawDb = this.connection.getRawDb();
+    const rows = rawDb
+      .prepare(
+        `SELECT 
+           id, 
+           scan_run_id, 
+           rule_id, 
+           category, 
+           severity, 
+           confidence, 
+           status, 
+           target_url, 
+           fingerprint, 
+           json_extract(evidence_json, '$.targetSelector') AS target_selector, 
+           json_extract(evidence_json, '$.selector') AS selector, 
+           json_extract(evidence_json, '$.lineNumber') AS line_number 
+         FROM findings 
+         WHERE scan_run_id = ? 
+         ORDER BY id ASC`,
+      )
+      .all(scanRunId) as ProjectedFindingRow[];
+
+    return rows.map(r => {
+      const targetUrl = redactUrl(r.target_url);
+      const selector = (r.target_selector || r.selector || null) as string | null;
+      const lineNumber =
+        r.line_number !== null && r.line_number !== undefined ? Number(r.line_number) : null;
+
+      const fingerprint =
+        r.fingerprint ??
+        computeFindingFingerprint({
+          ruleId: r.rule_id,
+          category: r.category,
+          targetUrl,
+          evidence: selector ? { selector } : null,
+        });
+
+      return {
+        id: r.id,
+        scanRunId: r.scan_run_id,
+        ruleId: r.rule_id,
+        category: r.category,
+        severity: r.severity as FindingSeverity,
+        confidence: r.confidence as FindingConfidence,
+        status: r.status as FindingStatus,
+        targetUrl,
+        fingerprint,
+        selector,
+        lineNumber,
+      };
+    });
+  }
 }
+

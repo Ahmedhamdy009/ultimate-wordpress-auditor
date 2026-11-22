@@ -47,6 +47,7 @@ export interface BrowserAuditExecutionResult {
   layoutStabilityPagesCompleted?: number;
   accessibilityCandidatesTotal?: number;
   pageScreenshots?: PageScreenshotRecord[];
+  auditedUrls?: string[];
 }
 
 export interface ScanExecutionContext {

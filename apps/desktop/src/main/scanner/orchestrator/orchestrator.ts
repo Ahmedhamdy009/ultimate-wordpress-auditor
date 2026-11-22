@@ -29,6 +29,11 @@ import {
   normalizeFindingLifecycleStatus,
   IPCError,
   IPC_ERROR_CODES,
+  computeFindingFingerprint,
+  serializeBoundedUrlTelemetry,
+  buildRuleCatalog,
+  KNOWN_RULE_IDS_V1,
+  CURRENT_REGISTRY_VERSION,
 } from '@auditor/shared';
 import { DatabaseConnection } from '../../db/connection.js';
 import { ScanRunRepository } from '../../db/repositories/scan-run.repository.js';
@@ -596,6 +601,18 @@ export class ScanOrchestrator implements IScanOrchestrator {
         : 0;
       const staticPagesAnalyzed = analyzerResult?.stats?.pagesAnalyzed ?? 0;
 
+      const rawCrawledUrls = crawlResult.pages.map(p => p.finalUrl || p.requestedUrl);
+      const rawBrowserAuditedUrls = browserResult?.auditedUrls
+        ? [...browserResult.auditedUrls]
+        : [];
+      const boundedUrlTelemetry = serializeBoundedUrlTelemetry(
+        rawCrawledUrls,
+        rawBrowserAuditedUrls,
+        262144,
+      );
+
+      const ruleCatalogResult = buildRuleCatalog(KNOWN_RULE_IDS_V1, CURRENT_REGISTRY_VERSION);
+
       const summary: ScanRunSummaryDTO = {
         totalFindings: allPersisted.length,
         criticalCount: countsBySeverity.critical,
@@ -621,6 +638,11 @@ export class ScanOrchestrator implements IScanOrchestrator {
         screenshotsCaptured: browserResult?.screenshotsCaptured ?? 0,
         pageScreenshots: browserResult?.pageScreenshots ?? [],
         completedEngines: [...context.completedEngines],
+        crawledUrls: [...boundedUrlTelemetry.crawledUrls],
+        browserAuditedUrls: [...boundedUrlTelemetry.browserAuditedUrls],
+        urlTelemetryTruncation: boundedUrlTelemetry.truncation,
+        ruleCatalog: [...ruleCatalogResult.admittedRuleIds],
+        ruleCatalogMetadata: ruleCatalogResult.metadata,
         browserCandidatesTotal,
         browserCandidatesSkipped,
         isPartialCoverage,
@@ -1141,6 +1163,7 @@ export class ScanOrchestrator implements IScanOrchestrator {
     const findings: CreateFindingRequest[] = [];
     context.inProgressFindings = findings;
     const failedPages: Array<{ url: string; error: string }> = [];
+    const browserAuditedUrls: string[] = [];
     let pagesAudited = 0;
     let viewportsCompleted = 0;
     let accessibilityAuditsCompleted = 0;
@@ -1734,6 +1757,7 @@ export class ScanOrchestrator implements IScanOrchestrator {
           }
 
           pagesAudited++;
+          browserAuditedUrls.push(pageUrl);
           if (pageHadLayoutStability) {
             layoutStabilityPagesCompleted++;
           }
@@ -1885,6 +1909,7 @@ export class ScanOrchestrator implements IScanOrchestrator {
       layoutStabilityPagesCompleted,
       accessibilityCandidatesTotal: modules.accessibility ? candidateUrls.size : 0,
       pageScreenshots,
+      auditedUrls: browserAuditedUrls,
     };
   }
 
@@ -2090,7 +2115,16 @@ export class ScanOrchestrator implements IScanOrchestrator {
     // 2. Filter out findings that were already persisted in an earlier checkpoint
     const itemsToInsert: CreateFindingInput[] = [];
     for (const item of sanitizedBatch) {
-      const key = this.getFindingDeduplicationKey(item);
+      if (!item.fingerprint) {
+        item.fingerprint = computeFindingFingerprint({
+          ruleId: item.ruleId,
+          category: item.category,
+          targetUrl: item.targetUrl,
+          evidence: (item.evidence as Record<string, unknown>) ?? null,
+          title: item.title,
+        });
+      }
+      const key = item.fingerprint || this.getFindingDeduplicationKey(item);
       if (!context.persistedFindingKeys.has(key)) {
         itemsToInsert.push(item);
       }
@@ -2105,7 +2139,7 @@ export class ScanOrchestrator implements IScanOrchestrator {
 
     // 4. Record keys and update context state only after successful commit
     for (const item of itemsToInsert) {
-      const key = this.getFindingDeduplicationKey(item);
+      const key = item.fingerprint || this.getFindingDeduplicationKey(item);
       context.persistedFindingKeys.add(key);
     }
 

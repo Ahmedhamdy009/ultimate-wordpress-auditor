@@ -328,3 +328,11 @@ export function computeFindingIdentity(input: FindingIdentityInput): IdentityDes
     canonicalLocator: positionalLocator ?? undefined,
   };
 }
+
+/**
+ * Convenience helper to compute the deterministic hex fingerprint string directly.
+ */
+export function computeFindingFingerprint(input: FindingIdentityInput): string {
+  return computeFindingIdentity(input).fingerprint;
+}
+

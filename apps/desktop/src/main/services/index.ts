@@ -4,3 +4,4 @@ export * from './scan-run.service.js';
 export * from './finding.service.js';
 export * from './finding-triage.service.js';
 export * from './report.service.js';
+export * from './scan-comparison.service.js';
